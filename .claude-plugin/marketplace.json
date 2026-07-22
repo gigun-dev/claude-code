@@ -41,11 +41,6 @@
       "description": "Figmate MCP server (agent2figma design)"
     },
     {
-      "name": "vercel-mcp",
-      "source": "./plugins/vercel-mcp",
-      "description": "Vercel MCP server (deployments, projects, logs)"
-    },
-    {
       "name": "markitdown-mcp",
       "source": "./plugins/markitdown-mcp",
       "description": "MarkItDown MCP server (file to markdown conversion)"
