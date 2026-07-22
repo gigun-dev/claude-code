@@ -1,0 +1,11 @@
+{
+  "name": "figmate-mcp",
+  "version": "1.0.0",
+  "description": "Figmate MCP server (agent2figma design)",
+  "mcpServers": {
+    "figmate": {
+      "type": "stdio",
+      "command": "figmate-mcp"
+    }
+  }
+}

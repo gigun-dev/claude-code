@@ -21,6 +21,8 @@ MCPサーバーを1つずつプラグインとして内包しています。プ�
 | `deepwiki-mcp` | DeepWiki (http) | GitHubリポジトリのドキュメントQ&A |
 | `dart-mcp` | `dart mcp-server` | Dart / Flutter開発(PATHに dart が必要) |
 | `tableplus-mcp` | TablePlus | データベースGUI連携 |
+| `vercel-mcp` | Vercel (http) | デプロイ・プロジェクト管理 |
+| `figmate-mcp` | `figmate-mcp` | agent2figmaデザイン(要 figmate グローバルインストール) |
 | `markitdown-mcp` | `uvx markitdown-mcp` | ファイル→Markdown変換 |
 
 Supabase など公式マーケットプレイスに既にMCP内包プラグインがあるものは重複させず、`claude-plugins-official` 側を使う方針。
