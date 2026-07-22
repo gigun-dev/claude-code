@@ -1,0 +1,11 @@
+{
+  "name": "tableplus-mcp",
+  "version": "1.0.0",
+  "description": "TablePlus MCP server (database GUI integration)",
+  "mcpServers": {
+    "tableplus": {
+      "type": "stdio",
+      "command": "/Applications/TablePlus.app/Contents/MacOS/tableplus-mcp"
+    }
+  }
+}

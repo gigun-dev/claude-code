@@ -1,0 +1,12 @@
+{
+  "name": "dart-mcp",
+  "version": "1.0.0",
+  "description": "Dart/Flutter MCP server",
+  "mcpServers": {
+    "dart": {
+      "type": "stdio",
+      "command": "dart",
+      "args": ["mcp-server"]
+    }
+  }
+}

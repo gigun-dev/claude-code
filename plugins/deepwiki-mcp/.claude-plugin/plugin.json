@@ -1,0 +1,11 @@
+{
+  "name": "deepwiki-mcp",
+  "version": "1.0.0",
+  "description": "DeepWiki MCP server (GitHub repo docs Q&A)",
+  "mcpServers": {
+    "deepwiki": {
+      "type": "http",
+      "url": "https://mcp.deepwiki.com/mcp"
+    }
+  }
+}

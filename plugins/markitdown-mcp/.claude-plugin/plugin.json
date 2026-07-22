@@ -1,0 +1,12 @@
+{
+  "name": "markitdown-mcp",
+  "version": "1.0.0",
+  "description": "MarkItDown MCP server (file to markdown conversion)",
+  "mcpServers": {
+    "markitdown": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["markitdown-mcp"]
+    }
+  }
+}

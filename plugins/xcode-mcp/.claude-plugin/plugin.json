@@ -1,0 +1,12 @@
+{
+  "name": "xcode-mcp",
+  "version": "1.0.0",
+  "description": "Xcode MCP server (xcrun mcpbridge)",
+  "mcpServers": {
+    "xcode": {
+      "type": "stdio",
+      "command": "xcrun",
+      "args": ["mcpbridge"]
+    }
+  }
+}

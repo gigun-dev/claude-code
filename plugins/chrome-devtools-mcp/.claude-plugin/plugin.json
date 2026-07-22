@@ -1,0 +1,12 @@
+{
+  "name": "chrome-devtools-mcp",
+  "version": "1.0.0",
+  "description": "Chrome DevTools MCP server",
+  "mcpServers": {
+    "chrome-devtools": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": ["chrome-devtools-mcp@latest"]
+    }
+  }
+}

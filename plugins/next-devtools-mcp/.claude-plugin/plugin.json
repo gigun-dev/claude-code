@@ -1,0 +1,12 @@
+{
+  "name": "next-devtools-mcp",
+  "version": "1.0.0",
+  "description": "Next.js DevTools MCP server",
+  "mcpServers": {
+    "next-devtools": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": ["-y", "next-devtools-mcp@latest"]
+    }
+  }
+}

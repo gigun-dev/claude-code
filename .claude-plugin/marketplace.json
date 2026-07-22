@@ -1,0 +1,44 @@
+{
+  "name": "gigun",
+  "owner": {
+    "name": "gigun",
+    "email": "gu.univ.morita@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "xcode-mcp",
+      "source": "./plugins/xcode-mcp",
+      "description": "Xcode MCP server (xcrun mcpbridge)"
+    },
+    {
+      "name": "next-devtools-mcp",
+      "source": "./plugins/next-devtools-mcp",
+      "description": "Next.js DevTools MCP server"
+    },
+    {
+      "name": "chrome-devtools-mcp",
+      "source": "./plugins/chrome-devtools-mcp",
+      "description": "Chrome DevTools MCP server"
+    },
+    {
+      "name": "deepwiki-mcp",
+      "source": "./plugins/deepwiki-mcp",
+      "description": "DeepWiki MCP server (GitHub repo docs Q&A)"
+    },
+    {
+      "name": "dart-mcp",
+      "source": "./plugins/dart-mcp",
+      "description": "Dart/Flutter MCP server"
+    },
+    {
+      "name": "tableplus-mcp",
+      "source": "./plugins/tableplus-mcp",
+      "description": "TablePlus MCP server (database GUI integration)"
+    },
+    {
+      "name": "markitdown-mcp",
+      "source": "./plugins/markitdown-mcp",
+      "description": "MarkItDown MCP server (file to markdown conversion)"
+    }
+  ]
+}
