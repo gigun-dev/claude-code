@@ -24,4 +24,11 @@ MCPサーバーを1つずつプラグインとして内包しています。プ�
 | `figmate-mcp` | `figmate-mcp` | agent2figmaデザイン(要 figmate グローバルインストール) |
 | `markitdown-mcp` | `uvx markitdown-mcp` | ファイル→Markdown変換 |
 
+## スキルプラグイン
+
+| プラグイン | スキル | 用途 |
+|---|---|---|
+| `ios-skills` | appstoreconnect-upload, ios-device-build | iOSのアーカイブ・TestFlight・実機ビルド |
+| `workers-fetch` | workers-fetch | workers-fetch CLIでのWorkers検証 |
+
 Supabase・Vercel など公式マーケットプレイスに既にMCP内包プラグインがあるものは重複させず、`claude-plugins-official` 側を使う方針。

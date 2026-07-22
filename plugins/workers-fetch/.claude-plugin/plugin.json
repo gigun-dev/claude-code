@@ -1,0 +1,5 @@
+{
+  "name": "workers-fetch",
+  "version": "1.0.0",
+  "description": "Test Cloudflare Workers apps via workers-fetch CLI"
+}

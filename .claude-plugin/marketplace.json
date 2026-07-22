@@ -44,6 +44,16 @@
       "name": "markitdown-mcp",
       "source": "./plugins/markitdown-mcp",
       "description": "MarkItDown MCP server (file to markdown conversion)"
+    },
+    {
+      "name": "ios-skills",
+      "source": "./plugins/ios-skills",
+      "description": "iOS development skills (App Store Connect upload, device build)"
+    },
+    {
+      "name": "workers-fetch",
+      "source": "./plugins/workers-fetch",
+      "description": "Test Cloudflare Workers apps via workers-fetch CLI"
     }
   ]
 }
