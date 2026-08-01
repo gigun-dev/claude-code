@@ -410,6 +410,6 @@ xcrun simctl io "$U" screenshot ~/tmp-sim/after.png
 | `references/system-proxy.md` | 「サーバの識別情報を検証できません」/ HTTPS だけ落ちる / CA を入れても直らない |
 | `references/setup.md` | `idb` が入っていない / `No Companion Connected` が直らない |
 | `references/recording.md` | 録画の尺が合わない / 停止スクリプトを書く / ffmpeg と比較する |
-| `references/webview-offload.md` | WKWebView の中身を検証する(= Simulator を使わない経路) |
+| `references/webview-offload.md` | WKWebView の中身を検証する(= Simulator を使わない経路)。**配色・コントラストの監査**をするなら「監査のチェックリスト」を必ず見る —— 色の値だけ見て**変数が代入されているかを見落とす**失敗が実測で出ている |
 | `references/retracted-2026-08-01.md` | **本文に引っかかったとき**(「昔はこう書いてあった気が」)/ 誤診カタログとして学ぶとき。誤診の型は3つ: 筋の通った推論を検証せずに信じた(§1〜§11)/ 観測データが汚染されていた(§9)/ 本物の発見を別の未解決問題の説明に流用した(§12) |
 | `FEEDBACK-2026-08-01-swift-mcp-app.md` | この日の実地記録(生記録)。§0 ソフトキーボード・§1 座標系誤診・§6 XCUITest 比較 |
