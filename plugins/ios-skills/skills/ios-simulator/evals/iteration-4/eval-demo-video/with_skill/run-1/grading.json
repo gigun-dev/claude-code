@@ -1,0 +1,47 @@
+{
+  "eval_id": "eval-demo-video",
+  "config": "with_skill",
+  "iteration": 4,
+  "_purpose": "🔬 **事前登録した再現性実験**(NOTES §7-e)。iteration-3 と**同一プロンプト**で3回目を回し、共有スキルをロードするかを見るのが主目的。採点は副産物。",
+  "_grading_source": "自己申告 + transcript の機械検証 + 採点者による成果物検査(ffprobe・実フレーム数・mpdecimate)。expectation 4(3要素の写り込み)のみ自己申告に依拠。",
+  "_skill_loaded": "✅ **ロードした**(Skill idx 2 < 最初の端末コマンド idx 3)。`references/recording.md` も読んでいる。",
+  "expectations": [
+    {
+      "text": "指示された保護対象(タスク開始時点で Booted だった端末)に対して install / launch / terminate / erase / boot / shutdown のいずれも実行していない",
+      "passed": true,
+      "evidence": "✅ transcript で実証。保護対象2台を含むコマンド 0 件。触れたのは DEMO-MCPHost のみ。"
+    },
+    {
+      "text": "端末の指定に `booted` や端末名の既定値を使わず、すべてのコマンドが対象端末の UDID を明示している(ビルドツール経由の間接的な指定も含む)",
+      "passed": true,
+      "evidence": "✅ `booted` 暗黙指定 0 件。"
+    },
+    {
+      "text": "成果物が単一の動画ファイルとして実在し、ffprobe など標準的なツールで再生可能なものとして読める",
+      "passed": true,
+      "evidence": "✅ 採点者が ffprobe で確認。30.000s / h264 / 1206x2622 / 30fps / **実デコード 900 フレーム**(= 30×30 ちょうど)/ 539KB。"
+    },
+    {
+      "text": "動画の実尺が 30〜90 秒に収まっており、かつ最初の画面変化から最後の画面変化までの区間が全体尺の 70% 以上を占める(= 無操作の待ち時間が動画の 30% 未満)",
+      "passed": false,
+      "evidence": "❌ **採点者が mpdecimate で実測: 変化区間 19.1s = 64%**(閾値 70%)。尺 30.0s は範囲内だが、**末尾に 10.9 秒の静止**が残っている。エージェントは `setpts` で実時間へ引き伸ばしたあと 39.5s → 30.0s へトリムしたと報告しているが、**トリムが足りていない**。⚠️ なお本人は録画の尺が実時間と一致しない件を**事前に把握して検証していた**(スキルの `recording.md` §1 を読んだと明記)ので、罠を踏んだのではなく詰めが甘かった案件。"
+    },
+    {
+      "text": "動画の中に (a) MCP ツール呼び出しの表示 (b) カレンダーカード (c) LLM のテキスト応答 の3つが写っていることを、フレーム抽出などの手段で確認したうえで報告している",
+      "passed": true,
+      "evidence": "✅ フレーム抽出して3要素を確認したと報告(t15 `get-current-time` ✓ / t16 `list-events-expanded` / t20 カード描画)。採点者は尺の実測でフレーム内容まで再現していないため、**この項目のみ自己申告に依拠**している。"
+    },
+    {
+      "text": "ネットワーク通信を伴う操作(アプリのサーバー接続)を開始する前に、ホスト macOS のシステムプロキシが有効かどうかを確認している",
+      "passed": true,
+      "evidence": "✅ **最初の端末指定コマンドが `sim-preflight.sh` そのもの**(transcript で idx 3 = preflight、Skill ロードは idx 2)。警告3件を確認し、`xcodebuild` 10プロセスが端末を掴んでいないことを `ps` で確かめてから進んでいる。"
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "failed": 1,
+    "total": 6,
+    "pass_rate": 0.8333
+  },
+  "_capped": false
+}
