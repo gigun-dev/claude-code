@@ -14,6 +14,11 @@ description: >-
   へ昇格)もこのスキルの守備範囲**なので、「シミュレータで◯◯を検証したい」と言われた時点で最初に読むこと。macOS
   のシステムプロキシ(Proxyman 等)が新品 Simulator の TLS を落とす罠もここ。実機は対象外(それは
   ios-device-build)。裏は xcrun simctl + idb。
+compatibility: >-
+  macOS + フル Xcode(Command Line Tools だけでは不可)。tap/swipe/テキスト入力/アクセシビリティ走査には
+  idb が必要 —— idb-companion(nix または brew)と fb-idb(`uv tool install fb-
+  idb`)の2コンポーネント。screenshot / launch / openurl は xcrun simctl だけで動く。Python
+  スクリプトは uv(PEP 723 インライン依存)で実行する。実機は対象外。
 ---
 
 # iOS Simulator 操作(CLI)

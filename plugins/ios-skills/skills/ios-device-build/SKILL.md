@@ -4,6 +4,9 @@ description: >-
   Swift/iOSアプリを実機にビルド・インストール・起動する。使用タイミング:
   (1)「実機にビルドして」(2)「iPhoneで動かして」(3)「デバイスにインストールして」(4)「実機で確認して」(5)「実機デプロイ」など実機デバッグが必要な時。xcodebuild
   → devicectl install → devicectl launchの一連のフローを自動化。
+compatibility: >-
+  macOS + Xcode。接続された iOS 実機と、有効な開発者証明書・プロビジョニングプロファイルが必要。xcodebuild /
+  devicectl を使う。Simulator は対象外(それは ios-simulator)。
 ---
 
 # iOS Device Build

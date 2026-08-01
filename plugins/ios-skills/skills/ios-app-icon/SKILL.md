@@ -10,6 +10,10 @@ description: >-
   といった語が出たとき。Icon Composer.app を開かずに icon.json を直接書き、ictool で
   Default/Dark/Clear/Tinted の全6モードをレンダリングして反復できる。**アプリのアイコン**が話題なら、明示的に「Liquid
   Glass」と言われなくても参照すること(ただし SF Symbols・favicon・UI の glassEffect() は対象外)。
+compatibility: >-
+  macOS + Xcode 26 以降(ictool と Icon Composer が同梱される)。素材の描画に
+  swift(CoreGraphics)を使うため Xcode のツールチェーンが要る。Icon Composer.app の GUI を使う場合のみ
+  macOS Tahoe 26.4+。
 ---
 
 # iOS アプリアイコン(Liquid Glass / .icon)

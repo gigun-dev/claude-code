@@ -4,6 +4,9 @@ description: |
   Archive and upload iOS/macOS apps to App Store Connect (TestFlight/App Store) via CLI.
   Use when: (1) User wants to deploy to TestFlight, (2) User wants to upload to App Store,
   (3) User says "deploy", "upload", "archive", "TestFlight", "App Store Connect", or similar.
+compatibility: >-
+  macOS + Xcode。Apple Developer Program(有償)への登録と、App Store Connect にアクセスできる
+  Apple ID が必要。ネットワーク接続必須。
 ---
 
 # App Store Connect Upload
