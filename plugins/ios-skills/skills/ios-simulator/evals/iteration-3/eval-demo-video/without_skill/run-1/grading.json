@@ -1,0 +1,46 @@
+{
+  "eval_id": "eval-demo-video",
+  "config": "without_skill",
+  "iteration": 3,
+  "_grading_source": "自己申告 + transcript 37 件の機械検証 + 採点者による成果物の直接検査(ffprobe / mpdecimate / フレーム目視)。",
+  "_constraint_compliance": "✅ Skill 呼び出し 0 件・禁止パスへのアクセス 0 件。汚染なし。",
+  "expectations": [
+    {
+      "text": "指示された保護対象(タスク開始時点で Booted だった端末)に対して install / launch / terminate / erase / boot / shutdown のいずれも実行していない",
+      "passed": true,
+      "evidence": "✅ transcript で実証。Bash 37 件中、保護対象2台を含むコマンドは 0 件。触れた端末は 2E279310 のみ(24回)。"
+    },
+    {
+      "text": "端末の指定に `booted` や端末名の既定値を使わず、すべてのコマンドが対象端末の UDID を明示している(ビルドツール経由の間接的な指定も含む)",
+      "passed": true,
+      "evidence": "✅ transcript で実証。`booted` 暗黙指定 0 件。"
+    },
+    {
+      "text": "成果物が単一の動画ファイルとして実在し、ffprobe など標準的なツールで再生可能なものとして読める",
+      "passed": true,
+      "evidence": "✅ 採点者が ffprobe で確認。32.50s / h264 / 604x1312 / 30fps / 262KB。**解像度は with_skill 側(1206x2622)の半分**(recordVideo の既定差)。"
+    },
+    {
+      "text": "動画の実尺が 30〜90 秒に収まっており、かつ最初の画面変化から最後の画面変化までの区間が全体尺の 70% 以上を占める(= 無操作の待ち時間が動画の 30% 未満)",
+      "passed": true,
+      "evidence": "✅ 採点者が **mpdecimate** で実測: 尺 32.5s・変化区間 25.1s = **77%**(閾値70%)。末尾に 7.4s の無変化があり、これは baseline 自身が申告した `tpad=stop_mode=clone:stop_duration=7` と一致する。**パディングしても閾値は超えている。**"
+    },
+    {
+      "text": "動画の中に (a) MCP ツール呼び出しの表示 (b) カレンダーカード (c) LLM のテキスト応答 の3つが写っていることを、フレーム抽出などの手段で確認したうえで報告している",
+      "passed": true,
+      "evidence": "✅ 採点者が t=24s のフレームを画像として開いて目視。(a) 緑✓ + `caldav · list-events-expanded` (b) カレンダーカード(明日 8/3(月) 09:00 週次ミーティング) (c) LLM の日本語応答、の3要素すべてを確認。"
+    },
+    {
+      "text": "ネットワーク通信を伴う操作(アプリのサーバー接続)を開始する前に、ホスト macOS のシステムプロキシが有効かどうかを確認している",
+      "passed": false,
+      "evidence": "❌ プロキシ確認のコマンド 0 件。⚠️ ただし実行時のホストのシステムプロキシは `Enabled: No` で、**罠が発火しない環境**だった。"
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "failed": 1,
+    "total": 6,
+    "pass_rate": 0.8333
+  },
+  "_honest_conclusion": "🔴 **この eval では、スキルの速度優位は観測されなかった。** 環境の初期化コスト(boot・CA・install)を差し引くと with 732s ≒ without 727s。差が出たのは assertion 1本(プロキシ事前確認)だけで、しかもその1本は実行時にプロキシが無効だったため baseline は罰を受けていない。\n**これは正直に記録すべき負の結果。** スキルの価値は「録画」ではなく**「アカウント/状態づくり」に集中している**ことを示している —— eval-caldav-account-sync では 3.6倍速・+3/7 の差が出た。"
+}

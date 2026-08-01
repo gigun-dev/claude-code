@@ -1,0 +1,7 @@
+{
+  "total_tokens": 106023,
+  "duration_ms": 782734,
+  "total_duration_seconds": 727.0,
+  "_source": "完了通知 782,734ms / 自己申告 727s(12分07秒)。作業実時間として自己申告を採用。",
+  "_confound": "🔴 **この 727s は with_skill の 852s と直接比較できない。** baseline は `simctl boot` も CA 投入も一度も実行していない(transcript で確認)。iteration-3 の run が整えた DEMO-MCPHost(Booted・CA 投入済み・アプリ install 済み)をそのまま引き継いでいる。iteration-3 の内訳では device prep が 100–220s(約120秒)。**差し引くと 852-120=732s ≒ baseline 727s でほぼ同一。**"
+}
