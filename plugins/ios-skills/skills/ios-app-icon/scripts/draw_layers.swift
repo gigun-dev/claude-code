@@ -106,6 +106,25 @@ struct Layer {
     var evenOdd: Bool               // 重なった部分を「穴」にするか(下記参照)
     var strokePath: Bool            // shape:"path" を塗らず線で描くか(thickness 明示で ON)
     var color: String
+    var gradient: Gradient?         // 指定されるとベタ塗りの代わりにこれで塗る
+    var opacity: CGFloat
+}
+
+/// 素材そのものに焼き込むグラデーション。
+///
+/// 【なぜ素材側に要るか・2026-08-02】色は icon.json のレイヤー `fill` でも付けられるが、
+/// あちらが持てるのは**2色の線形グラデーション1本**だけ。そのため素材は常に真っ平らで、
+/// 見えている艶や陰影は全部 ictool の Liquid Glass が後から乗せたものになっていた
+/// (「グラデーションが無く Liquid Glass に頼っている」と指摘されて発覚)。
+/// 純正は Health のハート、Siri のオーブ、iCloud の雲のように**放射状・多段**の
+/// グラデーションを持っており、その表現力の差がそのまま案の差になっていた。
+/// 放射状と多段は icon.json では表現できないので、素材側で焼くしかない。
+struct Gradient {
+    var kind: String                  // "linear" | "radial"
+    var stops: [(CGColor, CGFloat)]   // 色と位置(0..1)
+    var angle: CGFloat                // linear: 0 = 左→右、反時計回りが正(度)
+    var center: CGPoint               // radial: 図形の外接矩形内の正規化座標
+    var radius: CGFloat               // radial: 外接矩形の対角半分に対する倍率
 }
 
 let layers: [Layer] = rawLayers.enumerated().map { (i, d) in
@@ -131,7 +150,33 @@ let layers: [Layer] = rawLayers.enumerated().map { (i, d) in
         // 値ではなくキーの有無を見る —— 塗りたいときに thickness を書く理由が無いので、
         // 書いてあること自体を「線で描きたい」という意思表示として扱ってよい。
         strokePath: shape == "path" && d["thickness"] != nil,
-        color: d["color"] as? String ?? "#ffffff")
+        color: d["color"] as? String ?? "#ffffff",
+        gradient: parseGradient(d["gradient"] as? [String: Any]),
+        opacity: CGFloat(d["opacity"] as? Double ?? 1.0))
+}
+
+/// `"gradient"` を読む。stops は `[["#fff", 0], ["#333", 1]]` か
+/// `[{"color":"#fff","at":0}, ...]` のどちらでも書ける(手で書くとき前者が楽)。
+func parseGradient(_ g: [String: Any]?) -> Gradient? {
+    guard let g else { return nil }
+    var stops: [(CGColor, CGFloat)] = []
+    for raw in (g["stops"] as? [Any] ?? []) {
+        if let a = raw as? [Any], a.count >= 2,
+           let c = a[0] as? String, let at = a[1] as? Double {
+            stops.append((hex(c), CGFloat(at)))
+        } else if let d = raw as? [String: Any],
+                  let c = d["color"] as? String {
+            stops.append((hex(c), CGFloat(d["at"] as? Double ?? 0)))
+        }
+    }
+    guard stops.count >= 2 else { return nil }
+    let c = g["center"] as? [Double] ?? [0.5, 0.5]
+    return Gradient(
+        kind: g["type"] as? String ?? "linear",
+        stops: stops,
+        angle: CGFloat(g["angle"] as? Double ?? 90),
+        center: CGPoint(x: c.first ?? 0.5, y: c.count > 1 ? c[1] : 0.5),
+        radius: CGFloat(g["radius"] as? Double ?? 1.0))
 }
 
 /// SVG の `d` 属性を CGPath へ変換する(M/L/H/V/C/Q/Z と相対版に対応)。
@@ -358,9 +403,48 @@ func parseSVGPath(_ d: String, viewBox: CGFloat) -> CGPath {
     return path
 }
 
+/// 現在パスを、ベタ塗りかグラデーションで塗る。
+///
+/// グラデーションは「パスでクリップしてから矩形いっぱいに描く」形で実装する。
+/// clip() は現在パスを消費するので、この関数を呼ぶ前にパスを積んでおくこと。
+/// 座標は呼び出し側の変換(平行移動・回転・拡大)がかかった空間のままで扱うので、
+/// グラデーションの向きも図形と一緒に回る(回した板に光が同じ向きから当たる)。
+func paint(_ ctx: CGContext, _ l: Layer, evenOdd: Bool = false) {
+    guard let g = l.gradient else {
+        ctx.fillPath(using: evenOdd ? .evenOdd : .winding)
+        return
+    }
+    let box = ctx.boundingBoxOfPath
+    ctx.clip(using: evenOdd ? .evenOdd : .winding)
+
+    let colors = g.stops.map { $0.0 } as CFArray
+    let locs = g.stops.map { $0.1 }
+    guard let grad = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                colors: colors, locations: locs) else { return }
+
+    let c = CGPoint(x: box.minX + box.width * g.center.x,
+                    y: box.minY + box.height * (1 - g.center.y))  // center.y は上端基準で書く
+    if g.kind == "radial" {
+        let rad = max(box.width, box.height) / 2 * g.radius
+        ctx.drawRadialGradient(grad, startCenter: c, startRadius: 0,
+                               endCenter: c, endRadius: max(rad, 1),
+                               options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+    } else {
+        // angle は 0 = 左→右、反時計回りが正。図形の外接矩形を端から端まで貫く長さを取る。
+        let a = g.angle * .pi / 180
+        let half = hypot(box.width, box.height) / 2
+        let mid = CGPoint(x: box.midX, y: box.midY)
+        let s = CGPoint(x: mid.x - cos(a) * half, y: mid.y - sin(a) * half)
+        let e = CGPoint(x: mid.x + cos(a) * half, y: mid.y + sin(a) * half)
+        ctx.drawLinearGradient(grad, start: s, end: e,
+                               options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+    }
+}
+
 /// 上端基準の座標で図形を塗る。回転は図形の中心まわり。
 func draw(_ ctx: CGContext, _ l: Layer) {
     ctx.saveGState()
+    ctx.setAlpha(l.opacity)
     ctx.translateBy(x: l.cx, y: S - l.cy)
     ctx.rotate(by: l.angle * .pi / 180)
     ctx.setFillColor(hex(l.color))
@@ -368,13 +452,17 @@ func draw(_ ctx: CGContext, _ l: Layer) {
 
     switch l.shape {
     case "circle":
-        ctx.fillEllipse(in: CGRect(x: -l.w / 2, y: -l.h / 2, width: l.w, height: l.h))
+        ctx.addEllipse(in: CGRect(x: -l.w / 2, y: -l.h / 2, width: l.w, height: l.h))
+        paint(ctx, l)
 
     case "ring":
         // 線幅の中心が指定径になるよう、径から thickness の半分を引いた円を stroke する。
+        // グラデーションを乗せるため、stroke を輪郭パスへ変換してから塗る。
         ctx.setLineWidth(l.thickness)
         let d = l.w - l.thickness
-        ctx.strokeEllipse(in: CGRect(x: -d / 2, y: -d / 2, width: d, height: d))
+        ctx.addEllipse(in: CGRect(x: -d / 2, y: -d / 2, width: d, height: d))
+        ctx.replacePathWithStrokedPath()
+        paint(ctx, l)
 
     case "arc":
         // 円弧。NFC の波紋やカメラの部分リングに使う。端は丸めて途切れ感を出さない。
@@ -386,14 +474,15 @@ func draw(_ ctx: CGContext, _ l: Layer) {
                    startAngle: l.startAngle * .pi / 180,
                    endAngle: l.endAngle * .pi / 180,
                    clockwise: false)
-        ctx.strokePath()
+        ctx.replacePathWithStrokedPath()
+        paint(ctx, l)
 
     case "capsule":
         // 角丸を高さの半分に固定した帯。テキスト行やスライダの抽象に使う。
         let rect = CGRect(x: -l.w / 2, y: -l.h / 2, width: l.w, height: l.h)
         ctx.addPath(CGPath(roundedRect: rect, cornerWidth: l.h / 2, cornerHeight: l.h / 2,
                            transform: nil))
-        ctx.fillPath()
+        paint(ctx, l)
 
     case "path":
         // SVG パス。cx/cy は「パスの viewBox 中心をどこへ置くか」として扱い、
@@ -420,15 +509,16 @@ func draw(_ ctx: CGContext, _ l: Layer) {
             ctx.setLineWidth(l.thickness)
             ctx.setLineCap(.round)
             ctx.setLineJoin(.round)
-            ctx.strokePath()
+            ctx.replacePathWithStrokedPath()
+            paint(ctx, l)
         } else {
-            ctx.fillPath(using: l.evenOdd ? .evenOdd : .winding)
+            paint(ctx, l, evenOdd: l.evenOdd)
         }
 
     default:  // roundedRect
         ctx.addPath(CGPath(roundedRect: CGRect(x: -l.w / 2, y: -l.h / 2, width: l.w, height: l.h),
                            cornerWidth: l.r, cornerHeight: l.r, transform: nil))
-        ctx.fillPath()
+        paint(ctx, l)
     }
     ctx.restoreGState()
 }

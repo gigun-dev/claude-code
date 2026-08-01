@@ -101,6 +101,59 @@ swift scripts/draw_layers.swift spec.json out/
 角を丸めるときは「頂点の手前 r で止めて次の辺の r 先へ `A` で繋ぐ」、
 SVG は y 下向きなので外積が正なら `sweep-flag` は 1。
 
+#### 表現力が足りないと感じたら SVG を直接書く(推奨)
+
+上の JSON は「図形を並べる」までは速いが、**その DSL が表現力の上限になる**。
+放射・多段グラデーション、マスク、ぼかし、ブレンドモードが要るたびに
+`draw_layers.swift` を拡張することになり、そうしないと素材が平坦なままになる。
+平坦な素材に Liquid Glass を掛けると、艶や陰影が**全部システム由来**になり、
+どの案も同じ質感になる(実際「グラデーションが無く Liquid Glass に頼っている」と
+評価される状態が続いた)。純正は Health のハート、Siri のオーブ、iCloud の雲のように
+素材自身が多段グラデーションを持っている。
+
+`render_svg.swift` は SVG を WebKit(Safari と同じレンダラ)でラスタライズする。
+使えるのは SVG/CSS の全機能 —— `radialGradient` / 多段 stop / `mask` / `clipPath` /
+`feGaussianBlur` / `mix-blend-mode` / `opacity` / group transform。
+デザインツールや画像生成 AI が吐いた SVG をそのまま貼れるのも大きい。
+
+**レイヤー分割は `data-layer` で行う。** 同じ SVG を「その層だけ表示」で N 回
+レンダリングするので、座標が1つの定義から来る = 層がズレようがない。
+
+```xml
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000">
+  <defs>
+    <radialGradient id="warm" cx="34%" cy="26%" r="80%">
+      <stop offset="0" stop-color="#ffe9c2"/>
+      <stop offset=".5" stop-color="#e0563f"/>
+      <stop offset="1" stop-color="#5d180f"/>
+    </radialGradient>
+  </defs>
+  <g data-layer="01-back"><circle cx="420" cy="400" r="300" fill="url(#warm)"/></g>
+  <g data-layer="02-front" style="mix-blend-mode:screen"> … </g>
+</svg>
+```
+
+```bash
+swift scripts/render_svg.swift icon.svg out/ --size 1024
+# → 01-back.png / 02-front.png / _composite.png(すべて透過・同じ座標系)
+```
+
+出力は SVG の**描画順(先が奥)**で並ぶ。`build_icon.sh` へは**手前から**渡すこと。
+
+SVG 経路には autofit が無いので、**安全域は自分で守る**。viewBox と最終アイコンの対応は
+実測で 1:1(viewBox の 81% が出力の 81% に来る)なので、`draw_layers` の既定と同じく
+中央 81%(1000 の viewBox なら 94〜906)に収める。はみ出すと角丸マスクで切られ、
+「模様の続き」に見えて図として読めなくなる。
+
+**グラデーションは大きな形に1つ。小さい要素すべてに掛けない。** 純正は Health の
+ハート、iCloud の雲、Files のフォルダのように**主役の1形状**が多段グラデーションを持ち、
+Reminders の3つの点や Passbook のカード端のような小さい要素はベタ塗りのままにしている。
+点の一つ一つに放射グラデーションを掛けると立体の球になり、網点ではなく**キャンディ**に見える
+(実際にそれをやって全案が飴玉になった)。表現力が増えたぶん、掛ける場所を選ぶ必要がある。
+
+素材に光沢・角丸マスクは描かない(システムが付ける)。ただし**陰影とグラデーションは描く** ——
+これらは Liquid Glass が作ってくれるものではなく、案ごとの個性そのものだから。
+
 ### 3. .icon にしてレンダリングする
 
 ```bash
@@ -176,7 +229,8 @@ Liquid Glass の効果は浅くなる。
 
 | スクリプト | 用途 |
 | --- | --- |
-| `scripts/draw_layers.swift` | 構図 JSON → レイヤー PNG。bbox 実測 + autofit + 安全域検査 |
+| `scripts/render_svg.swift` | **SVG → レイヤー PNG(WebKit)**。グラデ・マスク・ぼかし・ブレンドが全部使える。表現力が要るときはこちら |
+| `scripts/draw_layers.swift` | 構図 JSON → レイヤー PNG。bbox 実測 + autofit + 安全域検査。図形を並べるだけなら速い |
 | `scripts/build_icon.sh` | レイヤー PNG 群 → `.icon` バンドル |
 | `scripts/render_icon.sh` | `.icon` → 全6モードの PNG(ictool) |
 | `scripts/contact_sheet.swift` | 複数 PNG → 比較シート(大 + 実サイズ) |
