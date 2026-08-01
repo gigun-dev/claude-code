@@ -2,14 +2,10 @@
 name: ios-app-icon
 description: >-
   iOS 26/27 の Liquid Glass アプリアイコン(.icon / Icon Composer 形式)を GUI
-  なしで設計・生成・検証し、Xcode / XcodeGen プロジェクトへ組み込む。使用タイミング:
-  (1)「アプリアイコンを作って/変えて/作り直して」「アイコン案を複数出して比較したい」(2)「アイコンを設定したい」「AppIcon を
-  Assets.xcassets / appiconset に入れたい」(3)「Liquid Glass 対応のアイコンにしたい」「iOS 26
-  らしいアイコンにして」(4) ビルドしてもアイコンが反映されない・ホーム画面が白いままの調査 (5) .icon / icon.json /
-  ictool / Icon Composer / appiconset / ASSETCATALOG_COMPILER_APPICON_NAME
-  といった語が出たとき。Icon Composer.app を開かずに icon.json を直接書き、ictool で
-  Default/Dark/Clear/Tinted の全6モードをレンダリングして反復できる。**アプリのアイコン**が話題なら、明示的に「Liquid
-  Glass」と言われなくても参照すること(ただし SF Symbols・favicon・UI の glassEffect() は対象外)。
+  なしで生成・検証し、Xcode プロジェクトへ組み込む。「アプリアイコンを作って/変えて」「AppIcon
+  を設定したい」「ビルドしてもアイコンが反映されない」と言われたとき、および .icon / icon.json / ictool /
+  appiconset といった語が出たときに使う。アプリのアイコンが話題なら Liquid Glass と明示されなくても参照する(SF
+  Symbols・favicon・UI の glassEffect() は対象外)。
 compatibility: >-
   macOS + Xcode 26 以降(ictool と Icon Composer が同梱される)。素材の描画に
   swift(CoreGraphics)を使うため Xcode のツールチェーンが要る。Icon Composer.app の GUI を使う場合のみ

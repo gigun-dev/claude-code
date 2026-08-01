@@ -1,19 +1,11 @@
 ---
 name: ios-simulator
 description: >-
-  起動済み iOS Simulator を CLI
-  から操作・視認する(タップ/スワイプ/テキスト入力/ハードウェアボタン/ディープリンク/スクリーンショット/アクセシビリティ走査)。使用タイミング:
-  (1)「シミュレータでアプリを動かして/確認して」(2)「この画面タップして」「スクショ撮って」(3)「onboarding
-  フローを試して」(4)「iPhone で見た目を確認」など、実機ではなく Simulator
-  上でアプリを見て触る必要がある時。(5)**Simulator に状態を用意したい時** — 資格情報・API キー・OS
-  のアカウント(CalDAV/メール等)・到達画面。`SIMCTL_CHILD_*` の env 注入 / `simctl clone`(種があれば
-  16.7 秒・0タップ)/ `.mobileconfig`(**アカウント系ペイロードは効かない**)/ **まっさら端末では CalDAV
-  アカウントの初回追加が必ず失敗するという既知の罠(回避策は `webcal://`
-  の照会カレンダーを1つ先に入れること)**まで扱う。**Simulator を触らずに済ませる判断(env 注入で状態を作る/WebView
-  はブラウザで見る/反復検証は XCUITest
-  へ昇格)もこのスキルの守備範囲**なので、「シミュレータで◯◯を検証したい」と言われた時点で最初に読むこと。macOS
-  のシステムプロキシ(Proxyman 等)が新品 Simulator の TLS を落とす罠もここ。実機は対象外(それは
-  ios-device-build)。裏は xcrun simctl + idb。
+  iOS Simulator を CLI から操作・視認し、検証用の状態(資格情報・OS
+  のアカウント・到達画面)を用意する。「シミュレータで動かして/確認して」「この画面タップして」「スクショ撮って」「onboarding
+  を試して」と言われたとき、および Simulator に CalDAV やメールのアカウントを入れたいときに使う。Simulator
+  を触らずに済ませる判断(env 注入・WebView はブラウザ・反復検証は XCUITest)も守備範囲なので、Simulator
+  が絡む検証を頼まれた時点で最初に読むこと。実機は対象外(ios-device-build)。
 compatibility: >-
   macOS + フル Xcode(Command Line Tools だけでは不可)。tap/swipe/テキスト入力/アクセシビリティ走査には
   idb が必要 —— idb-companion(nix または brew)と fb-idb(`uv tool install fb-

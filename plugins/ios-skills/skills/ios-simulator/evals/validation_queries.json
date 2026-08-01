@@ -1,0 +1,50 @@
+[
+  {
+    "id": "t02",
+    "query": "iPhone で見た目確認したいんだけど、ダークモードにしたときカードの余白おかしくない?",
+    "should_trigger": true,
+    "note": "「iPhone」としか言っておらず実機とも読める。Simulator 側へ寄せられるかを見る"
+  },
+  {
+    "id": "t04",
+    "query": "自作の CalDAV サーバーに入れた予定が iOS の純正カレンダーにちゃんと出るか、実際に見て確かめたい",
+    "should_trigger": true,
+    "note": "Simulator の語なし。description の (5) と CalDAV の語で拾えるか"
+  },
+  {
+    "id": "t06",
+    "query": "onboarding フローを最初から最後まで試して、どこで詰まるか教えて",
+    "should_trigger": true,
+    "note": "description に明示された例"
+  },
+  {
+    "id": "t08",
+    "query": "API キーの入力画面を検証のたびに手で打つのがだるい。最初から入った状態で起動できるようにできない?",
+    "should_trigger": true,
+    "note": "env 注入。description の (5) に「資格情報・API キー」がある"
+  },
+  {
+    "id": "t12",
+    "query": "そろそろ TestFlight に上げたい。アーカイブしてアップロードまでやって",
+    "should_trigger": false,
+    "note": "near-miss: appstoreconnect-upload の領域"
+  },
+  {
+    "id": "t15",
+    "query": "この SwiftUI の List、スクロールするとセルがちらつく。コード見て直してほしい",
+    "should_trigger": false,
+    "note": "near-miss: 途中で Simulator を使う可能性はあるが、依頼の主題はコード修正。ここで誤爆すると『iOS の作業ならとりあえずロード』になり description が広すぎる"
+  },
+  {
+    "id": "t17",
+    "query": "iOS 26 の Liquid Glass って、既存の UIKit のアプリだと何が変わるんだっけ",
+    "should_trigger": false,
+    "note": "知識質問。操作も検証も発生しない"
+  },
+  {
+    "id": "t19",
+    "query": "Cloudflare Workers の caldav サーバーで REPORT のテストが1本落ちてる。原因見て直して",
+    "should_trigger": false,
+    "note": "near-miss: description に CalDAV の語があるので誤爆しうる。実際はサーバー側のユニットテスト修正"
+  }
+]

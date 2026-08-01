@@ -1,0 +1,74 @@
+[
+  {
+    "id": "t01",
+    "query": "swift-mcp-app のログイン画面、シミュレータで一回通して見てほしい。スクショ3枚くらいもらえると助かる",
+    "should_trigger": true,
+    "note": "最も素直な陽性。どんな description でも通るはずのベースライン"
+  },
+  {
+    "id": "t03",
+    "query": "MCPHost の短いデモ動画を撮ってほしい。勉強会で流すので 30 秒くらいで、チャットに質問投げてカードが出るところまで",
+    "should_trigger": true,
+    "note": "★録画。現 description に「録画」「動画」の語が一切ない。最も落ちやすい陽性"
+  },
+  {
+    "id": "t05",
+    "query": "テスト用に、ログイン済みの状態の iPhone 端末を5台くらいさっと用意できない?毎回セットアップするのが面倒で",
+    "should_trigger": true,
+    "note": "★状態プロビジョニング(端末量産)。Simulator の語も操作の語もない。落ちやすい陽性"
+  },
+  {
+    "id": "t07",
+    "query": "Xcode 開かずに、ビルド済みの .app をシミュレータに入れて一回触ってみてほしい",
+    "should_trigger": true,
+    "note": "ビルドではなく投入と操作。ios-device-build との境界の陽性側"
+  },
+  {
+    "id": "t09",
+    "query": "シミュレータで日本語打つと文字化けするんだけど、「渋谷 15時」ってどうやって入れたらいい?",
+    "should_trigger": true,
+    "note": "テキスト入力/IME。description に「テキスト入力」はあるが IME・文字化けの語はない"
+  },
+  {
+    "id": "t10",
+    "query": "昨日から idb ui tap が効かなくなった。コマンドは成功して返ってくるのに画面が何も動かない。心当たりある?",
+    "should_trigger": true,
+    "note": "★トラブルシュート意図。description は「操作する」しか言っておらず、故障の相談を拾う語がない"
+  },
+  {
+    "id": "t11",
+    "query": "iPhone の実機にビルドして入れて。手元の端末で動かして確認したい",
+    "should_trigger": false,
+    "note": "near-miss: ios-device-build の領域。description 末尾に「実機は対象外」と明記されている"
+  },
+  {
+    "id": "t13",
+    "query": "アプリアイコンを iOS 26 らしい感じに作り直したい。案をいくつか出して比べさせて",
+    "should_trigger": false,
+    "note": "near-miss: ios-app-icon の領域"
+  },
+  {
+    "id": "t14",
+    "query": "ログインまわりの回帰テストを XCUITest で書いて、CI で毎回回るようにしたい",
+    "should_trigger": false,
+    "note": "★最も判断が割れる near-miss。false にした理由: 成果物は Swift のテストコードで、Simulator の CLI 操作も状態投入も要らない(テスト実行は xcodebuild test が担う)。一方 SKILL.md は「反復検証は XCUITest へ昇格」という判断を守備範囲に含めており、しかも description にその文言が入っている。つまりこのクエリで誤爆したら、それは description が『昇格の判断』を『XCUITest を書く仕事』まで広げて読ませている証拠になる。境界を測るために意図的に置いている"
+  },
+  {
+    "id": "t16",
+    "query": "スクショを README に貼りたいので、余白を切って幅 800px に揃えておいて",
+    "should_trigger": false,
+    "note": "near-miss: 「スクショ」の語を共有するが、やることは画像加工"
+  },
+  {
+    "id": "t18",
+    "query": "Simulator が起動しなくなった。Xcode ごと入れ直した方が早い?",
+    "should_trigger": false,
+    "note": "★near-miss: 「Simulator」という最強のキーワードを含む負例。だが依頼は開発環境の修復であって、起動済み端末の操作ではない"
+  },
+  {
+    "id": "t20",
+    "query": "Proxyman で本番の CalDAV リクエストの中身を見たい。SSL Proxying の設定どうすればいい?",
+    "should_trigger": false,
+    "note": "★near-miss: description が Proxyman を名指ししている(『システムプロキシが新品 Simulator の TLS を落とす罠』)ため誤爆しやすい。だが依頼は Proxyman の設定方法であって Simulator の検証ではない"
+  }
+]
