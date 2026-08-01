@@ -74,6 +74,8 @@ iteration-3 の device prep は約 120 秒なので、**差し引くと 732s ≒
 | eval | スコア | 所要 | 要点 |
 |---|---|---|---|
 | **webview-card-dark** | **4/4** | **277s(4分37秒)** | 🔴 **Simulator を1台も起動していない。** スキルの `webview-offload.md` を最初の調査より前に読み、ブラウザ検証へ逃がした。**操作系 eval では原理的に測れない能力。** 指摘(コントラスト比7件・CSS 行番号・ホスト変数の配線ミス)は採点者が全件独立に再現し一致 |
+| **japanese-text-entry** | **4/4** | **510s(8分30秒)** | `idb ui text` が非 ASCII を**送信できない**(化けではなく例外・しかも exit 0)ことを特定。**スキルに無かった事実**で、採点者が再現して確認 → SKILL.md に追記。メモ App が Simulator 非同梱と分かり、代替した旨を明示して報告 |
+| **onboarding-walkthrough** | **4/4** | **573s(9分33秒)** | 🔴 **同梱スクリプトを実際に使った初の run**(`sim-preflight.sh` / `sim-nav.py` / `sim-shot.sh` / `sim-tap.py` / `cmp` 前後比較)。**依頼の前提「3画面の onboarding が止まる」を反証**(実装が存在しない)し、代わりに実在の詰まり(API キーの導線が無い・⚠️ が MCP 認証しか見ていない)を発見 |
 | **account-fanout** | 4/5 | 471s(7分51秒) | `simctl clone` で3台を **0タップ**投入。`idb ui tap` は週表示切替の4回のみ。3台とも `Accounts3.sqlite` に `ZACTIVE=1` を採点者が確認。落ちた1本は assertion 側の設計ミス(下記) |
 
 ### 落ちた assertion は eval の設計ミス(2件目)
@@ -86,9 +88,27 @@ iteration-3 の device prep は約 120 秒なので、**差し引くと 732s ≒
 ## 未取得
 
 - `without_skill` は2本とも取得済み(caldav-sync / demo-video)。
-- 残り4本の eval(状態プロビジョニング / WebView 逃がし / 日本語入力 / onboarding)は未実行。
+- ~~残り4本の eval~~ ✅ **6本すべて実行済み**(2026-08-02)。
 - **`ios-skills:simulator-operator` 経由の実行が未検証。** 上記はすべて `claude` 型で回して
-  おり、実運用の委譲経路(agent が `skills` で事前ロード)とは異なる。
+  おり、実運用の委譲経路(agent が `skills` で事前ロード)とは異なる。**`/reload-plugins` 待ち。**
+
+## 全 6 eval の一覧(iteration-3 時点・すべて with_skill)
+
+| eval | スコア | 所要 | スキルのロード |
+|---|---|---|---|
+| caldav-account-sync | 6/7 | 305s | ✅ 事前 |
+| demo-video | 6/6 | 852s | ❌ 読まず |
+| webview-card-dark | 4/4 | 277s | ✅ 事前 |
+| account-fanout | 4/5 | 471s | ✅ 事前 |
+| japanese-text-entry | 4/4 | 510s | ✅ 事前 |
+| onboarding-walkthrough | 4/4 | 573s | ✅ 事前 |
+
+**合計 28/30。落ちた2本はいずれも assertion 側の設計ミス**(推奨解を採ると自動的に落ちる形)で、
+実行側の失敗ではない。**全 run が 20 分上限内、6本中5本が 10 分以下**、中央値 約 8 分。
+
+**eval が skill を改善した実例が2件**: `idb ui text` の非 ASCII 送信不能(japanese)と、
+OAuth ページでキーボード出現によりボタン座標が動く件(demo-video iter-3)。
+どちらも採点者が再現して確認したうえで skill / project skill に反映済み。
 
 ## この表を更新するときの注意
 
