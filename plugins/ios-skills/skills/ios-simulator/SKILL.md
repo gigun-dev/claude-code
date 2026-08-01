@@ -8,7 +8,9 @@ description: >-
   加えて、Simulator まわりでうまくいかないとき(タップが無言で失敗する・テキスト入力が化ける・キーボードが出ない・TLS
   が落ちる・アカウントが追加できない・録画の尺が合わない)の診断と、CLI
   での操作(タップ/入力/スクショ/録画)。「シミュレータで動かして/確認して」「アカウントを入れて」「端末を複数用意して」「スクショ撮って」「デモ動画を撮って」と言われたとき、および
-  Simulator が絡んで詰まったときに読む。実機は対象外(ios-device-build)。
+  Simulator が絡んで詰まったときに読む。**Simulator を実際に操作する前に読むこと**
+  ——
+  環境の事前チェックを飛ばすと以降の観測がすべて無効になる実例が複数ある。実機は対象外(ios-device-build)。
 compatibility: >-
   macOS + フル Xcode(Command Line Tools だけでは不可)。tap/swipe/テキスト入力/アクセシビリティ走査には
   idb が必要 —— idb-companion(nix または brew)と fb-idb(`uv tool install fb-
