@@ -1,6 +1,15 @@
 ---
 name: ios-app-icon
-description: iOS 26/27 の Liquid Glass アプリアイコン(.icon / Icon Composer 形式)を GUI なしで設計・生成・検証し、Xcode / XcodeGen プロジェクトへ組み込む。使用タイミング: (1)「アプリアイコンを作って/変えて/作り直して」「アイコン案を複数出して比較したい」(2)「アイコンを設定したい」「AppIcon を Assets.xcassets / appiconset に入れたい」(3)「Liquid Glass 対応のアイコンにしたい」「iOS 26 らしいアイコンにして」(4) ビルドしてもアイコンが反映されない・ホーム画面が白いままの調査 (5) .icon / icon.json / ictool / Icon Composer / appiconset / ASSETCATALOG_COMPILER_APPICON_NAME といった語が出たとき。Icon Composer.app を開かずに icon.json を直接書き、ictool で Default/Dark/Clear/Tinted の全6モードをレンダリングして反復できる。**アプリのアイコン**が話題なら、明示的に「Liquid Glass」と言われなくても参照すること(ただし SF Symbols・favicon・UI の glassEffect() は対象外)。
+description: >-
+  iOS 26/27 の Liquid Glass アプリアイコン(.icon / Icon Composer 形式)を GUI
+  なしで設計・生成・検証し、Xcode / XcodeGen プロジェクトへ組み込む。使用タイミング:
+  (1)「アプリアイコンを作って/変えて/作り直して」「アイコン案を複数出して比較したい」(2)「アイコンを設定したい」「AppIcon を
+  Assets.xcassets / appiconset に入れたい」(3)「Liquid Glass 対応のアイコンにしたい」「iOS 26
+  らしいアイコンにして」(4) ビルドしてもアイコンが反映されない・ホーム画面が白いままの調査 (5) .icon / icon.json /
+  ictool / Icon Composer / appiconset / ASSETCATALOG_COMPILER_APPICON_NAME
+  といった語が出たとき。Icon Composer.app を開かずに icon.json を直接書き、ictool で
+  Default/Dark/Clear/Tinted の全6モードをレンダリングして反復できる。**アプリのアイコン**が話題なら、明示的に「Liquid
+  Glass」と言われなくても参照すること(ただし SF Symbols・favicon・UI の glassEffect() は対象外)。
 ---
 
 # iOS アプリアイコン(Liquid Glass / .icon)
@@ -67,6 +76,30 @@ swift scripts/draw_layers.swift spec.json out/
 はみ出しは目で判断すると必ず失敗する(理由は `references/design-rules.md` 末尾)。
 
 素材に光沢・影・ぼかし・角丸マスクを描かないこと。システムが付けるので二重になる。
+
+#### 面を積むのに飽きたら「1本の線」で考える
+
+`shape` は `roundedRect` / `circle` / `ring` / `arc` / `capsule` / `path` の6つだが、
+**プリミティブを N 個積む構成だけで案を出し続けると、どのアプリでも似た絵になる**
+(実際、別々のアプリで作った案が見分けられないところまで行った)。行き詰まったら
+`path` に切り替える。`d` は SVG のパスコマンドをほぼ全部解釈する(M L H V C S Q T A Z、
+相対版と圧縮記法も可)ので、デザインツールや生成 AI が吐いた `d` をそのまま貼れる。
+
+```json
+{ "name": "01", "shape": "path", "cx": 512, "cy": 512, "w": 880, "viewBox": 1000,
+  "d": "M120 300H880A100 100 0 010 500...", "thickness": 96, "color": "#f4f2ec" }
+```
+
+| キー | 効果 |
+| --- | --- |
+| `viewBox` | `d` が前提とする正方 viewBox の一辺。`w` との比が拡大率になる |
+| `thickness` | **書くと塗りではなく線で描く**(端・角は丸)。渦巻き・蛇行リボンのような「一定の太さの1本の線」はこれでしか作れない — 塗りで作ると輪郭のオフセット曲線を手書きする羽目になる |
+| `fillRule: "evenOdd"` | 重なりを穴にする。1つのパスで穴あきの形を作るのに要る |
+
+規則的に折り返す長い線(角型スパイラル、蛇行する走査線)は手で書くより**生成したほうが速い**。
+折れ線の頂点列を作り、各頂点を半径 r の円弧で丸めて `d` に落とすだけで済む。
+角を丸めるときは「頂点の手前 r で止めて次の辺の r 先へ `A` で繋ぐ」、
+SVG は y 下向きなので外積が正なら `sweep-flag` は 1。
 
 ### 3. .icon にしてレンダリングする
 

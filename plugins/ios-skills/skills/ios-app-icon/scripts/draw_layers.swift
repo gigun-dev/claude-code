@@ -24,7 +24,13 @@
 //     { "name": "01-back", "shape": "roundedRect",
 //       "cx": 452, "cy": 468, "w": 620, "h": 486, "r": 128, "angle": -6, "color": "#ffffff" },
 //     { "name": "02-front", "shape": "circle",
-//       "cx": 652, "cy": 664, "d": 356, "color": "#fbbf24" }
+//       "cx": 652, "cy": 664, "d": 356, "color": "#fbbf24" },
+//     { "name": "03-mark", "shape": "path",
+//       "cx": 512, "cy": 512, "w": 880, "viewBox": 1000,
+//       "d": "M120 300H880A100 100 0 010 500Z",   // shape:"path" では d が SVG パス
+//       "thickness": 96,                          // 書くと塗りではなく線で描く
+//       "fillRule": "evenOdd",                    // 塗りのとき、重なりを穴にする
+//       "color": "#f4f2ec" }
 //   ]
 // }
 // 座標は「左上原点・上から測った y」で書く(デザインツールと同じ感覚)。
@@ -97,6 +103,8 @@ struct Layer {
     var endAngle: CGFloat           // arc の終了角(度)
     var pathD: String               // shape:"path" のときの SVG `d`
     var viewBox: CGFloat            // その d が前提とする正方 viewBox の一辺
+    var evenOdd: Bool               // 重なった部分を「穴」にするか(下記参照)
+    var strokePath: Bool            // shape:"path" を塗らず線で描くか(thickness 明示で ON)
     var color: String
 }
 
@@ -118,6 +126,11 @@ let layers: [Layer] = rawLayers.enumerated().map { (i, d) in
         endAngle: CGFloat(d["endAngle"] as? Double ?? 90),
         pathD: d["d"] as? String ?? "",
         viewBox: CGFloat(d["viewBox"] as? Double ?? 1024),
+        evenOdd: (d["fillRule"] as? String ?? "") == "evenOdd",
+        // thickness を「書いたかどうか」で塗り/線を切り替える。既定値(40)と区別が要るので
+        // 値ではなくキーの有無を見る —— 塗りたいときに thickness を書く理由が無いので、
+        // 書いてあること自体を「線で描きたい」という意思表示として扱ってよい。
+        strokePath: shape == "path" && d["thickness"] != nil,
         color: d["color"] as? String ?? "#ffffff")
 }
 
@@ -128,8 +141,16 @@ let layers: [Layer] = rawLayers.enumerated().map { (i, d) in
 /// 任意パスが描ければ、切り欠き・非対称な塊・記号的な曲線といった語彙が使え、
 /// デザインツールや生成 AI の草案をそのまま持ち込める。
 ///
-/// 対応するのは M/m L/l H/h V/v C/c Q/q Z/z。円弧(A)は使う場面が少なく実装コストが高いので
-/// 省いた —— 円弧が要るなら shape:"arc" を使う。
+/// 対応するのは M/m L/l H/h V/v C/c S/s Q/q T/t A/a Z/z(SVG のパスコマンドのほぼ全部)。
+///
+/// 【A(円弧)を後から足した理由・2026-08-02】当初は「使う場面が少なく実装コストが高い」として
+/// 省き、円弧が要るなら shape:"arc" を使えとしていた。これが間違いだった —— shape:"arc" は
+/// **独立したレイヤーとして線を1本引く**ものなので、「直線と円弧が繋がった1つの閉じた輪郭」が
+/// 作れない。結果、パスで描けるのは多角形と手書きベジェだけになり、「大胆に1つのパスで勝負する」
+/// タイプの構成(=プリミティブの積み重ねでは絶対に出ない形)が事実上できなかった。
+/// デザインツールや生成 AI が吐く d 属性も A を多用するので、持ち込みの互換性という意味でも要る。
+/// S/T(前の制御点の鏡像を使う省略記法)も同じ理由 —— 外部の d をそのまま貼れることが重要。
+///
 /// **SVG は y 軸が下向き**なので、ここで上下を反転してから CoreGraphics 座標へ渡す。
 func parseSVGPath(_ d: String, viewBox: CGFloat) -> CGPath {
     let path = CGMutablePath()
@@ -151,6 +172,12 @@ func parseSVGPath(_ d: String, viewBox: CGFloat) -> CGPath {
         if let c = currentCmd { tokens.append((c, nums)) }
         nums = []
     }
+    /// いま読もうとしている数値が A/a の 0/1 フラグ位置(7つ組の4・5番目)か。
+    func isArcFlagPosition() -> Bool {
+        guard let c = currentCmd, c == "a" || c == "A", numberBuf.isEmpty else { return false }
+        let i = nums.count % 7
+        return i == 3 || i == 4
+    }
     for ch in d {
         if ch.isLetter {
             flushCmd()
@@ -160,6 +187,14 @@ func parseSVGPath(_ d: String, viewBox: CGFloat) -> CGPath {
             numberBuf = "-"
         } else if ch == "," || ch == " " || ch == "\n" || ch == "\t" {
             flushNumber()
+        } else if isArcFlagPosition(), ch == "0" || ch == "1" {
+            // 【A コマンド特有の罠】large-arc-flag と sweep-flag は 0/1 の1文字で、
+            // SVG では区切り文字を省ける("a1 1 0 011 1" の "011" は 0,1,1 の3値)。
+            // 素朴に空白/カンマだけで区切ると 11 や 011 という1つの数になり、
+            // エラーにならないまま弧の形だけが壊れる。フラグの位置(7つ組の4・5番目)に
+            // 来たら1文字だけ取って確定させる。デザインツールが吐く圧縮された d を
+            // そのまま貼れることがこのパーサの存在意義なので、ここは仕様どおり実装する。
+            nums.append(ch == "1" ? 1 : 0)
         } else {
             numberBuf.append(ch)
         }
@@ -169,9 +204,86 @@ func parseSVGPath(_ d: String, viewBox: CGFloat) -> CGPath {
     // SVG(y 下向き・viewBox 基準)→ CoreGraphics(y 上向き・canvas 基準)。
     func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: viewBox - y) }
 
+    /// SVG の楕円弧(endpoint parameterization)を三次ベジェ列へ落として path へ足す。
+    ///
+    /// 変換は SVG 仕様 F.6.5 の実装そのまま(端点表現 → 中心表現)。CGPath には
+    /// 「傾いた楕円の弧」を直接足す API が無いので、90°以下の区画へ分割して各区画を
+    /// ベジェ近似する(t = 4/3·tan(δ/4) が誤差最小の古典的な係数)。
+    /// 計算は SVG 座標系(y 下向き)のまま行い、最後に pt() で反転する —— pt は
+    /// アフィン変換なので、制御点だけ変換すれば曲線の形は保たれる。
+    func addArc(_ p1: CGPoint, _ rxIn: CGFloat, _ ryIn: CGFloat, _ xRotDeg: CGFloat,
+                _ largeArc: Bool, _ sweep: Bool, _ p2: CGPoint) {
+        // 半径 0 は直線とみなす(仕様)。負値は絶対値を取る。
+        var rx = abs(rxIn), ry = abs(ryIn)
+        if rx == 0 || ry == 0 { path.addLine(to: pt(p2.x, p2.y)); return }
+
+        let phi = xRotDeg * .pi / 180
+        let cosP = cos(phi), sinP = sin(phi)
+        let dx2 = (p1.x - p2.x) / 2, dy2 = (p1.y - p2.y) / 2
+        let x1p = cosP * dx2 + sinP * dy2
+        let y1p = -sinP * dx2 + cosP * dy2
+
+        // 指定半径が小さすぎて2点を結べない場合は、仕様どおり等比で拡大する。
+        let lambda = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry)
+        if lambda > 1 { let s = sqrt(lambda); rx *= s; ry *= s }
+
+        let rx2 = rx * rx, ry2 = ry * ry
+        let num = max(0, rx2 * ry2 - rx2 * y1p * y1p - ry2 * x1p * x1p)
+        let den = rx2 * y1p * y1p + ry2 * x1p * x1p
+        let coef = (largeArc != sweep ? 1 : -1) * sqrt(den == 0 ? 0 : num / den)
+        let cxp = coef * rx * y1p / ry
+        let cyp = coef * -ry * x1p / rx
+        let cx = cosP * cxp - sinP * cyp + (p1.x + p2.x) / 2
+        let cy = sinP * cxp + cosP * cyp + (p1.y + p2.y) / 2
+
+        func angle(_ ux: CGFloat, _ uy: CGFloat, _ vx: CGFloat, _ vy: CGFloat) -> CGFloat {
+            let dot = ux * vx + uy * vy
+            let len = sqrt((ux * ux + uy * uy) * (vx * vx + vy * vy))
+            var a = acos(min(1, max(-1, len == 0 ? 1 : dot / len)))
+            if ux * vy - uy * vx < 0 { a = -a }
+            return a
+        }
+        let ux = (x1p - cxp) / rx, uy = (y1p - cyp) / ry
+        let vx = (-x1p - cxp) / rx, vy = (-y1p - cyp) / ry
+        let theta1 = angle(1, 0, ux, uy)
+        var delta = angle(ux, uy, vx, vy)
+        // sweep フラグと回転方向を一致させる(仕様どおり ±2π で折り返す)。
+        if !sweep, delta > 0 { delta -= 2 * .pi }
+        if sweep, delta < 0 { delta += 2 * .pi }
+
+        let segments = max(1, Int(ceil(abs(delta) / (.pi / 2))))
+        let step = delta / CGFloat(segments)
+        let t = 4.0 / 3.0 * tan(step / 4)
+        var theta = theta1
+        for _ in 0 ..< segments {
+            let next = theta + step
+            // 楕円上の点とその接ベクトル(x 軸回転 phi 込み)。
+            func point(_ a: CGFloat) -> CGPoint {
+                CGPoint(x: cx + rx * cosP * cos(a) - ry * sinP * sin(a),
+                        y: cy + rx * sinP * cos(a) + ry * cosP * sin(a))
+            }
+            func deriv(_ a: CGFloat) -> CGPoint {
+                CGPoint(x: -rx * cosP * sin(a) - ry * sinP * cos(a),
+                        y: -rx * sinP * sin(a) + ry * cosP * cos(a))
+            }
+            let p0 = point(theta), p3 = point(next)
+            let d0 = deriv(theta), d3 = deriv(next)
+            let c1 = CGPoint(x: p0.x + t * d0.x, y: p0.y + t * d0.y)
+            let c2 = CGPoint(x: p3.x - t * d3.x, y: p3.y - t * d3.y)
+            path.addCurve(to: pt(p3.x, p3.y), control1: pt(c1.x, c1.y), control2: pt(c2.x, c2.y))
+            theta = next
+        }
+    }
+
+    // S/T(省略記法)は「直前が同種の曲線コマンドだったか」で制御点の求め方が変わるので、
+    // 直前のコマンド種別を覚えておく(仕様: 直前が違えば鏡像ではなく現在点を使う)。
+    var prevCmd: Character = " "
+
     for (cmd, n) in tokens {
         let rel = cmd.isLowercase
-        switch Character(cmd.lowercased()) {
+        let lower = Character(cmd.lowercased())
+        defer { prevCmd = lower }
+        switch lower {
         case "m":
             var i = 0
             while i + 1 < n.count {
@@ -198,6 +310,18 @@ func parseSVGPath(_ d: String, viewBox: CGFloat) -> CGPath {
                 path.addCurve(to: pt(p.x, p.y), control1: pt(c1.x, c1.y), control2: pt(c2.x, c2.y))
                 cur = p; lastCtrl = c2; i += 6
             }
+        case "s":
+            // 第1制御点は「直前の三次曲線の第2制御点を現在点で反転したもの」。
+            // 直前が C/S でなければ反転する材料が無いので現在点そのものを使う(仕様)。
+            var i = 0
+            while i + 3 < n.count {
+                let mirrored = (prevCmd == "c" || prevCmd == "s")
+                    ? CGPoint(x: 2 * cur.x - lastCtrl.x, y: 2 * cur.y - lastCtrl.y) : cur
+                let c2 = rel ? CGPoint(x: cur.x + n[i], y: cur.y + n[i + 1]) : CGPoint(x: n[i], y: n[i + 1])
+                let p = rel ? CGPoint(x: cur.x + n[i + 2], y: cur.y + n[i + 3]) : CGPoint(x: n[i + 2], y: n[i + 3])
+                path.addCurve(to: pt(p.x, p.y), control1: pt(mirrored.x, mirrored.y), control2: pt(c2.x, c2.y))
+                cur = p; lastCtrl = c2; i += 4
+            }
         case "q":
             var i = 0
             while i + 3 < n.count {
@@ -206,12 +330,30 @@ func parseSVGPath(_ d: String, viewBox: CGFloat) -> CGPath {
                 path.addQuadCurve(to: pt(p.x, p.y), control: pt(c.x, c.y))
                 cur = p; lastCtrl = c; i += 4
             }
+        case "t":
+            // Q の省略記法。制御点は直前の二次曲線の制御点の鏡像(S と同じ理屈)。
+            var i = 0
+            while i + 1 < n.count {
+                let c = (prevCmd == "q" || prevCmd == "t")
+                    ? CGPoint(x: 2 * cur.x - lastCtrl.x, y: 2 * cur.y - lastCtrl.y) : cur
+                let p = rel ? CGPoint(x: cur.x + n[i], y: cur.y + n[i + 1]) : CGPoint(x: n[i], y: n[i + 1])
+                path.addQuadCurve(to: pt(p.x, p.y), control: pt(c.x, c.y))
+                cur = p; lastCtrl = c; i += 2
+            }
+        case "a":
+            // rx ry x-axis-rotation large-arc-flag sweep-flag x y の7つ1組。
+            var i = 0
+            while i + 6 < n.count {
+                let p = rel ? CGPoint(x: cur.x + n[i + 5], y: cur.y + n[i + 6])
+                            : CGPoint(x: n[i + 5], y: n[i + 6])
+                addArc(cur, n[i], n[i + 1], n[i + 2], n[i + 3] != 0, n[i + 4] != 0, p)
+                cur = p; i += 7
+            }
         case "z":
             path.closeSubpath(); cur = start
         default:
             break
         }
-        _ = lastCtrl
     }
     return path
 }
@@ -256,11 +398,32 @@ func draw(_ ctx: CGContext, _ l: Layer) {
     case "path":
         // SVG パス。cx/cy は「パスの viewBox 中心をどこへ置くか」として扱い、
         // w を指定すれば viewBox からの拡大率になる(未指定なら等倍)。
+        //
+        // 【fillRule】既定は非ゼロ塗り(nonZero)。`"fillRule": "evenOdd"` を指定すると
+        // 重なった領域が穴になる。これが無いと **1つのパスで穴の空いた形が作れない** ——
+        // 外側の輪郭と内側の輪郭を同じ向きで書いても、非ゼロ塗りでは内側が塗り潰されてしまい、
+        // 「巻き方向を逆にする」ことでしか穴を開けられなかった(手書きの d では事故のもと)。
+        // 生成 AI やデザインツールが吐く d は even-odd 前提のものが多いという事情もある。
+        //
+        // 【塗りか線か】既定は塗り。`"thickness"` を指定すると代わりに stroke する。
+        // stroke が要る理由: 渦巻き・蛇行するリボンのような「一定の太さの1本の線」は、
+        // 塗りで作ろうとすると輪郭のオフセット曲線を手で書くことになり事実上書けない。
+        // 線で描ければ d は中心線1本で済み、太さは thickness で後から振れる。
+        // 端と角は丸める —— アイコンでは尖った端は硬く見え、Apple の純正も丸で統一されている。
         let scale = l.w > 0 ? l.w / l.viewBox : 1
         ctx.scaleBy(x: scale, y: scale)
         ctx.translateBy(x: -l.viewBox / 2, y: -l.viewBox / 2)
         ctx.addPath(parseSVGPath(l.pathD, viewBox: l.viewBox))
-        ctx.fillPath()
+        if l.strokePath {
+            // 線幅は viewBox 基準で書けるほうが d と単位が揃って考えやすいので、
+            // scaleBy 後の座標系でそのまま thickness を使う(結果として w に比例して太る)。
+            ctx.setLineWidth(l.thickness)
+            ctx.setLineCap(.round)
+            ctx.setLineJoin(.round)
+            ctx.strokePath()
+        } else {
+            ctx.fillPath(using: l.evenOdd ? .evenOdd : .winding)
+        }
 
     default:  // roundedRect
         ctx.addPath(CGPath(roundedRect: CGRect(x: -l.w / 2, y: -l.h / 2, width: l.w, height: l.h),
