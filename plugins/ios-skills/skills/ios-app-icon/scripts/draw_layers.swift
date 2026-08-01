@@ -64,12 +64,23 @@ let doAutofit = spec["autofit"] as? Bool ?? true
 
 // MARK: - 描画基盤
 
+/// `#rrggbb` を **sRGB の** CGColor にする。
+///
+/// 【色空間を明示する理由・2026-08-02 修正】`CGColor(red:green:blue:alpha:)` は
+/// 色空間を取らず、生成される色は generic/device RGB になる。描画先のビットマップは
+/// sRGB なので、描くときに CoreGraphics が変換をかけ、**書いた hex と出る色がずれる**。
+/// 実測で `#fbbf24` → `#fdc92e`、`#6366f1` → `#7680f4`(いずれも明度・彩度が上がる方向)。
+/// 誤差は小さいがエラーも警告も出ないので、「指定した色と違う」と気づきにくい ——
+/// 実際、既存アイコンの PNG から色を測って spec と突き合わせるまで発覚しなかった。
+/// ブランド色を指定する用途では致命的なので、色空間を明示して同一に保つ。
 func hex(_ s: String) -> CGColor {
     var h = s.replacingOccurrences(of: "#", with: "")
     if h.count == 3 { h = h.map { "\($0)\($0)" }.joined() }
     let v = UInt32(h, radix: 16) ?? 0
-    return CGColor(red: CGFloat((v >> 16) & 0xff) / 255, green: CGFloat((v >> 8) & 0xff) / 255,
-                   blue: CGFloat(v & 0xff) / 255, alpha: 1)
+    let c: [CGFloat] = [CGFloat((v >> 16) & 0xff) / 255,
+                        CGFloat((v >> 8) & 0xff) / 255,
+                        CGFloat(v & 0xff) / 255, 1]
+    return CGColor(colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!, components: c)!
 }
 
 func makeContext() -> CGContext {
