@@ -100,8 +100,10 @@ xcrun simctl openurl "$SIM_UDID" "myapp://deeplink/path"
 | **`describe-all` が要素1個・frame 全部 0** | **アプリが前面にいない。** `xcrun simctl launch --terminate-running-process <UDID> <bundle-id>` + 数秒待ち(→ `references/diagnosis.md` §1) |
 | **画面に見えている要素が `describe-all` に出てこない** | **AX 走査の穴**(購読確定の赤い ✓ など)。スクショから `pt = px ÷ scale` で撃つ(→ `diagnosis.md` §3) |
 | **小さい要素(トグル等)を撃つと成功扱いなのに何も起きない** | スクショ座標の2回変換で誤差が乗っている。**小さい要素は必ず `describe-all` 経由**(→ `diagnosis.md` §2) |
-| screenshot が `volume is read only` | 出力先が `/tmp` 配下。`~/tmp-sim/` へ |
-| 端末上で「**サーバの識別情報を検証できません**」 | **macOS のシステムプロキシが MITM している。** `scripts/sim-trust-ca.sh --udid <UDID>` |
+| screenshot が `volume is read only` / `NSCocoaErrorDomain code=642` | 出力先が `/tmp` 配下。`~/tmp-sim/` へ |
+| **`NSURLErrorDomain Code=-1200 "A TLS error caused the secure connection to fail."`** / 端末上で「**サーバの識別情報を検証できません**」「**接続はプライベートではありません**」 | **システムプロキシが MITM していて、端末がその CA を信頼していない。** `scripts/sim-trust-ca.sh --udid <UDID>`。⚠️ **CA はローテーションするので、以前入れた端末も突然こうなる** |
+| **HTTPS だけが落ちる**(「サーバーが落ちている」ように見える) | 同上。**ビルドが緑でアプリが起動することは、ネットワーク信頼について何も証明しない** |
+| **作業が異様に遅い**(タップ数回で数分) | **idb ではなく往復がコスト。** → 「ワークフロー規律」の「往復を減らす」 |
 | **入力した文字が化ける**(`hello` → 「へっぉ」) | **IME を通っている。** `xcrun simctl pbcopy` へ逃げる(→「テキスト入力」節) |
 | **キーが1つも画面に出ない** | `ConnectHardwareKeyboard` が有効。Step 0 の `fix` |
 | `pbcopy` が `NSPOSIXErrorDomain code=60` | ブート直後。**数秒待って再試行すれば通る**。「使えない端末だ」と結論しない |
@@ -329,6 +331,42 @@ Python の4本は **uv の PEP 723 インラインスクリプト**(事前 pip �
 | `attach`/`detach` | 該当なし(live ペインは Desktop 専用。CLI は screenshot で確認) |
 
 ## ワークフロー規律とジェスチャ(Anthropic の Desktop ツール定義から翻案)
+
+### 🔴 往復を減らす —— 遅いのは idb ではない(2026-08-02 実測)
+
+| 操作 | 実測(アイドル時) |
+|---|---|
+| `idb ui tap` | **0.08 秒** |
+| `idb ui describe-all` | 0.14〜0.28 秒 |
+| `xcrun simctl io screenshot` | 0.24 秒 |
+| `scripts/sim-shot.sh`(scale 込み) | 0.48 秒 |
+| **タップ5連発を1コマンドで** | **0.46 秒** |
+
+**1タップごとにシェルを1往復すると、数タップで数分が溶ける。** コストは idb ではなく
+**ツール呼び出しの往復**。画面遷移のひとまとまりは**1コマンドにまとめて撃ち、最後に1枚撮って確認する**。
+
+```bash
+U="$SIM_UDID"
+idb ui tap --udid "$U" 201 337 && sleep 0.4 && \
+idb ui tap --udid "$U" 201 420 && sleep 0.4 && \
+xcrun simctl io "$U" screenshot ~/tmp-sim/after.png
+```
+
+> ⚠️ **座標を変数に入れて回すループは zsh で壊れる。** `for c in "201 337"; do idb ui tap $U $c` は
+> bash なら2引数に割れるが、**zsh は引用符なしの変数展開を単語分割しない**ので `"201 337"` が
+> 1引数のまま渡り、**タップが実行されない**。stderr を捨てていると無言の失敗に見え、
+> 「座標が古くなった」と誤診する(実際に踏んだ)。配列で回すなら `coords=(201 337 201 420)` と
+> **数値を平坦に**持ち、2つずつ取り出す。
+>
+> **Why not「だから XCUITest へ昇格」としないか**: この遅さは idb の性質ではないので、
+> 昇格しても往復の問題は残る(1テスト実行あたりのビルド待ちに化けるだけ)。
+> **昇格の判断軸は「反復が実際に発生しているか」のまま**(→ 棲み分けの表)。
+>
+> ⚠️ **「idb ui tap が 110 秒かかる」という報告は実測で否定済み**(1400倍の誤り)。
+> 往復コストを idb のコストに誤帰属したもの。**遅いと感じたら、まず上の表の値を自分で取り直す**
+> ——「診断の規律」2(実測と推論を書き分ける)と 3(疑っている道具の外側で測る)の実例。
+
+### そのほか
 
 - **見た目の確認は screenshot で行う**(headless・安い)。操作の直後、状態が変わる前に撮る。
   ただし**スクショだけで成否を決めない**。固定 `sleep` より `sim-wait.py` のポーリング。

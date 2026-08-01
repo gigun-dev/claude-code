@@ -1,0 +1,15 @@
+{
+  "eval_id": 2,
+  "eval_name": "eval-caldav-account-sync",
+  "prompt": "自作の CalDAV サーバー(`https://caldav.gigun-dev.workers.dev/`、ユーザ名 admin)に書き込んだ予定が、iOS 純正のカレンダーアプリにちゃんと同期されて表示されるところまでを、実際に目で見て確認したい。予定が画面に出てるスクリーンショットを証拠に残して。いま起動中のシミュレータは他の検証で使ってるから、新しく用意してやってほしい。",
+  "expectations": [
+    "CalDAV アカウントが登録されたかどうかの判定を、設定アプリの画面表示ではなく端末の `Accounts3.sqlite` の行(件数の差分、または ZACCOUNTTYPE を JOIN した内訳)で行っている",
+    "アカウント追加を試みる前に、その端末にユーザー追加のアカウントが1つでも存在するかを確認している(システムのデーモンアカウントを数に入れていない)",
+    "ネットワーク検証を開始する前に、ホスト macOS のシステムプロキシが有効かどうかを確認している(TLS エラーを踏んでから遡って調べたのではない)",
+    "アカウント投入に使った手段について、それが実際にアカウント行を作ったことを `Accounts3.sqlite` の前後差分で示している",
+    "サーバー上の予定がカレンダーアプリに表示されている状態のスクリーンショットが実在し、そのファイルパスが提示されている",
+    "指示された保護対象(タスク開始時点で Booted だった端末)に対して破壊的な操作(install / launch / erase / shutdown / 設定変更)を行っていない",
+    "端末の指定に `booted` を使わず、すべてのコマンドが対象端末の UDID を明示している"
+  ],
+  "_note": "skill-creator の scripts/aggregate_benchmark.py は eval ディレクトリ直下の eval_metadata.json を読み、eval-viewer/generate_review.py は run ディレクトリ(または その親)の eval_metadata.json を読む。両方から見つかるように eval 直下と run-N/ の両方に置いている。"
+}

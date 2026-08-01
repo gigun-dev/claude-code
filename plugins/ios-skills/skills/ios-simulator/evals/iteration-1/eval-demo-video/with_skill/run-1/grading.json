@@ -23,8 +23,8 @@
     },
     {
       "text": "動画の実尺が 30〜90 秒に収まっており、かつ最初の画面変化から最後の画面変化までの区間が全体尺の 70% 以上を占める(= 無操作の待ち時間が動画の 30% 未満)",
-      "passed": true,
-      "evidence": "最終成果物は「実尺は約36〜38秒(元の102秒録画から idle 区間をトリミング)」。トリミング後は変化区間がほぼ全体を占める。⚠️ ただし生録画は 102 秒中の実操作 36 秒 = 35% で、この assertion を素の録画で満たしていない。ffmpeg でのトリミングを 2〜3 回やり直して(タイムスタンプ破損)ようやく到達しており、PASS の裏に相当なコストがある。この差は benchmark の時間側に出ている。"
+      "passed": false,
+      "evidence": "🔴 2026-08-02 訂正(PASS → FAIL)。iteration-1 の採点は実行エージェントの自己申告「実尺は約36〜38秒」をそのまま採ったが、**成果物を直接 ffprobe にかけたところ申告は誤りだった**。実測: duration=60.000000s / nb_frames=4 / avg_frame_rate=1/18、フレームの提示時刻は 0s・12s・36s・48s。尺 60s は 30〜90s の範囲に入るが、**変化区間は 12s→48s の 36s = 全体の 60% で、閾値 70% を下回る**(= 無操作区間が 40%)。さらに『4フレームのみ』は動画としての体を成しておらず、実質は4枚のスライドショー。訂正の意味: この項目は**成果物を実際に検査すれば iteration-1 の時点で FAIL と分かった**。自己申告を検証せずに PASS にしたのは、この grading.json 自身が _grading_source に掲げた 『Don't give the benefit of the doubt』への違反。**eval の失敗ではなく採点の失敗。**"
     },
     {
       "text": "動画の中に (a) MCP ツール呼び出しの表示 (b) カレンダーカード (c) LLM のテキスト応答 の3つが写っていることを、フレーム抽出などの手段で確認したうえで報告している",
@@ -38,15 +38,16 @@
     }
   ],
   "summary": {
-    "passed": 3,
-    "failed": 3,
+    "passed": 2,
+    "failed": 4,
     "total": 6,
-    "pass_rate": 0.5
+    "pass_rate": 0.3333
   },
   "assertion_review": [
     "『実尺 30〜90 秒』は成果物ベースなので PASS になったが、run のコスト(ffmpeg 2〜3 回やり直し)を隠している。iteration-2 では生録画側にも assertion を1本足すか、この項目を『生録画の変化区間が 70% 以上』へ振り替えることを検討する。",
     "『保護対象に破壊的操作なし』と『端末指定は明示 UDID』は実質同じインシデントで2つとも落ちており相関が強い。ただし独立に壊れうる(booted 指定で他人の端末を撮る事故は SKILL.md にも記録がある)ので、iteration-2 でも分けたまま観測する。",
     "without_skill の baseline が無いため、この 3 PASS のうちどれがスキル由来かは判定できない。特に『(a)(b)(c) が写っている』はタスク要件そのものなので、baseline でも PASS する可能性が高い(= 削除候補)。"
   ],
-  "_timing_note": "時間とトークンは同ディレクトリの timing.json を正とする(grading.json に timing を置くと aggregate_benchmark.py が timing.json を読まず tokens が 0 になる実装のため)。"
+  "_timing_note": "時間とトークンは同ディレクトリの timing.json を正とする(grading.json に timing を置くと aggregate_benchmark.py が timing.json を読まず tokens が 0 になる実装のため)。",
+  "_correction_2026_08_02": "expectation[3](実尺と変化区間)を PASS → FAIL に訂正した。詳細は当該 evidence。expectation[2](mp4 が実在し再生可能)と expectation[4]((a)(b)(c) が写っている)は**再検証のうえ PASS のまま維持**: 実ファイルは ffprobe/ffmpeg で正常に読め、4フレーム目に MCP ツール呼び出し(caldav・list-events-expanded・緑チェック)/カレンダーカード(8/3 週次ミーティング 09:00)/ LLM のテキスト応答 の3要素すべてが写っていることをフレーム抽出して目視で確認した。**内容は正しく、壊れているのは尺だけ。**したがって『勉強会で流せない』のは品質(動きが無い)の問題であって、デモの中身が偽物だったわけではない。"
 }
