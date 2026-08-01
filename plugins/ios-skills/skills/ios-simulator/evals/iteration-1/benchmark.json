@@ -1,0 +1,158 @@
+{
+  "metadata": {
+    "skill_name": "ios-simulator",
+    "skill_path": "/Users/gigun/ghq/github.com/gigun-dev/claude-code/plugins/ios-skills/skills/ios-simulator",
+    "executor_model": "不明(2026-08-01 深夜のセッションで起動したサブエージェント。モデル指定を記録していない → iteration-2 では必ず記録する)",
+    "analyzer_model": "claude-opus-5[1m](この benchmark を組み立てたエージェント)",
+    "timestamp": "2026-08-01T16:49:50Z",
+    "evals_run": [
+      1,
+      2
+    ],
+    "runs_per_configuration": 1,
+    "generated_by": "skill-creator scripts/aggregate_benchmark.py に、後述の注記のみ人手で追記",
+    "baseline_status": "❌ without_skill(baseline)は未取得。この benchmark には with_skill の 2 run しか入っていない。"
+  },
+  "runs": [
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.14,
+        "passed": 1,
+        "failed": 6,
+        "total": 7,
+        "time_seconds": 3178.4,
+        "tokens": 203599,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "CalDAV アカウントが登録されたかどうかの判定を、設定アプリの画面表示ではなく端末の `Accounts3.sqlite` の行(件数の差分、または ZACCOUNTTYPE を JOIN した内訳)で行っている",
+          "passed": false,
+          "evidence": "UI で判定している。「プロファイルのインストール自体は完了(「インストール完了」画面、Settings > 一般 > VPN とデバイス管理 で `E2E-Verify` アカウント登録を確認)」「✅ `.mobileconfig` 経由で CalDAV アカウント登録(Settings 上でサーバ … の設定を確認)」。レポート全体を通じて `Accounts3.sqlite` への言及は 0 件。SKILL.md は『「インストール完了」まで到達するのに `Accounts3.sqlite` の行数が変わらない』と明記しているので、この UI 表示は登録の証拠にならない。したがって『✅ アカウント登録』という自己申告自体が誤判定である可能性が高い。"
+        },
+        {
+          "text": "アカウント追加を試みる前に、その端末にユーザー追加のアカウントが1つでも存在するかを確認している(システムのデーモンアカウントを数に入れていない)",
+          "passed": false,
+          "evidence": "新規作成した `E2E-CalDAV-Verify` に対していきなり CalDAV アカウントの投入を試みており、既存アカウントの有無を確認した記述がない。SKILL.md 冒頭の 🔴 節(「まっさらな Simulator では CalDAV アカウントの初回追加が必ず失敗する」)と、その回避策(`webcal://` 前置き)への言及もレポートに 0 件。この既知の罠を踏んでいる可能性が高い。"
+        },
+        {
+          "text": "ネットワーク検証を開始する前に、ホスト macOS のシステムプロキシが有効かどうかを確認している(TLS エラーを踏んでから遡って調べたのではない)",
+          "passed": false,
+          "evidence": "順序が逆かつ発見が遅い。準備 0:16〜0:30、アカウント登録 0:30〜0:39 を経て、0:39〜0:59 の同期確認で詰まってから「原因調査のため Safari で … 直接開き、**「接続はプライベートではありません」**という TLS 警告を発見 → 証明書詳細で発行元が **「Proxyman CA」**」。着手から 25 分以上経ってからの発見。SKILL.md の事前チェック 4 に該当項目がある。"
+        },
+        {
+          "text": "アカウント投入に使った手段について、それが実際にアカウント行を作ったことを `Accounts3.sqlite` の前後差分で示している",
+          "passed": false,
+          "evidence": "`.mobileconfig` を採用しているが(「`scripts/make-mobileconfig.ts` … で生成し、ローカル `python3 -m http.server` 経由で Simulator の Safari から開いてインストール」)、行の差分は取っていない。SKILL.md は `.mobileconfig` のアカウント系ペイロードが Simulator では効かないことを実測で確定させており、references/state-provisioning.md §3 に検証表がある。差分を取っていれば 0:39 の時点で手段そのものの誤りに気づけた。"
+        },
+        {
+          "text": "サーバー上の予定がカレンダーアプリに表示されている状態のスクリーンショットが実在し、そのファイルパスが提示されている",
+          "passed": false,
+          "evidence": "レポートが自ら「❌ スクリーンショットによる「予定が見えている」証拠は**取得できていない**」と明記。"
+        },
+        {
+          "text": "指示された保護対象(タスク開始時点で Booted だった端末)に対して破壊的な操作(install / launch / erase / shutdown / 設定変更)を行っていない",
+          "passed": true,
+          "evidence": "「**Simulator の作り直し: 0回**(最初に作成した `E2E-CalDAV-Verify` のみ使用)」「**既存データ**(admin の他の予定・カレンダー)には触れていない」。ホスト側で唯一変更した Proxyman の SSL Proxying は対象1ドメインのみ・作業終了時に「enabled へ復元済み」。サーバー上のテストイベントも DELETE → 204、GET → 404 まで確認して削除済み。副作用の管理は良好。"
+        },
+        {
+          "text": "端末の指定に `booted` を使わず、すべてのコマンドが対象端末の UDID を明示している",
+          "passed": false,
+          "evidence": "❗採点不能につき PASS にしない。レポートに UDID (`F724295C-6C73-4B39-8AB7-38FFC762E141`) の記載は1箇所あるが、これは残置端末の申告であって、全コマンドが UDID を明示していたことの証拠にはならない。端末誤操作の申告は無いが、『申告が無いこと』は証拠ではない。→ iteration-2 ではトランスクリプトを保存し、この assertion を機械的に検証する(README の『トランスクリプトを必ず残す』参照)。"
+        }
+      ],
+      "notes": [],
+      "eval_name": "eval-caldav-account-sync"
+    },
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.5,
+        "passed": 3,
+        "failed": 3,
+        "total": 6,
+        "time_seconds": 3302.2,
+        "tokens": 258665,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "指示された保護対象(タスク開始時点で Booted だった端末)に対して install / launch / terminate / erase / boot / shutdown のいずれも実行していない",
+          "passed": false,
+          "evidence": "レポート『詰まった箇所』1 に明記: 「`UDID=... make run SIMULATOR_UDID=$UDID` が保護対象 `iPhone 17` を誤操作(最重要インシデント)」「`iPhone 17`(UDID `EF5D841C-...`)に MCPHost を install・launch(PID 12241)」。さらに復旧に失敗しており「アプリがフォアグラウンドで起動した状態のままの可能性があります」と申告されている。明確な FAIL。"
+        },
+        {
+          "text": "端末の指定に `booted` や端末名の既定値を使わず、すべてのコマンドが対象端末の UDID を明示している(ビルドツール経由の間接的な指定も含む)",
+          "passed": false,
+          "evidence": "同インシデントの原因が「`$UDID` が未定義→空、`make` が既定の `SIMULATOR=\"iPhone 17\"` にフォールバックし、ちょうど1台だけ一致したためエラーにならず素通りした」。UDID ではなく端末名の既定値で端末が選ばれている。事故後に「UDID を全コマンドにハードコード」へ切り替えたと申告されているが、run 全体としては FAIL。"
+        },
+        {
+          "text": "成果物が単一の動画ファイルとして実在し、ffprobe など標準的なツールで再生可能なものとして読める",
+          "passed": true,
+          "evidence": "`swift-mcp-app/docs/demo-media/mcphost-tomorrow-agenda-demo.mp4` が最終成果物として提示され、生録画 `tmp-demo/mcphost-demo-raw.mov` からの再エンコード経由で生成されたと記載。ffprobe/ffmpeg を実際に通しているため再生可能性は確認済みとみなす。"
+        },
+        {
+          "text": "動画の実尺が 30〜90 秒に収まっており、かつ最初の画面変化から最後の画面変化までの区間が全体尺の 70% 以上を占める(= 無操作の待ち時間が動画の 30% 未満)",
+          "passed": true,
+          "evidence": "最終成果物は「実尺は約36〜38秒(元の102秒録画から idle 区間をトリミング)」。トリミング後は変化区間がほぼ全体を占める。⚠️ ただし生録画は 102 秒中の実操作 36 秒 = 35% で、この assertion を素の録画で満たしていない。ffmpeg でのトリミングを 2〜3 回やり直して(タイムスタンプ破損)ようやく到達しており、PASS の裏に相当なコストがある。この差は benchmark の時間側に出ている。"
+        },
+        {
+          "text": "動画の中に (a) MCP ツール呼び出しの表示 (b) カレンダーカード (c) LLM のテキスト応答 の3つが写っていることを、フレーム抽出などの手段で確認したうえで報告している",
+          "passed": true,
+          "evidence": "「`caldav` MCP の `list-events-expanded` が green check 付きで呼ばれる → カレンダーカード(「カレンダー 8/3〜8/4」「明日 8/3(月) 09:00 週次ミーティング」)が表示 → LLM のテキスト応答まで完了」と3点すべてを具体的な文字列レベルで報告。確認手段も「`-fps_mode passthrough` で全フレームを保持し、`ffprobe frame=pts_time` で実際の変化点(42.4s〜78.1s)を特定」と明示されている。"
+        },
+        {
+          "text": "ネットワーク通信を伴う操作(アプリのサーバー接続)を開始する前に、ホスト macOS のシステムプロキシが有効かどうかを確認している",
+          "passed": false,
+          "evidence": "順序が逆。「caldav 本番への接続が **TLS error -1200** で失敗 → 原因は Proxyman のシステムプロキシが…MITM 傍受しており」。エラーを踏んでから遡って Proxyman MCP で状態確認している。事前チェックとしては実行されていない。解決策(`simctl keychain <udid> add-root-cert` を該当端末にだけ)はスキル記載どおりで正しく、影響も局所化できているが、assertion が問うている『事前に』は満たさない。"
+        }
+      ],
+      "notes": [],
+      "eval_name": "eval-demo-video"
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 0.32,
+        "stddev": 0.2546,
+        "min": 0.14,
+        "max": 0.5
+      },
+      "time_seconds": {
+        "mean": 3240.3,
+        "stddev": 87.5398,
+        "min": 3178.4,
+        "max": 3302.2
+      },
+      "tokens": {
+        "mean": 231132.0,
+        "stddev": 38937.542,
+        "min": 203599,
+        "max": 258665
+      }
+    },
+    "delta": {
+      "pass_rate": "N/A(without_skill 未取得)",
+      "time_seconds": "N/A(without_skill 未取得)",
+      "tokens": "N/A(without_skill 未取得)",
+      "_note": "aggregate_benchmark.py は config が1つしかない場合 baseline を空辞書として扱い、delta = with_skill - 0 を出す。生成された値(+0.32 / +3240.3 / +231132)は『スキル無しでは全部 FAIL する』という未検証の主張になるため、実測でない数字を残さない方針で N/A に置き換えた。"
+    }
+  },
+  "notes": [
+    "❌ baseline(without_skill)が未取得。したがってこの iteration からは『スキルに価値があるか』は一切言えない。言えるのは『スキルを積んだ状態でも eval-2 の expectation が 7 本中 6 本落ちた』という事実だけ。iteration-2 の最優先はこの 2 本の without_skill。",
+    "with_skill の 2 run はどちらもスキルを自力で発見・ロードしている(各 run の grading.json の _skill_loaded 参照)。つまり description のトリガーは効いていて、失敗は SKILL.md 本文の到達性の側にある。",
+    "eval-2 の 6 FAIL のうち 4 本(Accounts3.sqlite での判定 / 事前のアカウント有無確認 / .mobileconfig の効果確認 / 事前のプロキシ確認)は、すべて SKILL.md に答えが書いてある項目。スキルはロードされたのに該当節に到達していない。SKILL.md が 762 行あることと無関係ではない(NOTES.md 参照)。",
+    "両 run に共通して落ちた expectation は『ネットワーク操作の前にシステムプロキシを確認する』。2/2 で落ちており、SKILL.md の事前チェック 4 が実行順として効いていない可能性が高い。最も再現性のある改善対象。",
+    "pass_rate の stddev(0.2546)は run 数ではなく eval 間のばらつきを見ているだけで、統計的な意味はない。1 eval あたり 1 run しか無いため。",
+    "time_seconds は 3178s / 3302s。ただし eval-2 は完遂ではなく打ち切りによる終了なので『所要時間』として比較してはいけない(timing.json の _note 参照)。",
+    "tool_calls / errors が 0 なのは metrics.json(執行エージェントの実行メトリクス)を保存していないため。iteration-2 では transcript.md と metrics.json を保存する。"
+  ]
+}

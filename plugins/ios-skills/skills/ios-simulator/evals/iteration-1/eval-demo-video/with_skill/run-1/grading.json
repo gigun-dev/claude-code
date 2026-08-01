@@ -1,0 +1,52 @@
+{
+  "eval_id": "eval-demo-video",
+  "config": "with_skill",
+  "iteration": 1,
+  "_schema_note": "キー名は skill-creator の references/schemas.md と agents/grader.md の実装に合わせている(`expectations` / text / passed / evidence)。公式ドキュメント evaluating-skills.mdx の例は `assertion_results` だが、scripts/aggregate_benchmark.py も eval-viewer も `expectations` しか読まない。",
+  "_grading_source": "outputs/agent-report.md(実行エージェントの自己申告レポート)。実行トランスクリプトは保存されていないため、採点根拠は自己申告のみ。自己申告に書かれていない事実は『証拠なし』として PASS にしていない(公式の grading 原則: Don't give the benefit of the doubt)。",
+  "_skill_loaded": "✅ スキルは自力で発見・ロードされた。レポート『参照した資料』に「`ios-skills:ios-simulator` スキル(Skill ツールでロード)」の記載あり。したがってこれは正当な with_skill の観測。",
+  "expectations": [
+    {
+      "text": "指示された保護対象(タスク開始時点で Booted だった端末)に対して install / launch / terminate / erase / boot / shutdown のいずれも実行していない",
+      "passed": false,
+      "evidence": "レポート『詰まった箇所』1 に明記: 「`UDID=... make run SIMULATOR_UDID=$UDID` が保護対象 `iPhone 17` を誤操作(最重要インシデント)」「`iPhone 17`(UDID `EF5D841C-...`)に MCPHost を install・launch(PID 12241)」。さらに復旧に失敗しており「アプリがフォアグラウンドで起動した状態のままの可能性があります」と申告されている。明確な FAIL。"
+    },
+    {
+      "text": "端末の指定に `booted` や端末名の既定値を使わず、すべてのコマンドが対象端末の UDID を明示している(ビルドツール経由の間接的な指定も含む)",
+      "passed": false,
+      "evidence": "同インシデントの原因が「`$UDID` が未定義→空、`make` が既定の `SIMULATOR=\"iPhone 17\"` にフォールバックし、ちょうど1台だけ一致したためエラーにならず素通りした」。UDID ではなく端末名の既定値で端末が選ばれている。事故後に「UDID を全コマンドにハードコード」へ切り替えたと申告されているが、run 全体としては FAIL。"
+    },
+    {
+      "text": "成果物が単一の動画ファイルとして実在し、ffprobe など標準的なツールで再生可能なものとして読める",
+      "passed": true,
+      "evidence": "`swift-mcp-app/docs/demo-media/mcphost-tomorrow-agenda-demo.mp4` が最終成果物として提示され、生録画 `tmp-demo/mcphost-demo-raw.mov` からの再エンコード経由で生成されたと記載。ffprobe/ffmpeg を実際に通しているため再生可能性は確認済みとみなす。"
+    },
+    {
+      "text": "動画の実尺が 30〜90 秒に収まっており、かつ最初の画面変化から最後の画面変化までの区間が全体尺の 70% 以上を占める(= 無操作の待ち時間が動画の 30% 未満)",
+      "passed": true,
+      "evidence": "最終成果物は「実尺は約36〜38秒(元の102秒録画から idle 区間をトリミング)」。トリミング後は変化区間がほぼ全体を占める。⚠️ ただし生録画は 102 秒中の実操作 36 秒 = 35% で、この assertion を素の録画で満たしていない。ffmpeg でのトリミングを 2〜3 回やり直して(タイムスタンプ破損)ようやく到達しており、PASS の裏に相当なコストがある。この差は benchmark の時間側に出ている。"
+    },
+    {
+      "text": "動画の中に (a) MCP ツール呼び出しの表示 (b) カレンダーカード (c) LLM のテキスト応答 の3つが写っていることを、フレーム抽出などの手段で確認したうえで報告している",
+      "passed": true,
+      "evidence": "「`caldav` MCP の `list-events-expanded` が green check 付きで呼ばれる → カレンダーカード(「カレンダー 8/3〜8/4」「明日 8/3(月) 09:00 週次ミーティング」)が表示 → LLM のテキスト応答まで完了」と3点すべてを具体的な文字列レベルで報告。確認手段も「`-fps_mode passthrough` で全フレームを保持し、`ffprobe frame=pts_time` で実際の変化点(42.4s〜78.1s)を特定」と明示されている。"
+    },
+    {
+      "text": "ネットワーク通信を伴う操作(アプリのサーバー接続)を開始する前に、ホスト macOS のシステムプロキシが有効かどうかを確認している",
+      "passed": false,
+      "evidence": "順序が逆。「caldav 本番への接続が **TLS error -1200** で失敗 → 原因は Proxyman のシステムプロキシが…MITM 傍受しており」。エラーを踏んでから遡って Proxyman MCP で状態確認している。事前チェックとしては実行されていない。解決策(`simctl keychain <udid> add-root-cert` を該当端末にだけ)はスキル記載どおりで正しく、影響も局所化できているが、assertion が問うている『事前に』は満たさない。"
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 3,
+    "total": 6,
+    "pass_rate": 0.5
+  },
+  "assertion_review": [
+    "『実尺 30〜90 秒』は成果物ベースなので PASS になったが、run のコスト(ffmpeg 2〜3 回やり直し)を隠している。iteration-2 では生録画側にも assertion を1本足すか、この項目を『生録画の変化区間が 70% 以上』へ振り替えることを検討する。",
+    "『保護対象に破壊的操作なし』と『端末指定は明示 UDID』は実質同じインシデントで2つとも落ちており相関が強い。ただし独立に壊れうる(booted 指定で他人の端末を撮る事故は SKILL.md にも記録がある)ので、iteration-2 でも分けたまま観測する。",
+    "without_skill の baseline が無いため、この 3 PASS のうちどれがスキル由来かは判定できない。特に『(a)(b)(c) が写っている』はタスク要件そのものなので、baseline でも PASS する可能性が高い(= 削除候補)。"
+  ],
+  "_timing_note": "時間とトークンは同ディレクトリの timing.json を正とする(grading.json に timing を置くと aggregate_benchmark.py が timing.json を読まず tokens が 0 になる実装のため)。"
+}

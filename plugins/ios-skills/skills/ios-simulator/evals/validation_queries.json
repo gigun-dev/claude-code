@@ -1,50 +1,50 @@
 [
   {
-    "id": "t02",
-    "query": "iPhone で見た目確認したいんだけど、ダークモードにしたときカードの余白おかしくない?",
+    "id": "t08",
+    "query": "API キーの入力画面を検証のたびに手で打つのがだるい。最初から入った状態で起動できるようにできない?",
     "should_trigger": true,
-    "note": "「iPhone」としか言っておらず実機とも読める。Simulator 側へ寄せられるかを見る"
+    "note": "env 注入。desc-288 の「検証用の状態(資格情報・OS のアカウント・到達画面)を用意する」で拾えるか。744字版にあった「API キー」の語は削られている"
   },
   {
     "id": "t04",
     "query": "自作の CalDAV サーバーに入れた予定が iOS の純正カレンダーにちゃんと出るか、実際に見て確かめたい",
     "should_trigger": true,
-    "note": "Simulator の語なし。description の (5) と CalDAV の語で拾えるか"
+    "note": "Simulator の語なし。desc-288 は「Simulator に CalDAV やメールのアカウントを入れたいときに使う」と明示しているので拾えるはず"
   },
   {
-    "id": "t06",
-    "query": "onboarding フローを最初から最後まで試して、どこで詰まるか教えて",
+    "id": "t03",
+    "query": "MCPHost の短いデモ動画を撮ってほしい。勉強会で流すので 30 秒くらいで、チャットに質問投げてカードが出るところまで",
     "should_trigger": true,
-    "note": "description に明示された例"
+    "note": "★録画。desc-288 にも 744字版にも「録画」「動画」の語が一切ない。最も落ちやすい陽性"
   },
   {
-    "id": "t08",
-    "query": "API キーの入力画面を検証のたびに手で打つのがだるい。最初から入った状態で起動できるようにできない?",
+    "id": "t09",
+    "query": "シミュレータで日本語打つと文字化けするんだけど、「渋谷 15時」ってどうやって入れたらいい?",
     "should_trigger": true,
-    "note": "env 注入。description の (5) に「資格情報・API キー」がある"
+    "note": "テキスト入力/IME。desc-288 は操作プリミティブの列挙(タップ/スワイプ/テキスト入力…)を落として「この画面タップして」「スクショ撮って」の2例だけにしているため、744字版より落ちやすくなっているはず"
   },
   {
-    "id": "t12",
-    "query": "そろそろ TestFlight に上げたい。アーカイブしてアップロードまでやって",
+    "id": "t14",
+    "query": "ログインまわりの回帰テストを XCUITest で書いて、CI で毎回回るようにしたい",
     "should_trigger": false,
-    "note": "near-miss: appstoreconnect-upload の領域"
+    "note": "★最も判断が割れる near-miss。false にした理由: 成果物は Swift のテストコードで、Simulator の CLI 操作も状態投入も要らない(テスト実行は xcodebuild test が担う)。一方 SKILL.md は「反復検証は XCUITest へ昇格」という判断を守備範囲に含めており、しかも description にその文言が入っている。つまりこのクエリで誤爆したら、それは description が『昇格の判断』を『XCUITest を書く仕事』まで広げて読ませている証拠になる。境界を測るために意図的に置いている"
+  },
+  {
+    "id": "t16",
+    "query": "スクショを README に貼りたいので、余白を切って幅 800px に揃えておいて",
+    "should_trigger": false,
+    "note": "near-miss: 「スクショ」の語を共有するが、やることは画像加工"
+  },
+  {
+    "id": "t13",
+    "query": "アプリアイコンを iOS 26 らしい感じに作り直したい。案をいくつか出して比べさせて",
+    "should_trigger": false,
+    "note": "near-miss: ios-app-icon の領域"
   },
   {
     "id": "t15",
     "query": "この SwiftUI の List、スクロールするとセルがちらつく。コード見て直してほしい",
     "should_trigger": false,
     "note": "near-miss: 途中で Simulator を使う可能性はあるが、依頼の主題はコード修正。ここで誤爆すると『iOS の作業ならとりあえずロード』になり description が広すぎる"
-  },
-  {
-    "id": "t17",
-    "query": "iOS 26 の Liquid Glass って、既存の UIKit のアプリだと何が変わるんだっけ",
-    "should_trigger": false,
-    "note": "知識質問。操作も検証も発生しない"
-  },
-  {
-    "id": "t19",
-    "query": "Cloudflare Workers の caldav サーバーで REPORT のテストが1本落ちてる。原因見て直して",
-    "should_trigger": false,
-    "note": "near-miss: description に CalDAV の語があるので誤爆しうる。実際はサーバー側のユニットテスト修正"
   }
 ]
