@@ -1,3 +1,4 @@
 .claude/settings.local.json
 .claude-plugin/.claude/
 .DS_Store
+__pycache__/
