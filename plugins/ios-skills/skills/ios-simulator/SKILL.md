@@ -231,7 +231,14 @@ com.apple.settings.apps → com.apple.mobilecal → ACCOUNTS → ADD_ACCOUNT
 ## ★テキスト入力: 「キーボードが出ない」と「入力が化ける」は**別問題**
 
 混ぜると誤診する。**キーが1つも出ない**なら原因はホスト側の `ConnectHardwareKeyboard`(Step 0)。
-**キーは出るが化ける**なら原因は IME で、確実に ASCII を入れる手段は3つ:
+**キーは出るが化ける**なら原因は IME。
+
+> 🔴 **そもそも `idb ui text` は非 ASCII を送れない**(2026-08-02 実測)。化けるのではなく
+> **HID キーコード変換の時点で例外**になる: `Exception: No keycode found for 打`。
+> **しかも例外が出ても終了コードは 0**(ハマりどころ「無言で失敗する」は `text` にも当てはまる)。
+> → **日本語・絵文字・記号を入れるなら選択肢は `pbcopy` + ペースト一択。** IME の設定をいじっても直らない。
+
+確実に ASCII を入れる手段は3つ:
 
 1. **`xcrun simctl pbcopy <UDID>` + 長押しペースト(第一選択)** — IME を経由しない。UDID 指定なので
    複数 Booted でも誤爆しない。弱点はペーストのメニュータップが座標依存なところだけ。
