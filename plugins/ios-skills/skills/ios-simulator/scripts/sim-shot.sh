@@ -75,6 +75,62 @@ list_booted() {
     | sed -n 's/^[[:space:]]*\(.*\) (\([0-9A-Fa-f-]\{20,\}\)) (Booted).*/\2	\1/p'
 }
 upper() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+
+# describe-all の JSON(stdin)から面積最大の frame(= 画面全体)を "W H"(points)で返す。
+#
+# Why 一時ファイル経由で uv を呼ぶ(2026-08-02 に修正した実バグ):
+#   旧版は `idb ... | uv run --quiet - <<'PY' ... PY` と書いていたが、
+#   **ヒアドキュメントが stdin を上書きするのでパイプの中身は Python に届かない**。
+#   結果、point/scale は常に取得失敗し、しかも「idb 未接続かも/アプリが前面にいないかも」という
+#   見当違いの案内を毎回出していた(= 誤誘導を生むコード)。実測で確認済み:
+#   `echo '[...]' | uv run --quiet - <<'PY' sys.stdin.read() PY` は空文字列を読む。
+#   uv には「スクリプト = ファイル / データ = stdin」と分けて渡す必要がある。
+#   ボツ案: JSON を argv で渡す(`uv run - "$JSON"` は実際に動く)
+#     → describe-all は数百KB になりうるので ARG_MAX(macOS は約1MB)に張り付く危険がある。
+#   一時ファイルは $HOME 配下に置く(/tmp は sandbox で書き込みを弾かれる)。
+max_frame_from_stdin() {
+  local py="$HOME/tmp-sim/.sim-maxframe.$$.py" rc
+  command -v uv >/dev/null 2>&1 || return 1
+  mkdir -p "$(dirname "$py")" 2>/dev/null || return 1
+  cat > "$py" <<'PY'
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
+import sys, json
+raw = sys.stdin.read().strip()
+if not raw:
+    sys.exit(0)
+# describe-all は JSON(配列 or 入れ子) or JSON-lines のどれもあり得るので両対応。
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError:
+    data = [json.loads(l) for l in raw.splitlines() if l.strip()]
+
+best = None
+def walk(n):
+    global best
+    if isinstance(n, list):
+        for i in n:
+            walk(i)
+    elif isinstance(n, dict):
+        f = n.get("frame")
+        if isinstance(f, dict):
+            w, h = f.get("width"), f.get("height")
+            if isinstance(w, (int, float)) and isinstance(h, (int, float)) and w > 0 and h > 0:
+                if best is None or w * h > best[0] * best[1]:
+                    best = (w, h)
+        for v in n.values():
+            walk(v)
+walk(data)
+if best:
+    print(int(round(best[0])), int(round(best[1])))
+PY
+  uv run --quiet "$py" 2>/dev/null
+  rc=$?
+  rm -f "$py"
+  return "$rc"
+}
 # ------------------------------------------------------------------------------------
 
 UDID="${SIM_UDID:-}"
@@ -100,6 +156,14 @@ if [[ -z "$UDID" ]]; then
       "     不定に化けて他人の端末を撮る事故になったため、意図的に必須化している)。" \
       "  → scripts/sim-preflight.sh --udid <UDID> で環境ごと確認するのが早い。"
   exit 2
+fi
+
+# xcrun 不在を「端末が見つからない(3)」と誤報しないよう先に切り分ける
+# —— 原因が違えば次の一手も違う(boot するのか Xcode を入れるのか)。
+if ! command -v xcrun >/dev/null 2>&1; then
+  err "xcrun が無い。フル Xcode が必要(Command Line Tools だけでは simctl が揃わない)。" \
+      "  → xcode-select -p で選択中の開発者ディレクトリを確認する。"
+  exit 7
 fi
 
 # Booted 確認を撮影の前に置く: simctl のエラー文面だけだと「UDID の打ち間違い」と
@@ -150,41 +214,8 @@ PXH=$(sips -g pixelHeight "$OUT" | awk '/pixelHeight/{print $2}')
 # idb が無ければ scale 不明として pixel だけ返す(screenshot 自体は成立しているので致命ではない)。
 PTW="" ; PTH="" ; SCALE=""
 if command -v idb >/dev/null 2>&1; then
-  # 面積最大の frame = 画面全体(ルート)とみなす。
-  # jq に依存しないよう Python(uv 経由・stdlib のみ)で幅と高さを取り出す。
-  # 注: describe-all は **入れ子の JSON 配列**を返すことがある(トップレベルが flat とは限らない)。
-  #     再帰で全 dict を舐める実装にしてある。
-  RECT=$(idb ui describe-all --udid "$UDID" --json 2>/dev/null | uv run --quiet - <<'PY' 2>/dev/null || true
-import sys, json
-raw = sys.stdin.read().strip()
-if not raw:
-    sys.exit(0)
-# describe-all は JSON(配列 or 入れ子) or JSON-lines のどちらもあり得るので両対応。
-try:
-    data = json.loads(raw)
-except json.JSONDecodeError:
-    data = [json.loads(l) for l in raw.splitlines() if l.strip()]
-
-best = None
-def walk(n):
-    global best
-    if isinstance(n, list):
-        for i in n:
-            walk(i)
-    elif isinstance(n, dict):
-        f = n.get("frame")
-        if isinstance(f, dict):
-            w, h = f.get("width"), f.get("height")
-            if isinstance(w, (int, float)) and isinstance(h, (int, float)) and w > 0 and h > 0:
-                if best is None or w * h > best[0] * best[1]:
-                    best = (w, h)
-        for v in n.values():
-            walk(v)
-walk(data)
-if best:
-    print(int(round(best[0])), int(round(best[1])))
-PY
-)
+  # 面積最大の frame = 画面全体(ルート)とみなす(describe-all は入れ子で返ることもあるので再帰で舐める)。
+  RECT="$(idb ui describe-all --udid "$UDID" --json 2>/dev/null | max_frame_from_stdin || true)"
   read -r PTW PTH <<<"${RECT:-}"
   if [[ -n "${PTW:-}" && "${PTW:-0}" -gt 0 ]]; then
     # scale = pixel幅 / point幅(Retina は 2 or 3)。%.3g で 3 / 2 のような整数表記に落ちる。
