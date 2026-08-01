@@ -200,3 +200,53 @@ transcript が入ったら iteration-1 のスコアと直接は比較できな�
   「スキル無しなら全部 FAIL する」という未検証の主張なので **N/A に潰した**。
 - **eval 3〜6 の `grading.json`** — 未実行。`evals.json` の `status_iteration_1` に「未実行」と明記。
 - **トリガー eval の結果** — 未実行。上の第1節はすべて「description を読んだ推測」。
+
+
+---
+
+## 5. 共有スキルへの到達性 — subagent の制約ではないと確定した(2026-08-02 実測)
+
+**問い**: eval 3本のうち2本が共有スキル `ios-skills:ios-simulator` を読まなかった。
+これは subagent の制約か、それとも選択か。
+
+**測り方**: 各 agent 型で subagent を立て、「ツール一覧に `Skill` はあるか / スキル一覧は
+渡っているか / 名前を全部挙げよ」とだけ聞いた(ファイル読取・コマンド実行は禁止・副作用ゼロ)。
+
+| subagent_type | agent 定義の tools | `Skill` ツール | スキル一覧 |
+|---|---|---|---|
+| **`claude`**(eval で使用) | `*` | **あり** | **main と同一の全 54 件**(`ios-skills:ios-simulator` を含む) |
+| `implementer` | `Read, Write, Edit, Bash, Grep, Glob` | **無し** | **渡らない** |
+
+`*` 型では渡り方も main と同じ —— system プロンプト後方の注入ブロックに
+`The following skills are available for use with the Skill tool:` として並ぶ。
+
+**結論**: 分岐点は「subagent かどうか」ではなく **agent 定義の tools に `Skill` が入っているか**。
+eval 3本はすべて `claude` 型なので、**共有スキルは見えていたしロードもできた**。
+読まなかったのは**能力の制約ではなく選択**であることが確定した。
+
+### 3本の差(仮説・n=3 で未確定)
+
+| run | 依頼文の出だし | 共有スキル |
+|---|---|---|
+| demo-video iter-2 | 「`~/ghq/.../swift-mcp-app` の MCPHost の…」 | ❌ Skill 呼び出し 0 件 |
+| demo-video iter-3 | 同上 | ❌ `cat` でリポジトリ内スキルを読んだ |
+| caldav-sync iter-2 | 「自作の CalDAV サーバー(`https://...`)に…」 | ✅ Skill で2本ロード |
+
+**依頼がリポジトリのパスで始まると、そのリポジトリ内を探索してスキル機構を経由しない**、
+という仮説と整合する。**未検証。** 検証するなら、同じ eval を「パスで始まる版」と
+「目的で始まる版」で振って Skill 呼び出しの有無を比べるのが最短。
+
+### 代償(実測)
+
+iter-3 は共有スキルを読まなかったため、**共有スキルには書いてある罠を踏んだ** ——
+`idb ui describe-all` が JSONL ではなく入れ子の JSON 配列を返す件。
+プロジェクト側スキルは当該項目を共有スキルへ委譲していたので、そこには無かった。
+→ **委譲は「読まれる」ことを前提にしている。読まれない経路があると穴になる。**
+
+### ⚠️ やってはいけない検出方法
+
+transcript に `available-skills` 等の文字列があるかを見る方法は**無効**。
+**実際に Skill をロードした transcript でも同じく 0 件**になる。
+正しくは **`Skill` の tool_use を直接カウント**する。
+(この誤検出で一度「subagent は引けない」と誤断定した。SKILL.md「診断の規律」3
+——ground truth は疑っている道具の外側で取る—— の実例。)
