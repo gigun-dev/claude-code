@@ -30,15 +30,25 @@ compatibility: >-
 
 ---
 
-## ★Step 0: 何より先にこれを撃つ
+## ★Step 0: アプリを触る前にこれを撃つ
 
 ```bash
-scripts/sim-preflight.sh --udid <UDID>      # 端末の特定・競合・キーボード・プロキシ・idb・scale を一括確認
-export SIM_UDID=<対象の UDID>                # 以降すべてこれを使う
+# 端末を新しく作るなら、まず用意する(preflight は Booted な端末を要求する)
+UDID=$(xcrun simctl create "<名前>" <devicetype> <runtime>)
+xcrun simctl bootstatus "$UDID" -b
+
+export SIM_UDID="$UDID"                     # 以降すべてこれを使う
+scripts/sim-preflight.sh --udid "$SIM_UDID" # 競合・キーボード・プロキシ・idb・scale を一括確認
 ```
 
 **warnings が出たら、各項目の `fix` を実行してから先へ進む。** ここを飛ばして観測を始めると、
 **以降の観測がすべて無効になる**(実測で2回、丸ごと誤診に化けた)。
+
+> ⚠️ **順序の注意(2026-08-02 に記述を訂正)**: 旧版は「**何より先に**撃つ」と書いていたが、
+> `sim-preflight.sh` は **Booted な端末を要求する**(Shutdown だと「Booted な端末として
+> 見つからない」で止まる)。新規端末を作るワークフローでは**物理的に create/boot が先**になる。
+> **境界は「端末を用意する」と「アプリを触る(install / launch / io / idb ui)」の間**であって、
+> 「何もしないうち」ではない。既に Booted な端末を使うなら、本当に最初に撃てる。
 
 | 見るもの | 飛ばすと何が起きるか |
 |---|---|
