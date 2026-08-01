@@ -65,6 +65,12 @@ with_skill 側は `simctl clone`(**16秒・0タップ**)を選んだ。同じ問
 | with_skill(iter-3) | 6/6 | 852s(14分12秒) | **boot + CA 投入 + OAuth を自分で実施** |
 | without_skill | 5/6 | 727s(12分07秒) | **上記が済んだ端末を引き継いだ** |
 
+> **2026-08-02 追試で決着**: 汚染のない条件(既存端末の使用を全面禁止・`create` から)で
+> baseline を取り直した → **753s**。with_skill iter3(852s)より **99 秒速い**。
+> しかも clean baseline は `create` + `install` を自前で払い、with_skill 側はアプリ導入済みの
+> 端末を使っていた。**成果物の質も上**(変化区間 99% vs 88%/64%)。
+> → **「demo-video にスキルの速度優位は無い」が実測で確定。** 下の補正による結論は正しかった。
+
 🔴 **この 727s と 852s は直接比較できない。** baseline は `simctl boot` も CA 投入も一度も
 実行していない(transcript で確認)—— iteration-3 が整えた端末をそのまま使っている。
 iteration-3 の device prep は約 120 秒なので、**差し引くと 732s ≒ 727s でほぼ同一。**
@@ -119,8 +125,12 @@ iteration-3 の device prep は約 120 秒なので、**差し引くと 732s ≒
 
 - `without_skill` は2本とも取得済み(caldav-sync / demo-video)。
 - ~~残り4本の eval~~ ✅ **6本すべて実行済み**(2026-08-02)。
-- **`ios-skills:simulator-operator` 経由の実行が未検証。** 上記はすべて `claude` 型で回して
-  おり、実運用の委譲経路(agent が `skills` で事前ロード)とは異なる。**`/reload-plugins` 待ち。**
+- ~~`skills:` 事前ロードの機構が未検証~~ ✅ **2026-08-02 実測で検証**(NOTES §8)。
+  `skills:` だけを持つ使い捨て agent に**ツールを一切使わせず**、本文固有の内容を3点言わせて
+  `tool_uses=0` で全問正答。**修飾名(`plugin:skill`)で解決することも確認。**
+- **実運用で `simulator-operator` へ委譲する運用は未定着。** 上記 eval はすべて `claude` 型で
+  回しており、agent 経由ではない。⚠️ **プラグイン配下の agent はホットリロードされない**
+  (プロジェクト配下はされる)ので、反映には `/reload-plugins` が要る。
 
 ## 全 6 eval の一覧(iteration-3 時点・すべて with_skill)
 

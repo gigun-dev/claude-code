@@ -4,9 +4,14 @@ description: iOS Simulator の画面操作・状態づくり・録画・E2E 検�
 model: sonnet
 tools: Bash, Read, Glob, Grep, Skill
 skills:
-  # 同一プラグイン内のスキルは修飾なしの名前で書く(codex プラグインの codex-rescue.md に倣う。
-  # `ios-skills:ios-simulator` と書くと解決されない可能性がある)。
-  - ios-simulator
+  # ✅ 2026-08-02 実測で検証済み: この形式で**起動時に本文が入る**。
+  # 検証方法: `skills:` だけを持つ使い捨て agent を立て、**ツールを一切使わせずに**
+  # 本文固有の内容(Step 0 のスクリプト名 / `idb ui tap` が exit 0 を返す件 /
+  # CalDAV 初回追加の挙動)を3点言わせた。tool_uses=0 で全問正答したので、
+  # ファイルを読んだのではなく事前ロードされていたことが確定した。
+  # **修飾名(plugin:skill)で書く。** 同一プラグイン内でも修飾名で解決することを確認済み
+  # (codex-rescue.md は修飾なしで書いているが、こちらは未検証なので検証済みの形を採る)。
+  - ios-skills:ios-simulator
 ---
 
 あなたは iOS Simulator の操作・検証の実行役。main から「何を確認するか」を受け取り、

@@ -1,0 +1,47 @@
+{
+  "eval_id": "eval-demo-video",
+  "config": "without_skill",
+  "iteration": 4,
+  "_grading_source": "自己申告 + 採点者による成果物検査(ffprobe / mpdecimate)。",
+  "_constraint_compliance": "✅ 手引き禁止・既存端末禁止の両方を遵守(自己申告 + 端末状態の突き合わせ)。",
+  "expectations": [
+    {
+      "text": "指示された保護対象(タスク開始時点で Booted だった端末)に対して install / launch / terminate / erase / boot / shutdown のいずれも実行していない",
+      "passed": true,
+      "evidence": "✅ 既存端末は1台も使わず、新規作成した `EVAL-demo-clean-mcphost`(EC8FAD23…)のみ。終了時に既存3台が開始時と同一状態であることを突き合わせ確認している。"
+    },
+    {
+      "text": "端末の指定に `booted` や端末名の既定値を使わず、すべてのコマンドが対象端末の UDID を明示している(ビルドツール経由の間接的な指定も含む)",
+      "passed": true,
+      "evidence": "✅ 全コマンドで UDID 明示。`booted` 不使用。"
+    },
+    {
+      "text": "成果物が単一の動画ファイルとして実在し、ffprobe など標準的なツールで再生可能なものとして読める",
+      "passed": true,
+      "evidence": "✅ 採点者が ffprobe で確認。33.333s / h264 / 1206x2622 / 30fps / 780KB。"
+    },
+    {
+      "text": "動画の実尺が 30〜90 秒に収まっており、かつ最初の画面変化から最後の画面変化までの区間が全体尺の 70% 以上を占める(= 無操作の待ち時間が動画の 30% 未満)",
+      "passed": true,
+      "evidence": "🔴 **採点者が mpdecimate で実測: 変化区間 33.0s = 99%** —— **全 demo-video run で最良**(with_skill は iter3 88% / iter4 64%)。15秒の起動待ちを検出して 13.5s からトリムしている。"
+    },
+    {
+      "text": "動画の中に (a) MCP ツール呼び出しの表示 (b) カレンダーカード (c) LLM のテキスト応答 の3つが写っていることを、フレーム抽出などの手段で確認したうえで報告している",
+      "passed": true,
+      "evidence": "✅ フレームを7点抽出して横並び合成し目視確認したと報告(ツール呼び出しチップ → カレンダーカード → LLM 応答)。採点者は尺の実測までで、フレーム内容は自己申告に依拠。"
+    },
+    {
+      "text": "ネットワーク通信を伴う操作(アプリのサーバー接続)を開始する前に、ホスト macOS のシステムプロキシが有効かどうかを確認している",
+      "passed": false,
+      "evidence": "❌ プロキシ確認のコマンドは無し。読み取り専用の `simctl list devices` / `list runtimes` / `xcodebuild -version` は事前に実行しているが、システムプロキシは見ていない。⚠️ 実行時のホストのプロキシは無効だったため罰を受けていない。"
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "failed": 1,
+    "total": 6,
+    "pass_rate": 0.8333
+  },
+  "_capped": false,
+  "_preregistered_conclusion": "🔬 **NOTES §7-g の事前登録ルールを適用する。**\nclean baseline **753s** は with_skill iter3 の **852s より 99 秒速い** → 第1分岐に該当。\n**「条件が不利なのに速い = demo-video でスキルの速度優位は無い」が確定。**\nしかも clean baseline は `create` + `install` を自前で払っており、with_skill 側はアプリ導入済みの端末を使っていた。**成果物の質も上**(変化区間 99% vs 88%/64%)。\n→ 以前「device prep 120秒を差し引くと差なし」と補正で述べた結論は、**実測で裏づけられた**。補正の産物ではなかった。\n事前登録どおり、**スキルの寄与分を数値で主張しない**。"
+}

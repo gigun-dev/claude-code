@@ -1,0 +1,7 @@
+{
+  "total_tokens": 111087,
+  "duration_ms": 847427,
+  "total_duration_seconds": 753.0,
+  "_source": "完了通知 847,427ms / 自己申告 753s(12分33秒)。",
+  "_clean": "🔴 **汚染なし**: 既存端末の使用を全面禁止し、`simctl create` から始めている。端末の用意 1分21秒・認証 1分28秒を自己申告。**with_skill の run は DEMO-MCPHost にアプリが既に入っていたので、こちらの方が余分な負担を払っている。**"
+}
