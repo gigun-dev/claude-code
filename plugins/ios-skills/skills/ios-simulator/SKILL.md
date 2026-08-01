@@ -109,6 +109,8 @@ xcrun simctl openurl "$SIM_UDID" "myapp://deeplink/path"
 | `pbcopy` が `NSPOSIXErrorDomain code=60` | ブート直後。**数秒待って再試行すれば通る**。「使えない端末だ」と結論しない |
 | **CalDAV 追加でトグル一覧が空 / 保存すると「停止中」** | ⛔ **サーバーを疑う前に端末を疑う。** ユーザー追加アカウントがゼロの端末は初回追加が必ず失敗する(→ 下の 🔴 節) |
 | **`webcal://` を撃ったのにホーム画面のまま** | カレンダー App の起動待ち。**10 秒待つ**(実測。4 秒ではまだホーム)。「効かなかった」と即断しない |
+| **`SimError code=405 "Unable to lookup in current state: Shutdown"`** | **`simctl keychain` 系は Booted 必須。** 先に `bootstatus <UDID> -b` |
+| **`SimError code=405`(clone 実行時)** | 🔁 **逆。`simctl clone` は元デバイスが Shutdown 必須。** 同じ 405 が正反対の理由で出るので、**どちらのコマンドで出たかを必ず見る**(2026-08-02 実測) |
 | 端末が別プロセスに掴まれている | **kill しない。** `ps` で終了を待つ(実地では数十秒〜1分で自然終了。→ `diagnosis.md` §4) |
 | どれも当たらない | **`shutdown` → `boot` は最終手段。** 上を全部やってから(旧版はこれを第一手に書いていたが、ほとんどのケースで過剰だった) |
 

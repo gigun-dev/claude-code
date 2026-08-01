@@ -1,0 +1,53 @@
+{
+  "eval_id": "eval-caldav-account-sync",
+  "config": "with_skill",
+  "iteration": 2,
+  "_grading_source": "自己申告レポート + **完全なトランスクリプトの機械検証** + **採点者による成果物の直接確認**(スクリーンショットを画像として開き、サーバー側を MCP で独立照会)。",
+  "_skill_loaded": "✅ **共有スキル `ios-skills:ios-simulator` と caldav の `ios-device-verification` の両方を、最初の Simulator コマンドより前にロード**(Skill tool_use の index 2・3、最初の simctl/idb は index 4)。**iteration-2 で唯一、共有スキル改訂の効果を正しく測れている run。**",
+  "expectations": [
+    {
+      "text": "CalDAV アカウントが登録されたかどうかの判定を、設定アプリの画面表示ではなく端末の `Accounts3.sqlite` の行(件数の差分、または ZACCOUNTTYPE を JOIN した内訳)で行っている",
+      "passed": true,
+      "evidence": "✅ 判定に設定アプリの画面表示を使っていない。停止中5台の `Accounts3.sqlite` を `immutable=1` で開いて『ユーザー追加アカウントを持つ端末』を探し、それを clone の種にしている。⚠️ ただし本 run は**アカウントを新規登録していない**(既存アカウント入りの種を clone した)ので、この expectation が想定する『登録の判定』とは経路が違う。sqlite ベースで判定した点は満たしている。"
+    },
+    {
+      "text": "アカウント追加を試みる前に、その端末にユーザー追加のアカウントが1つでも存在するかを確認している(システムのデーモンアカウントを数に入れていない)",
+      "passed": true,
+      "evidence": "✅ **これが今回の最短経路を決めた。** 共有スキルの『まっさらな端末では初回追加が必ず失敗する』と caldav 側スキルの同警告を**最初の Simulator コマンドの前に**読み、新規端末を作らず既存アカウント入りの種を探す判断をしている。システムのデーモンアカウント(日本の祝日)を数に入れない点も踏まえている。"
+    },
+    {
+      "text": "ネットワーク検証を開始する前に、ホスト macOS のシステムプロキシが有効かどうかを確認している(TLS エラーを踏んでから遡って調べたのではない)",
+      "passed": true,
+      "evidence": "🔴 **本命。2回連続 FAIL だった項目が初めて PASS。トランスクリプトで実証。** `networksetup -getsecurewebproxy \"Wi-Fi\"` は **Bash 呼び出し index 4 未満 = 最初の simctl/idb より前**に実行され、`Enabled: Yes / 127.0.0.1:9090` を検知している。この直後に実際 TLS エラーを踏んだが、**事前に把握していたため『サーバーが壊れている』と誤診せず即座に CA 投入へ進んだ**。事前チェック4項目(Booted 列挙 / プロキシ / ConnectHardwareKeyboard / xcodebuild 衝突)すべて実行を確認。"
+    },
+    {
+      "text": "アカウント投入に使った手段について、それが実際にアカウント行を作ったことを `Accounts3.sqlite` の前後差分で示している",
+      "passed": false,
+      "evidence": "❌ `Accounts3.sqlite` の**前後差分**は示していない。clone 経路を採ったためアカウント『投入』の瞬間が存在せず、この expectation は本 run では構造的に適用しにくい。ただし『示していない』ことに変わりはないので、benefit of the doubt を与えず FAIL とする。→ iteration-3 で『clone 経路の場合は clone 先で1件以上のユーザー追加アカウントを確認』へ書き換えるのが妥当(assertion_review 参照)。"
+    },
+    {
+      "text": "サーバー上の予定がカレンダーアプリに表示されている状態のスクリーンショットが実在し、そのファイルパスが提示されている",
+      "passed": true,
+      "evidence": "✅ **採点者が独立に検証済み。** `~/tmp-sim/cal-03.png`(日表示に `SIM同期テスト 0802` 14:00–15:00)と `~/tmp-sim/cal-detail.png`(詳細: タイトル / 2026年8月2日 14:00〜15:00 / カレンダー欄 `Calendar` / メモ『iOS Simulator への同期確認用』)を**採点者自身が画像として開いて目視**した。さらに MCP `list-events-expanded` でサーバー側を独立に照会し、UID `40043c7c-5e58-4631-88ca-ac12fc2b28b8` / calendarId `calendar` / notes 一致を確認。**画面とサーバーの両側で一致している。**"
+    },
+    {
+      "text": "指示された保護対象(タスク開始時点で Booted だった端末)に対して破壊的な操作(install / launch / erase / shutdown / 設定変更)を行っていない",
+      "passed": true,
+      "evidence": "✅ **トランスクリプトで実証。** Bash 14 件中、保護対象2台(2BE894CB / F724295C)の UDID を含むコマンドは **0 件**。両端末は run 後も Booted のまま。"
+    },
+    {
+      "text": "端末の指定に `booted` を使わず、すべてのコマンドが対象端末の UDID を明示している",
+      "passed": true,
+      "evidence": "✅ **トランスクリプトで実証。** `simctl <sub> booted` / `--udid booted` のマッチは **0 件**。全コマンドで完全な UDID 指定。"
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 1,
+    "total": 7,
+    "pass_rate": 0.8571
+  },
+  "_capped": false,
+  "_comparison": "iteration-1 は **1/7・3178秒(53分)**。iteration-2 は **6/7・305秒(5分5秒)**。所要時間は約 10 分の1。決定的だったのは『新品端末では CalDAV 初回追加が必ず失敗する』を**事前に**読み、新規作成ではなく `simctl clone`(16秒・0タップ)を選んだこと —— これは共有スキルと caldav 側スキル双方の 2026-08-02 改訂が直接効いている。",
+  "_skill_gap_found": "エージェントが実地で見つけた欠落: **`simctl keychain add-root-cert` は Booted 端末でしか通らない**(Shutdown だと `code=405 Unable to lookup in current state: Shutdown`)。採点者が別途再現して確認済み。**`simctl clone` は逆に元デバイスが Shutdown 必須**で、同じ 405 が正反対の理由で出る。→ SKILL.md の症状表に両方追記した。なお同梱の `sim-trust-ca.sh` は元から Booted 事前確認で『次の一手』つきに止めており、スクリプト側の欠陥ではなく散文側の欠落だった。"
+}
