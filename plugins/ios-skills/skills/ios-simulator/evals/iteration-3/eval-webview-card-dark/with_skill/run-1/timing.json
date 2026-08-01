@@ -1,0 +1,7 @@
+{
+  "total_tokens": 84523,
+  "duration_ms": 359253,
+  "total_duration_seconds": 277.0,
+  "_source": "完了通知 359,253ms / 自己申告 277s。",
+  "_note": "20分上限に対し 4分37秒。**Simulator を1台も起動していない**ので、これまでで最速。"
+}

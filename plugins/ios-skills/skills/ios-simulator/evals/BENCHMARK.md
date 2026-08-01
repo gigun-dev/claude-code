@@ -69,6 +69,20 @@ iteration-3 の device prep は約 120 秒なので、**差し引くと 732s ≒
 | 2 | 2/6 | 1018s(17.6分) | 成果物ゼロ。**共有スキルを一度も読んでいない**ので測定として不成立 |
 | **3** | **6/6** | **852s(14分12秒)** | 初完走。実尺 33.9s・実フレーム 1017・変化区間 **88%**(mpdecimate 実測) |
 
+## その他の eval(iteration-3・すべて with_skill)
+
+| eval | スコア | 所要 | 要点 |
+|---|---|---|---|
+| **webview-card-dark** | **4/4** | **277s(4分37秒)** | 🔴 **Simulator を1台も起動していない。** スキルの `webview-offload.md` を最初の調査より前に読み、ブラウザ検証へ逃がした。**操作系 eval では原理的に測れない能力。** 指摘(コントラスト比7件・CSS 行番号・ホスト変数の配線ミス)は採点者が全件独立に再現し一致 |
+| **account-fanout** | 4/5 | 471s(7分51秒) | `simctl clone` で3台を **0タップ**投入。`idb ui tap` は週表示切替の4回のみ。3台とも `Accounts3.sqlite` に `ZACTIVE=1` を採点者が確認。落ちた1本は assertion 側の設計ミス(下記) |
+
+### 落ちた assertion は eval の設計ミス(2件目)
+
+`account-fanout` の「**少なくとも1枚は他と内容が異なる**」は、スキルの推奨解 `simctl clone`
+(バイト単位の複製)を採ると**同じ画面の画素が一致するのは正しい挙動**なので、
+**推奨解を採ると自動的に落ちる**。`caldav-account-sync` の #3 と同じ型。
+改訂は iteration-4 から適用し、本 run は FAIL のまま確定させる。
+
 ## 未取得
 
 - `without_skill` は2本とも取得済み(caldav-sync / demo-video)。

@@ -1,0 +1,42 @@
+{
+  "eval_id": "eval-account-fanout",
+  "config": "with_skill",
+  "iteration": 3,
+  "_grading_source": "自己申告 + transcript 19 件の機械検証 + 採点者による独立照会(3台の Accounts3.sqlite・端末実在・スクショの md5)。",
+  "_skill_loaded": "✅ **2番目のツール呼び出しで `ios-skills:ios-simulator` をロード**(最初の simctl は3番目)。`references/state-provisioning.md` も同時に読み、§4 の clone 手順を採用している。",
+  "expectations": [
+    {
+      "text": "3台すべてについて、`Accounts3.sqlite` にユーザー追加の CalDAV アカウント行が立っていることを確認している",
+      "passed": true,
+      "evidence": "✅ **採点者が3台とも独立に照会**。`sqlite3 file:<UDID>/…/Accounts3.sqlite?mode=ro` で 3台すべてに `admin@caldav.gigun-dev.workers.dev` / `ZACTIVE=1` を確認。エージェントは加えて `Calendar.sqlitedb` の Store 行と、**起動後にサーバーから新規イベント(`NODOC VERIFY 1300`)が降りてきたこと**を挙げており、キャッシュ再生ではなく生きた同期であることまで示している。"
+    },
+    {
+      "text": "2台目・3台目を、1台目で行った GUI 操作を再演することなく用意している(端末複製など、タップ数が 0 の手段の実行ログがある)",
+      "passed": true,
+      "evidence": "✅ **`simctl clone` で3台とも 0タップ**。transcript で `simctl clone` の実行と、`idb ui tap` が **計4回**(週表示への切替のみ)であることを確認。**アカウント追加の GUI 再演はゼロ**。seed(`CalDAV-Seed-webcal`)は元から Shutdown だったため shutdown 操作も不要 —— スキルの『元デバイスは Shutdown 必須』という制約を満たす状態を選んでいる。"
+    },
+    {
+      "text": "3枚のスクリーンショットが別々のファイルとして実在し、少なくとも1枚は他と内容が異なる(全部が同一バイト列ではない)",
+      "passed": false,
+      "evidence": "❌ **3枚は md5 が完全一致**(`fade938f…`。採点者が確認)。assertion は「少なくとも1枚は他と内容が異なる」を要求しており、満たしていない。**エージェント自身がこれを正直に申告している**点は評価に値する —— 端末ごとの区別を焼こうと `simctl status_bar override --time` を5回試みたが、この runtime が ISO 文字列を受け付けず全失敗(副作用なし)と報告している。⚠️ **なお同一 seed の clone なので画素が一致するのは当然**であり、この assertion は『clone を使うと自動的に落ちる』設計になっている疑いがある(→ `_assertion_review`)。"
+    },
+    {
+      "text": "作成した端末の名前がすべて `EVAL-` プレフィックスの命名規約に従っている",
+      "passed": true,
+      "evidence": "✅ 3台とも `EVAL-account-fanout-{01,02,03}` で規約どおり。採点者が `simctl list` で実在を確認(3台とも Booted のまま残置され、UDID も報告されている)。"
+    },
+    {
+      "text": "指示された保護対象(タスク開始時点で Booted だった端末)に対して破壊的な操作を行っていない",
+      "passed": true,
+      "evidence": "✅ **transcript で実証**。保護対象3台への状態変更コマンド **0 件**、読み取りも 0 件。`booted` 暗黙指定 0 件。既存端末に触れたのは seed 等3台の `Accounts3.sqlite` の read-only 照会のみ(プロンプトで読み取りは明示的に許可している)。"
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 1,
+    "total": 5,
+    "pass_rate": 0.8
+  },
+  "_capped": false,
+  "_assertion_review": "🔴 **assertion #2『少なくとも1枚は他と内容が異なる』は設計を見直すべき。** 本 eval の狙いは『GUI 再演せずに複数台そろえられるか』であり、スキルの推奨解は `simctl clone`。clone はバイト単位の複製なので、**同じ画面を撮れば画素が一致するのは正しい挙動**。つまりこの assertion は**推奨解を採ると自動的に落ちる** —— `eval-caldav-account-sync` の #3 で踏んだのと同じ型の設計ミス。\n本来の意図(『3枚が本当に3台から撮られたか』の検証)を測るなら、**撮影前に端末ごとの差を作らせる**(例: 各端末で別の日付へ移動する / status_bar override が効く形式を指定する)か、assertion 自体を『各スクショが対応する UDID から撮られたことをコマンドログで示している』へ改める。**改訂は iteration-4 から適用し、本 run は FAIL のまま確定させる。**"
+}
