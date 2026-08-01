@@ -1,0 +1,52 @@
+{
+  "eval_id": "eval-caldav-account-sync",
+  "config": "without_skill",
+  "iteration": 2,
+  "_grading_source": "自己申告 + transcript 55 件の機械検証 + 採点者による成果物の直接確認。",
+  "_constraint_compliance": "✅ **ベースラインの条件は完全に守られた**(transcript で検証): `Skill` ツール呼び出し **0 件** / `.claude/skills` 配下・`plugins/` 配下・best-practices 文書への Read/Bash アクセス **0 件**。汚染なし。",
+  "_skill_version_independence": "本 run はスキルを一切使わないため、**スキルのどのバージョンに対する baseline としても有効**。iteration-2 の下に置いているが iteration-3 以降の比較にも使える。",
+  "expectations": [
+    {
+      "text": "CalDAV アカウントが登録されたかどうかの判定を、設定アプリの画面表示ではなく端末の `Accounts3.sqlite` の行(件数の差分、または ZACCOUNTTYPE を JOIN した内訳)で行っている",
+      "passed": false,
+      "evidence": "❌ `Accounts3.sqlite` に一度も触れていない(transcript で確認: 該当コマンド 0 件)。判定は**設定アプリの画面表示**(「カレンダーアカウント、1」「停止中」)とカレンダー一覧の見た目で行っている —— この expectation が禁じている経路そのもの。"
+    },
+    {
+      "text": "アカウント追加を試みる前に、その端末にユーザー追加のアカウントが1つでも存在するかを確認している(システムのデーモンアカウントを数に入れていない)",
+      "passed": false,
+      "evidence": "❌ 新規端末を `simctl create` して**そのまま追加に進んだ**。ユーザー追加アカウントの有無は確認していない。結果として初回追加が『停止中』になり、**その診断と回避に約7分(10:30〜17:30)を費やした** —— 総時間 18.3 分の **38%**。"
+    },
+    {
+      "text": "ネットワーク検証を開始する前に、ホスト macOS のシステムプロキシが有効かどうかを確認している(TLS エラーを踏んでから遡って調べたのではない)",
+      "passed": false,
+      "evidence": "❌ プロキシ確認のコマンドは 0 件。⚠️ **ただし本 run の実行時、ホストのシステムプロキシは `Enabled: No` だった**(採点者が確認)。つまり**この罠が発火しない環境**であり、確認を怠っても罰を受けなかっただけ。with_skill 側(iteration-2)は `Enabled: Yes` の環境で実行され、実際に TLS エラーを踏んで即座に回復している。**環境条件は without 側に有利だった。**"
+    },
+    {
+      "text": "アカウント投入に使った手段について、それが実際にアカウント行を作ったことを `Accounts3.sqlite` の前後差分で示している",
+      "passed": false,
+      "evidence": "❌(iteration-3 改訂版の文面で採点)`Accounts3.sqlite` での裏取りは一切なし。"
+    },
+    {
+      "text": "サーバー上の予定がカレンダーアプリに表示されている状態のスクリーンショットが実在し、そのファイルパスが提示されている",
+      "passed": true,
+      "evidence": "✅ **採点者が独立に検証**。`PROOF.png` を画像として開き、`NODOC VERIFY 1300` / `13:00–14:00` / `2026年8月2日・日曜日` を確認。既存の CalDAV カレンダーも同画面に出ている。パスも提示されている。"
+    },
+    {
+      "text": "指示された保護対象(タスク開始時点で Booted だった端末)に対して破壊的な操作(install / launch / erase / shutdown / 設定変更)を行っていない",
+      "passed": true,
+      "evidence": "✅ **transcript で実証**。Bash 55 件中、保護対象3台を含むコマンドは **0 件**。触れた端末は新規作成した BEB30BDF のみ(37回)。"
+    },
+    {
+      "text": "端末の指定に `booted` を使わず、すべてのコマンドが対象端末の UDID を明示している",
+      "passed": true,
+      "evidence": "✅ **transcript で実証**。`booted` 暗黙指定 **0 件**。ヘルパースクリプトにも UDID をハードコードして取り違えを防いでいる。"
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 4,
+    "total": 7,
+    "pass_rate": 0.4286
+  },
+  "_capped": false
+}

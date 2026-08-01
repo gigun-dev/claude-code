@@ -22,6 +22,39 @@ ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
 Xcode が新規プロジェクトに自動で入れる設定だが、XcodeGen の素の target には付かない。
 無いと素材を同梱しても actool がどれを採用するか分からず、**アイコンが空のままビルドが通る**。
 
+## 素の .xcodeproj の場合: Xcode 16 以降は pbxproj を編集しなくてよい
+
+`project.pbxproj` の `objectVersion = 77` かつ `PBXFileSystemSynchronizedRootGroup` が
+あれば **同期フォルダ**方式で、そのフォルダにファイルを置くだけでターゲットに入る。
+`.icon` をアプリのソースフォルダへ置き、`ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`
+が設定されていれば、それだけで通る(pbxproj の手術は不要)。
+
+```bash
+grep -n "objectVersion\|PBXFileSystemSynchronizedRootGroup" App.xcodeproj/project.pbxproj
+```
+
+古い形式(objectVersion < 70)なら PBXFileReference / PBXBuildFile / Resources phase の
+3箇所を手で足すことになるので、その場合は Xcode で追加したほうが速い。
+
+## 生成元(SVG / spec)はリポジトリに置き、バンドルからは外す
+
+`.icon` の PNG はビルド生成物で、**幾何が焼き込まれている**。生成元が無いと
+「カードを少し動かす」ができず作り直しになる(実際にこれで復元作業が発生した)。
+生成元は `.icon` の隣に置くのが分かりやすいが、そのままだとアプリに同梱されるので除外する。
+
+```yaml
+# XcodeGen
+sources:
+  - path: Sources/Features
+    excludes:
+      - "Resources/AppIcon.svg"   # アイコンの生成元。成果物ではないので同梱しない
+```
+
+同期フォルダ方式の素の .xcodeproj なら、生成元だけ同期フォルダの**外**
+(例: リポジトリ直下の `Design/`)へ置くのが手っ取り早い。
+
+組み込み後は `find "$APP" -name "*.svg"` が空であることを確認する。
+
 ## 落とし穴1: XcodeGen が .icon を展開してしまう
 
 `.icon` は拡張子付きのディレクトリなので、XcodeGen は既定で中身を個別ファイルとして
