@@ -73,6 +73,10 @@ buildはプロジェクト側の手順に任せ、本skillは状態づくり、i
 - AX frameはpoints、スクリーンショットはpixels。座標タップ時は`point = pixel / scale`。
   小さい要素はスクリーンショット換算よりAX frameを優先する。
 - AX treeが要素1個かつframe 0だけなら、まず対象アプリが前面にいないことを疑う。
+- screenshot/recordVideoの出力先を`/tmp`配下にすると`NSCocoaErrorDomain code=642`
+  (`volume is read only`)で失敗する。ホーム配下の書き込み可能なディレクトリへ出す。
+- `idb`が`No targets`を返すのはcompanion未接続。`idb connect <UDID>` →
+  `idb list-targets`でsocketを確認する。端末側の異常と誤診しない。
 - 仮想化リストは表示中要素しかAX treeに出ない。`sim-nav.py --scroll-max`を増やす。
 - `idb ui text`は非ASCIIを送れず、失敗してもexit 0になりうる。日本語・絵文字・記号は
   `xcrun simctl pbcopy "$SIM_UDID"`とペーストを使う。詳細は`references/text-input.md`。
