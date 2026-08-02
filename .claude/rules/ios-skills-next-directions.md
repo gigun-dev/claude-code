@@ -14,13 +14,16 @@ paths:
 `xcode-mcp` は公式バイナリ(`xcrun mcpbridge`)の薄いラッパーで、
 私たちが開発しているものではないため対象外。
 
+Codex からは `plugins/ios-skills/AGENTS.md` / `evaluations/AGENTS.md`
+(このファイルへの symlink)経由で同じ内容を読む。対応関係は `.codex/README.md`。
+
 ## 現在地(2026-08-02)
 
 `ios-skills` を portable/evaluable な形へ再構成した(`e112915`)。Claude/Codex 共有の
 評価ハーネス(`evaluations/`)を作り、サブスク認証での実走・ブラインド採点まで通した。
 
 old(`2d3424a`)vs new(`e112915`)の A/B 結果は
-[`evaluations/ios-skills/results/2026-08-02-old-vs-new.md`](../../evaluations/ios-skills/results/2026-08-02-old-vs-new.md):
+`evaluations/ios-skills/results/2026-08-02-old-vs-new.md`(repo ルート相対):
 **総合して改善**(safety 違反 4→0、5 case 中3つで実質的な精度向上)。
 唯一の劣後(icon case)は調査済みで、再構成そのものの劣化ではなく rubric の歪みと判明。
 
