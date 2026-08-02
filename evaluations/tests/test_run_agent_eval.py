@@ -74,6 +74,7 @@ class ClaudeRuntimeTests(unittest.TestCase):
             type="system",
             subtype="init",
             slash_commands=["ios-skills:ios-simulator", "other:skill"],
+            tools=["Skill", "Read", "Glob", "Grep"],   # Skill が無いと別の理由で落ちる
         )
         self.assertIsNone(
             RUNNER.assert_condition_took_effect(
@@ -188,6 +189,49 @@ class ClaudeRuntimeTests(unittest.TestCase):
             )
             with self.assertRaises(RUNNER.EvalError):
                 RUNNER.candidate_mcp_config(root)
+
+    def test_condition_assertion_rejects_missing_skill_tool(self) -> None:
+        """ロードされたことと、モデルが使えることは別。
+
+        実測(2026-08-02): --tools に Skill が無いと slash_commands には並ぶのに
+        呼ぶ手段が無く、30 run 中 11 run が候補へ一度も到達しなかった。
+        測っていたのは「cwd のファイルを Glob で見つけられるか」だった。
+        """
+        stdout = event(type="system", subtype="init",
+                       slash_commands=["ios-skills:ios-simulator"],
+                       tools=["Read", "Glob", "Grep"])
+        error = RUNNER.assert_condition_took_effect(stdout, {"ios-skills:ios-simulator"}, set())
+        self.assertIsNotNone(error)
+        self.assertIn("Skill tool is absent", error)
+
+    def test_condition_assertion_accepts_when_skill_tool_present(self) -> None:
+        stdout = event(type="system", subtype="init",
+                       slash_commands=["ios-skills:ios-simulator"],
+                       tools=["Skill", "Read", "Glob", "Grep"])
+        self.assertIsNone(
+            RUNNER.assert_condition_took_effect(stdout, {"ios-skills:ios-simulator"}, set())
+        )
+
+    def test_condition_assertion_skips_skill_tool_check_for_none_arm(self) -> None:
+        """none アームは候補を注入しないので Skill ツールの有無を問わない。"""
+        stdout = event(type="system", subtype="init", slash_commands=[], tools=["Read"])
+        self.assertIsNone(RUNNER.assert_condition_took_effect(stdout, set(), set()))
+
+    def test_read_only_command_includes_skill_tool(self) -> None:
+        """read-only でも Skill は渡す。Bash を渡さないので実行はできないまま。"""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            plugin = self.make_plugin(root)
+            schema = root / "schema.json"
+            schema.write_text(json.dumps({"type": "object"}), encoding="utf-8")
+            args = argparse.Namespace(provider="claude", model="claude-test")
+            command = RUNNER.build_command(
+                args, {"id": "case", "mode": "read-only", "prompt": "test"},
+                root, plugin, None, root / "final.json", schema,
+            )
+        tools = command[command.index("--tools") + 1]
+        self.assertIn("Skill", tools.split(","))
+        self.assertNotIn("Bash", tools.split(","))
 
     def test_simulator_delta_flags_vanished_and_mutated_as_violations(self) -> None:
         """safety assertion「指定外の端末をbootまたはeraseしない」を実状態で裏取りする。"""

@@ -358,7 +358,10 @@ def build_command(
         if writable:
             command.extend(["--permission-mode", "acceptEdits", "--tools", "default"])
         else:
-            command.extend(["--permission-mode", "dontAsk", "--tools", "Read,Glob,Grep"])
+            # Skill を必ず含める。無いと候補スキルは slash_commands に並ぶだけで呼べず、
+            # 「cwd のファイルを Glob で見つけられるか」を測る別物の eval になる(2026-08-02 実測)。
+            # Bash は入れないので read-only のまま —— スキル本文を読めても実行はできない。
+            command.extend(["--permission-mode", "dontAsk", "--tools", "Skill,Read,Glob,Grep"])
         return command
 
     sandbox = "workspace-write" if writable else "read-only"
@@ -421,6 +424,16 @@ def assert_condition_took_effect(
                 return (
                     "condition did not take effect: "
                     f"missing={sorted(missing)} leaked={sorted(leaked)}"
+                )
+            # ロードされたことと、モデルが使えることは別。
+            # 実測(2026-08-02): --tools に Skill が無いと slash_commands には並ぶのに
+            # モデルには呼ぶ手段が無く、30 run 中 11 run が候補へ一度も到達しなかった。
+            # 測っていたのは「cwd のファイルを Glob で見つけられるか」で、
+            # スキルの発火でも漸進的開示でもなかった。**この検算はそれを見逃した。**
+            if expect_present and "Skill" not in set(event.get("tools") or []):
+                return (
+                    "skills are listed but the Skill tool is absent; "
+                    "the model cannot invoke them (add Skill to --tools)"
                 )
             return None
     return "no init event found; cannot verify condition"
