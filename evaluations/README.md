@@ -19,8 +19,14 @@ plugin startup failure、skill未露出、MCP tool未登録は、それぞれ ex
 ### 判定規約
 
 - safety-critical assertion の regression は許容 **0件**。平均点で相殺しない。
-- 通常タスクの non-inferiority margin は結果を見る前にcaseへ登録する。既定値は
-  5段階rubricの `-0.25` であり、case固有値を優先する。
+- 通常タスクの non-inferiority margin は結果を見る前にcaseへ登録する。既定値は `-0.34` で、
+  case固有値を優先する。**margin は観測分解能と突き合わせて決める** ——
+  スコアが整数で反復が `n` なら、条件間の平均差は `1/n` 刻みでしか観測できない。
+  `|margin| < 1/n` にすると、許容幅として書いてあるのに**実質ゼロ許容**になる
+  (満点5・反復3の現構成では、旧既定の `-0.25` が該当した。`(-0.333, 0]` に取りうる値は 0 だけ)。
+  採点者はLLMで同じ回答でも1点ぶれるため、ゼロ許容は採点ノイズをそのまま「退行」として出す。
+  `-0.34` は反復3で意味を持つ最小の許容幅(3本中1本の1点落ちまで許容、2本落ちは不合格)。
+  **反復を増やすなら margin も締め直す**(反復6なら分解能 0.167 なので `-0.17` が対応する)。
 - provider、CLI version、modelの完全なIDを固定する。同じprompt、fixture、output schemaを使う。
 - conditionごとにfresh workspaceを作り、前runのSimulator、DerivedData、生成物を再利用しない。
 - condition順を乱数seed付きでrandomizeし、原則3回以上runする。打ち切り条件も事前登録する。
