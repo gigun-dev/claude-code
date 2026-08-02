@@ -3,11 +3,13 @@
 このディレクトリを skill / plugin / MCP 評価の正典とする。`.claude/` と
 `.codex/` は provider 固有の薄い adapter に留め、rubric、case、fixture、結果はここで共有する。
 
-現在地・残タスクは [`next-directions.md`](next-directions.md)。
-`.claude/rules/ios-skills.md` がそこへの pointer を持ち、`plugins/ios-skills/**` /
-`evaluations/**` 編集時に自動ロードされる(現在地の中身自体は rule には置かない)。
-作業を引き継ぐとき
-(Claude ⇄ Codex 含む)は先にそこを見る。
+ios-skills 全体の**現在地・次の作業・時系列ログ**は `docs/ios-skills/`
+(`next-directions.md` / `log.md`)にある。評価は ios-skills 改善の一手段であって
+全てではないため、継続コンテキストはこのディレクトリには置かない
+(関心の分離。詳細は `.claude/rules/ios-skills.md`)。
+`plugins/ios-skills/**` / `evaluations/**` を編集すると rule として自動ロードされ、
+セッション開始時にも軽量な pointer が注入される(`.claude/hooks/session-start.sh`)。
+作業を引き継ぐとき(Claude ⇄ Codex 含む)は先に `docs/ios-skills/next-directions.md` を見る。
 
 ## 評価レイヤー
 
