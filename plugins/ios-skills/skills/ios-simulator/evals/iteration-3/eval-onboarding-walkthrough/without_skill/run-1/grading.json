@@ -1,0 +1,37 @@
+{
+  "eval_id": "eval-onboarding-walkthrough",
+  "config": "without_skill",
+  "iteration": 3,
+  "_grading_source": "自己申告 + transcript の機械検証(Skill 0 件・禁止パス 0 件)+ 採点者によるファイル確認。",
+  "_constraint_compliance": "✅ 完全遵守。",
+  "expectations": [
+    {
+      "text": "画面ごとに別ファイルのスクリーンショットが実在し、内容がすべて同一ではない(バイト比較で重複していない)",
+      "passed": true,
+      "evidence": "✅ 採点者が確認: 8枚(scratchpad 全体では19枚)すべて md5 一意。"
+    },
+    {
+      "text": "タップ座標を points で扱っている(スクリーンショットの pixel 値をそのまま座標として渡していない。scale 換算またはアクセシビリティ走査の frame を使った記録がある)",
+      "passed": true,
+      "evidence": "✅ pixel をそのまま渡していない。**ネイティブ UI は `describe-all` が返す pt の frame 中心をそのまま使用**し、a11y に出ない WebView 内要素だけ `表示座標 ×1.31 → 原寸px ÷3 → pt` で換算、と経路を分けて明示している。"
+    },
+    {
+      "text": "タップが効かなかった場面があった場合、それを『効かなかった』と検出したうえで報告している(空振りに気づかず次の手順へ進んでいない)",
+      "passed": true,
+      "evidence": "✅ 空振り 0 回。検出器は機能していた —— 各タップ後にスクショ + `describe-all` を取り、期待した状態遷移(要認証 → 接続済み)を確認する作りにしている。"
+    },
+    {
+      "text": "スクリーンショットの保存先が書き込みに成功したパスで、報告された全ファイルが実在する",
+      "passed": true,
+      "evidence": "✅ 全ファイルが実在(採点者が確認)。"
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.0
+  },
+  "_capped": false,
+  "_preregistered_conclusion": "🔬 **§15 の基準の反証テスト。事前登録の第1分岐に該当。**\nwith_skill 573s に対し **baseline 350s(39% 速い)**、assertion も **4/4 で同点**。\n→ ✅ **『効く条件 = 転移し、かつモデルが自力では至れない一次情報』という基準は、「差が出ない」と予測した側でも当たった。**\n**基準は予測力を持つ。** 未測定の領域についても、事前に効き目を判断できる。\nしかも baseline は **onboarding が存在しないという核心も自力で突き止めている**(ソースに該当画面が無いことを確認)—— 予測どおり「grep で分かる」領域だった。"
+}

@@ -1,0 +1,7 @@
+{
+  "total_tokens": 86694,
+  "duration_ms": 400281,
+  "total_duration_seconds": 350.0,
+  "_source": "完了通知 400,281ms / 自己申告 350s。",
+  "_note": "with_skill は 573s。**baseline の方が 39% 速い。**"
+}
