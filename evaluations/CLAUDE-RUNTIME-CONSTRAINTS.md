@@ -156,6 +156,43 @@ def assert_condition_took_effect(stdout: str, expect_present: set[str], expect_a
 `Not logged in` / `Invalid API key` で始まっていたら `provider-error` にする
 (いまは `artifact-error` に化けるので原因が読み取りにくい)。
 
+## 6-a. 🔴 `init` に並ぶことと、モデルが使えることは別
+
+**同じ形の罠を2回踏んだので、規則として書く。**
+
+> **`--tools` に載せていない機構は、`init` イベントに一覧が出ていてもモデルの文脈に入らない。**
+
+| 機構 | `init` の該当キー | 必要な `--tools` | 載せないと |
+|---|---|---|---|
+| skill | `slash_commands` | `Skill` | 一覧に並ぶが**呼べない**。モデルは SKILL.md を `Glob` で探し回る |
+| agent | `agents` | `Agent`(実体は `Task`) | 一覧に並ぶが**存在を認識しない** |
+
+実測(2026-08-02):
+
+```bash
+# skill
+--tools "Read,Glob,Grep"        → SKILL.md を Glob で探し回り、応答 None
+--tools "Skill,Read,Glob,Grep"  → 即座に4スキルを列挙
+
+# agent(init.agents には両方とも simulator-operator が入っている)
+--tools "Skill,Read,Glob,Grep"          → simulator-operator に言及しない
+--tools "Skill,Read,Glob,Grep,Agent"    → 正しく列挙する(tools に Task が現れる)
+```
+
+**踏んだ代償**: 1回目(skill)は 30 run のバッチを丸ごと作り直した。
+測っていたのは「cwd のファイルを見つけて読めるか」で、スキルの発火ではなかった。
+2回目(agent)は `plugin-fresh-session-exposure` の全6本が
+`ios-skills:simulator-operator` を落とした —— **両条件に一様な減点なので条件比較は歪まない**が、
+case の満点は構造的に取れない。
+
+> ⚠️ **`Agent` を read-only アームに足してはいけない。** subagent を spawn でき、
+> その中で `Bash` が使えるので **read-only が破れる**。
+> 対処は case の文言を skill に限定する側。agent の露出検証が要るなら、
+> `component-inventory` 層の別 case として持つ。
+
+**§6 の assert は skill 側だけを検査している。** agent を測る case を足すときは、
+同じ検算を `agents` × `Task` の組でも書くこと。
+
 ---
 
 ## 6-b. ✅ サブスク枠で成立する構成(これを採る)
