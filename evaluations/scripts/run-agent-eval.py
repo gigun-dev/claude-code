@@ -26,6 +26,8 @@ LIVE_CONFIRMATION = "I_UNDERSTAND_LIVE_EVAL"
 EXPECTED_VERSIONS = {"claude": "2.1.220", "codex": "0.145.0"}
 CONDITIONS = {"ios-skills-old", "ios-skills-new", "build-ios-apps", "none"}
 SECRET_NAME = re.compile(r"(^\.env($|\.)|credential|secret|auth\.json$|token)", re.IGNORECASE)
+EMPTY_MCP_CONFIG = json.dumps({"mcpServers": {}}, separators=(",", ":"))
+CLAUDE_AUTH_FAILURE_PREFIXES = ("Not logged in", "Invalid API key")
 
 
 class EvalError(Exception):
@@ -154,6 +156,27 @@ def validate_claude_plugin(candidate: Path) -> None:
         raise EvalError(f"Claude candidate is not an unambiguous plugin root: {candidate}")
 
 
+def claude_plugin_commands(candidate: Path) -> set[str]:
+    """Return plugin-qualified skill commands expected in Claude's init event."""
+    validate_claude_plugin(candidate)
+    manifest_path = candidate / ".claude-plugin" / "plugin.json"
+    if not manifest_path.is_file():
+        manifest_path = candidate / "plugin.json"
+    manifest = load_json(manifest_path)
+    plugin_name = manifest.get("name") if isinstance(manifest, dict) else None
+    if not isinstance(plugin_name, str) or not plugin_name:
+        raise EvalError(f"Claude plugin manifest has no valid name: {manifest_path}")
+    skills_dir = candidate / "skills"
+    commands = {
+        f"{plugin_name}:{skill_file.parent.name}"
+        for skill_file in skills_dir.glob("*/SKILL.md")
+        if skill_file.is_file()
+    }
+    if not commands:
+        raise EvalError(f"Claude plugin exposes no skills under {skills_dir}")
+    return commands
+
+
 def toml_skill_config(skill_roots: list[Path]) -> str:
     entries = ",".join(
         "{path=" + json.dumps(str(path)) + ",enabled=true}" for path in skill_roots
@@ -162,14 +185,35 @@ def toml_skill_config(skill_roots: list[Path]) -> str:
 
 
 def clean_environment(provider: str, tmpdir: Path) -> dict[str, str]:
-    allowed = ["PATH", "HOME", "LANG", "LC_ALL", "SSL_CERT_FILE"]
-    if provider == "claude":
-        allowed.extend(["ANTHROPIC_API_KEY", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX"])
-    else:
+    # USER は必須。macOS の Keychain エントリ(service "Claude Code-credentials")は
+    # acct = ユーザー名で引かれるため、USER が無いと subscription 認証が解決できず
+    # 全 run が "Not logged in · Please run /login" になる(2026-08-02 実測)。
+    # Why not LOGNAME: 実測で LOGNAME だけでは解決しない。USER でなければならない。
+    # 検算: env -i PATH=... HOME=... claude -p → Not logged in / + USER → 通常応答。
+    allowed = ["PATH", "HOME", "USER", "LANG", "LC_ALL", "SSL_CERT_FILE"]
+    if provider == "codex":
         allowed.append("CODEX_HOME")
     environment = {name: os.environ[name] for name in allowed if name in os.environ}
     environment["TMPDIR"] = str(tmpdir)
     return environment
+
+
+def claude_json_schema(path: Path) -> dict[str, Any]:
+    """`--json-schema` へ渡す形へ整える。
+
+    Claude CLI の validator は `$schema` の meta-schema ref を解決できず、
+    draft 2020-12 を宣言したスキーマをそのまま渡すと起動前に落ちる(2026-08-02 実測):
+
+        Error: --json-schema is not a valid JSON Schema:
+               no schema with key or ref "https://json-schema.org/draft/2020-12/schema"
+
+    Why not スキーマ側から `$schema` を消すか: 同じファイルを Codex の `--output-schema` と
+    リポジトリ内の検証にも使っており、そちらでは meta-schema 宣言があった方がよい。
+    **provider 固有の都合は adapter 側で吸収する**(evaluations/README.md の方針)。
+    """
+    schema = load_json(path)
+    schema.pop("$schema", None)
+    return schema
 
 
 def cli_version(provider: str, expected: str) -> str:
@@ -216,10 +260,11 @@ def build_command(
     writable = case["mode"] != "read-only"
     if args.provider == "claude":
         command = [
-            "claude", "--bare", "-p", prompt,
+            "claude", "-p", prompt,
             "--output-format", "stream-json", "--verbose", "--no-session-persistence",
+            "--strict-mcp-config", "--mcp-config", EMPTY_MCP_CONFIG,
             "--model", args.model,
-            "--json-schema", json.dumps(load_json(response_schema), separators=(",", ":")),
+            "--json-schema", json.dumps(claude_json_schema(response_schema), separators=(",", ":")),
         ]
         if candidate is not None:
             validate_claude_plugin(candidate)
@@ -241,6 +286,17 @@ def build_command(
     return command
 
 
+def build_claude_preflight_command(args: argparse.Namespace) -> list[str]:
+    """Build an unscored subscription-auth and plugin-leak preflight."""
+    return [
+        "claude", "-p", "Reply with OK only.",
+        "--output-format", "stream-json", "--verbose", "--no-session-persistence",
+        "--strict-mcp-config", "--mcp-config", EMPTY_MCP_CONFIG,
+        "--model", args.model,
+        "--permission-mode", "dontAsk", "--tools", "", "--max-turns", "1",
+    ]
+
+
 def extract_claude_final(stdout: str, final_path: Path) -> None:
     final: Any = None
     for line in stdout.splitlines():
@@ -258,8 +314,128 @@ def extract_claude_final(stdout: str, final_path: Path) -> None:
         final_path.write_text(str(final), encoding="utf-8")
 
 
+def assert_condition_took_effect(
+    stdout: str,
+    expect_present: set[str],
+    expect_absent: set[str],
+) -> str | None:
+    """Verify that Claude exposed exactly the target skills needed by this condition."""
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") == "system" and event.get("subtype") == "init":
+            commands = set(event.get("slash_commands") or [])
+            missing = expect_present - commands
+            leaked = expect_absent & commands
+            if missing or leaked:
+                return (
+                    "condition did not take effect: "
+                    f"missing={sorted(missing)} leaked={sorted(leaked)}"
+                )
+            return None
+    return "no init event found; cannot verify condition"
+
+
+def claude_auth_error(stdout: str) -> str | None:
+    """Surface subscription/authentication failures that Claude reports with exit code zero."""
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict) or event.get("type") != "result":
+            continue
+        result = event.get("result")
+        if isinstance(result, str) and result.startswith(CLAUDE_AUTH_FAILURE_PREFIXES):
+            return result
+    return None
+
+
 def write_json(path: Path, value: Any) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def run_claude_preflight(
+    args: argparse.Namespace,
+    batch_dir: Path,
+    expect_absent: set[str],
+) -> None:
+    """Fail the batch before scoring if subscription auth or plugin isolation is invalid."""
+    preflight_dir = batch_dir / "claude-preflight"
+    workspace = preflight_dir / "workspace"
+    tmpdir = preflight_dir / "tmp"
+    workspace.mkdir(parents=True)
+    tmpdir.mkdir()
+    stdout_path = preflight_dir / "stdout.jsonl"
+    stderr_path = preflight_dir / "stderr.log"
+    command = build_claude_preflight_command(args)
+    metadata: dict[str, Any] = {
+        "provider": "claude",
+        "model": args.model,
+        "expected_absent": sorted(expect_absent),
+        "dry_run": args.dry_run,
+        "command": command,
+    }
+    if args.dry_run:
+        stdout_path.write_text("", encoding="utf-8")
+        stderr_path.write_text("", encoding="utf-8")
+        metadata["status"] = "planned"
+        write_json(preflight_dir / "metadata.json", metadata)
+        return
+
+    started = time.monotonic()
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=workspace,
+            env=clean_environment("claude", tmpdir),
+            capture_output=True,
+            text=True,
+            timeout=args.timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        stdout = error.stdout if isinstance(error.stdout, str) else ""
+        stderr = error.stderr if isinstance(error.stderr, str) else ""
+        stdout_path.write_text(stdout, encoding="utf-8")
+        stderr_path.write_text(stderr, encoding="utf-8")
+        metadata.update({"status": "timeout", "duration_seconds": time.monotonic() - started})
+        write_json(preflight_dir / "metadata.json", metadata)
+        raise EvalError(f"Claude preflight timed out; inspect {preflight_dir}", EXIT_TIMEOUT)
+
+    stdout_path.write_text(completed.stdout, encoding="utf-8")
+    stderr_path.write_text(completed.stderr, encoding="utf-8")
+    auth_error = claude_auth_error(completed.stdout)
+    condition_error = assert_condition_took_effect(completed.stdout, set(), expect_absent)
+    if auth_error is not None:
+        status = "provider-error"
+        failure = f"Claude preflight authentication failed: {auth_error}"
+    elif completed.returncode != 0:
+        status = "provider-error"
+        failure = f"Claude preflight exited {completed.returncode}"
+    elif condition_error is not None:
+        status = "condition-error"
+        failure = (
+            f"Claude preflight plugin isolation failed: {condition_error}. "
+            "Disable the installed comparison plugin before starting the batch."
+        )
+    else:
+        status = "completed"
+        failure = None
+    metadata.update({
+        "status": status,
+        "duration_seconds": time.monotonic() - started,
+        "provider_exit_code": completed.returncode,
+        "auth_error": auth_error,
+        "condition_error": condition_error,
+    })
+    write_json(preflight_dir / "metadata.json", metadata)
+    if failure is not None:
+        raise EvalError(f"{failure} Inspect {preflight_dir}", EXIT_PROVIDER)
 
 
 def validate_final(path: Path, case_id: str) -> str | None:
@@ -337,6 +513,16 @@ def main() -> int:
             if path_map["ios-skills-old"] == path_map["ios-skills-new"]:
                 raise EvalError("old and new conditions must use different candidate paths")
 
+        claude_commands_by_condition: dict[str, set[str]] = {}
+        if args.provider == "claude":
+            claude_commands_by_condition = {
+                condition: claude_plugin_commands(path)
+                for condition, path in path_map.items()
+            }
+        all_claude_candidate_commands = set().union(
+            *claude_commands_by_condition.values()
+        ) if claude_commands_by_condition else set()
+
         expected_version = args.expected_cli_version or EXPECTED_VERSIONS[args.provider]
         version = cli_version(args.provider, expected_version)
         seed = args.seed if args.seed is not None else random.SystemRandom().randrange(2**63)
@@ -369,6 +555,8 @@ def main() -> int:
             },
         }
         write_json(batch_dir / "condition-map.json", sealed_map)
+        if args.provider == "claude":
+            run_claude_preflight(args, batch_dir, all_claude_candidate_commands)
 
         summaries: list[dict[str, Any]] = []
         overall_exit = 0
@@ -450,9 +638,30 @@ def main() -> int:
                 extract_claude_final(completed.stdout, final_path)
             if not final_path.exists():
                 final_path.write_text("", encoding="utf-8")
-            artifact_error = validate_final(final_path, case["id"]) if completed.returncode == 0 else None
-            if completed.returncode != 0:
+            auth_error: str | None = None
+            condition_error: str | None = None
+            if args.provider == "claude":
+                auth_error = claude_auth_error(completed.stdout)
+                expected_present = claude_commands_by_condition.get(condition, set())
+                expected_absent = all_claude_candidate_commands - expected_present
+                condition_error = assert_condition_took_effect(
+                    completed.stdout,
+                    expected_present,
+                    expected_absent,
+                )
+            artifact_error = (
+                validate_final(final_path, case["id"])
+                if completed.returncode == 0
+                and auth_error is None
+                and condition_error is None
+                else None
+            )
+            if auth_error is not None:
                 status = "provider-error"
+            elif completed.returncode != 0:
+                status = "provider-error"
+            elif condition_error is not None:
+                status = "condition-error"
             elif artifact_error is not None:
                 status = "artifact-error"
             else:
@@ -461,14 +670,18 @@ def main() -> int:
                 "duration_seconds": time.monotonic() - started,
                 "status": status,
                 "provider_exit_code": completed.returncode,
+                "auth_error": auth_error,
+                "condition_error": condition_error,
                 "artifact_error": artifact_error,
             })
             write_json(batch_dir / "condition-map.json", sealed_map)
             summaries.append({"run_id": blinded_id, "status": status, "path": str(run_dir)})
-            if completed.returncode != 0:
+            if completed.returncode != 0 or auth_error is not None or condition_error is not None:
                 overall_exit = max(overall_exit, EXIT_PROVIDER)
             elif artifact_error is not None:
                 overall_exit = max(overall_exit, EXIT_ARTIFACT)
+            if auth_error is not None or condition_error is not None:
+                break
 
         print(json.dumps({
             "status": "planned" if args.dry_run else ("completed" if overall_exit == 0 else "completed-with-errors"),

@@ -17,8 +17,10 @@ Choose exactly one phase for this session:
 2. **Grade:** Start from a fresh context. Read the frozen rubric and raw transcript/artifacts, verify
    self-reported claims, and emit a result matching `evaluations/schemas/result.schema.json`.
 
-Never execute and grade the same run in one context. Use Claude `--bare -p`, an explicit
-`--plugin-dir`, stream JSON, verbose output, and no session persistence through the runner. Keep
+Never execute and grade the same run in one context. Use Claude subscription auth with `-p`, an
+explicit `--plugin-dir`, empty strict MCP config, stream JSON, verbose output, and no session
+persistence through the runner. Require the unscored init preflight and per-run `slash_commands`
+assertions to pass; a dry-run is not evidence that plugin isolation worked. Keep
 manifest/load/exposure failures separate from skill precision. Do not run `live` or `write` cases
 without both human guard arguments. Keep automated technical pass separate from blinded HITL design
 preference; leave the design conclusion pending until a human records raw scores.

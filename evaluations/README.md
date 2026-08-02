@@ -33,6 +33,19 @@ plugin startup failure、skill未露出、MCP tool未登録は、それぞれ ex
 を参照する。特にA/B必須、到達可能な閾値、打ち切り、層別、answer leakage、環境汚染を重複して
 再発明しない。
 
+過去に**一度スキル本文へ書かれ、実験で誤りと判明して撤回された記述**は
+[`ios-skills/ios-simulator/retracted-2026-08-01.md`](ios-skills/ios-simulator/retracted-2026-08-01.md)
+にある。runtime skillには載せない(誤った記述をエージェントに読ませないため)が、
+**削除もしない** —— 同じ症状から同じ誤診へ落ちるのを防ぐカタログとして残す。
+「座標系がpxだと結論した」「AXが壊れたと診断してshutdown/bootを第一手にした」など、
+いずれも**もっともらしく、実験するまで気づけなかった**もの。
+
+Claude ランタイム側の制約(`--bare`とサブスク認証、プラグインスキルを無効化できない件、
+バッチ単位でのみ成立する隔離手順)は [`CLAUDE-RUNTIME-CONSTRAINTS.md`](CLAUDE-RUNTIME-CONSTRAINTS.md)
+にある。**実走の前に必ず読むこと**。runnerは§6-bに従い、サブスク認証、空MCP構成、
+`slash_commands`によるcondition検算を行うが、installed comparison pluginのdisable/restoreは
+共有状態を変更するため人間がバッチ境界で実施する。
+
 ## ios-skills と build-ios-apps の役割
 
 | 領域 | ios-skills | OpenAI `build-ios-apps` | 比較 |
@@ -69,10 +82,15 @@ python3 evaluations/scripts/run-agent-eval.py \
   --dry-run
 ```
 
-Claude adapterは `claude --bare -p ... --plugin-dir ... --output-format stream-json --verbose
---no-session-persistence`、Codex adapterは `codex exec --ephemeral --ignore-user-config
---sandbox read-only --json --output-schema ...` を組み立てる。Codexでは候補skillを
+Claude adapterは `claude -p ... --plugin-dir ... --output-format stream-json --verbose
+--no-session-persistence --strict-mcp-config --mcp-config '{"mcpServers":{}}'`、Codex adapterは
+`codex exec --ephemeral --ignore-user-config --sandbox read-only --json --output-schema ...` を
+組み立てる。Codexでは候補skillを
 `-c 'skills.config=[{path="...",enabled=true}]'` で明示する。
+
+Claudeの実走では採点前にunscored preflightを1回行う。subscription認証、`system/init`の存在、
+比較対象pluginの非露出を確認し、各runでも候補skillの欠落・別conditionの混入を検出したら
+`condition-error`で停止する。dry-runはCLIを呼ばないため、この検算を実行した証拠にはならない。
 
 `live` / `write` caseは `--allow-live --confirm-live I_UNDERSTAND_LIVE_EVAL` の両方がなければ
 拒否する。実機、Simulator、network、App Store Connectに副作用を起こす評価は、対象、credential、
