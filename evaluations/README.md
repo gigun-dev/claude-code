@@ -3,6 +3,8 @@
 このディレクトリを skill / plugin / MCP 評価の正典とする。`.claude/` と
 `.codex/` は provider 固有の薄い adapter に留め、rubric、case、fixture、結果はここで共有する。
 
+残タスクは [`TODO.md`](TODO.md)。作業を引き継ぐとき(Claude ⇄ Codex 含む)は先にそこを見る。
+
 ## 評価レイヤー
 
 下位レイヤーが失敗した run を、上位レイヤーの精度比較へ混ぜない。
