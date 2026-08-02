@@ -198,6 +198,35 @@ def clean_environment(provider: str, tmpdir: Path) -> dict[str, str]:
     return environment
 
 
+def candidate_mcp_config(candidate: Path | None) -> str:
+    """候補が manifest で宣言した MCP だけを、そのアームに与える。
+
+    Why 全アーム一律に空 MCP にしないか(CLAUDE-RUNTIME-CONSTRAINTS.md §6-c):
+    `ios-skills` は `xcrun simctl` + `idb` の CLI 専業なので空 MCP でも無傷だが、
+    `build-ios-apps` の `ios-debugger-agent` は本文の全手順が
+    `mcp__XcodeBuildMCP__*` の呼び出しで、**MCP を切ると1行目から実行不能**になる。
+    一律に切ると `ios-skills` が構造的に勝つ —— 測定ではなく設計の産物になる。
+
+    Why not ホストの MCP 設定をそのまま使うか: 環境の 15 サーバーがロードされ、
+    起動だけで 2 分を超えて 1 run も完走しない(§5 実測)。
+    **候補が自分で宣言した依存だけ**を与えるのが、公平さと実行可能性の両立点。
+    """
+    if candidate is None:
+        return EMPTY_MCP_CONFIG            # none アーム: 何も与えない
+    manifest = candidate / ".claude-plugin" / "plugin.json"
+    if not manifest.is_file():
+        return EMPTY_MCP_CONFIG
+    declared = load_json(manifest).get("mcpServers")
+    if not declared:
+        return EMPTY_MCP_CONFIG            # ios-skills はここ(宣言なし = CLI 専業)
+    if isinstance(declared, str):          # "./.mcp.json" のようなファイル参照
+        referenced = (candidate / declared).resolve()
+        if not referenced.is_file():
+            raise EvalError(f"plugin declares mcpServers {declared!r} but {referenced} is missing")
+        declared = load_json(referenced).get("mcpServers", {})
+    return json.dumps({"mcpServers": declared}, separators=(",", ":"))
+
+
 def claude_json_schema(path: Path) -> dict[str, Any]:
     """`--json-schema` へ渡す形へ整える。
 
@@ -262,7 +291,7 @@ def build_command(
         command = [
             "claude", "-p", prompt,
             "--output-format", "stream-json", "--verbose", "--no-session-persistence",
-            "--strict-mcp-config", "--mcp-config", EMPTY_MCP_CONFIG,
+            "--strict-mcp-config", "--mcp-config", candidate_mcp_config(candidate),
             "--model", args.model,
             "--json-schema", json.dumps(claude_json_schema(response_schema), separators=(",", ":")),
         ]

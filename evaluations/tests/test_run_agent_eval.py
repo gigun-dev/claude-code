@@ -144,6 +144,51 @@ class ClaudeRuntimeTests(unittest.TestCase):
             environment = RUNNER.clean_environment("claude", Path(raw))
         self.assertEqual(environment["USER"], "someone")
 
+    def test_mcp_config_is_empty_for_none_arm_and_cli_only_plugin(self) -> None:
+        """MCP を宣言しない候補(= ios-skills)と none アームは空 MCP のまま。"""
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "ios-skills"
+            (root / ".claude-plugin").mkdir(parents=True)
+            (root / ".claude-plugin" / "plugin.json").write_text(
+                json.dumps({"name": "ios-skills", "skills": "./skills/"})
+            )
+            self.assertEqual(RUNNER.candidate_mcp_config(root), RUNNER.EMPTY_MCP_CONFIG)
+        self.assertEqual(RUNNER.candidate_mcp_config(None), RUNNER.EMPTY_MCP_CONFIG)
+
+    def test_mcp_config_follows_plugin_declared_servers(self) -> None:
+        """MCP を宣言する候補(= build-ios-apps)にはそれを与える。
+
+        一律に空 MCP を渡すと build-ios-apps の ios-debugger-agent が
+        1行目から実行不能になり、ios-skills が構造的に勝つ
+        (CLAUDE-RUNTIME-CONSTRAINTS.md §6-c)。
+        """
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "build-ios-apps"
+            (root / ".claude-plugin").mkdir(parents=True)
+            (root / ".claude-plugin" / "plugin.json").write_text(
+                json.dumps({"name": "build-ios-apps", "mcpServers": "./.mcp.json"})
+            )
+            (root / ".mcp.json").write_text(
+                json.dumps({"mcpServers": {"xcodebuildmcp": {"command": "npx"}}})
+            )
+            config = json.loads(RUNNER.candidate_mcp_config(root))
+        self.assertIn("xcodebuildmcp", config["mcpServers"])
+
+    def test_mcp_config_rejects_dangling_reference(self) -> None:
+        """宣言だけあってファイルが無いのを黙って空 MCP に落とさない。
+
+        黙って落とすと「MCP を与えたつもりのアームが実は空」という
+        静かな偽の対照になる。
+        """
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "broken"
+            (root / ".claude-plugin").mkdir(parents=True)
+            (root / ".claude-plugin" / "plugin.json").write_text(
+                json.dumps({"name": "broken", "mcpServers": "./missing.json"})
+            )
+            with self.assertRaises(RUNNER.EvalError):
+                RUNNER.candidate_mcp_config(root)
+
     def test_claude_json_schema_drops_meta_schema_ref(self) -> None:
         """`$schema` を残すと Claude CLI が起動前に落ちる(2026-08-02 実測)。
 

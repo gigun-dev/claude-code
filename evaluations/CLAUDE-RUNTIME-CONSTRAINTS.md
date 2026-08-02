@@ -241,6 +241,14 @@ claude plugin enable ios-skills@gigun
 代償: `build-ios-apps` アームだけ起動が遅い(初回は `npx -y xcodebuildmcp@latest` の
 ダウンロードも走る)。**`--timeout` はアームごとに変えること。**
 
+> **2026-08-02 runner反映**: `candidate_mcp_config()` として実装済み。
+> 候補の `.claude-plugin/plugin.json` の `mcpServers`(文字列ならファイル参照を解決)を
+> そのアームにだけ渡し、宣言が無ければ空 MCP のまま。
+> **宣言だけあってファイルが無い場合は黙って空へ落とさず `EvalError`** にする ——
+> 「MCP を与えたつもりのアームが実は空」という静かな偽の対照を防ぐため。
+> 実測値: `ios-skills-old`/`-new`/`none` → `{"mcpServers":{}}` /
+> `build-ios-apps` → `xcodebuildmcp`。
+
 ## 6-d. build-ios-apps を Claude で測るときの前提(2026-08-02 実測)
 
 `openai/plugins` の `plugins/build-ios-apps`(v0.1.2)を取得して実測した。
