@@ -1,1 +1,1 @@
-../.claude/rules/ios-skills-next-directions.md
+../.claude/rules/ios-skills.md

@@ -1,9 +1,3 @@
----
-paths:
-  - "plugins/ios-skills/**"
-  - "evaluations/**"
----
-
 # ios-skills の現在地・次の作業
 
 **正典。作業の区切りごとに必ず更新する。** 完了は打ち消し線+✅、状況変化は
@@ -13,9 +7,6 @@ paths:
 主旨は **ios-skills(`plugins/ios-skills/`)の改善**、特に iOS アプリ開発まわり。
 `xcode-mcp` は公式バイナリ(`xcrun mcpbridge`)の薄いラッパーで、
 私たちが開発しているものではないため対象外。
-
-Codex からは `plugins/ios-skills/AGENTS.md` / `evaluations/AGENTS.md`
-(このファイルへの symlink)経由で同じ内容を読む。対応関係は `.codex/README.md`。
 
 ## 現在地(2026-08-02)
 
