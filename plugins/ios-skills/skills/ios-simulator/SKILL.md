@@ -124,6 +124,7 @@ xcrun simctl openurl "$SIM_UDID" "myapp://deeplink/path"
 | **`webcal://` を撃ったのにホーム画面のまま** | カレンダー App の起動待ち。**10 秒待つ**(実測。4 秒ではまだホーム)。「効かなかった」と即断しない |
 | **`SimError code=405 "Unable to lookup in current state: Shutdown"`** | **`simctl keychain` 系は Booted 必須。** 先に `bootstatus <UDID> -b` |
 | **`SimError code=405`(clone 実行時)** | 🔁 **逆。`simctl clone` は元デバイスが Shutdown 必須。** 同じ 405 が正反対の理由で出るので、**どちらのコマンドで出たかを必ず見る**(2026-08-02 実測) |
+| **`sim-nav.py --id <長いリストの下の方>` が見つからない** | **AX 走査は画面に描画されている要素しか返さない**(仮想化リスト。実測: 設定ルートで返るのは **14 要素だけ**)。`--scroll-max` の既定 **3** では届かないことがある。→ **`--scroll-max 8` 程度に上げる**か、`--list` で現在見えている範囲を確認してから撃つ。実例: 設定ルートの `com.apple.settings.apps`(「アプリ」)は既定では届かなかった |
 | 端末が別プロセスに掴まれている | **kill しない。** `ps` で終了を待つ(実地では数十秒〜1分で自然終了。→ `diagnosis.md` §4) |
 | どれも当たらない | **`shutdown` → `boot` は最終手段。** 上を全部やってから(旧版はこれを第一手に書いていたが、ほとんどのケースで過剰だった) |
 
