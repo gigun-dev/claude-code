@@ -101,8 +101,8 @@ NSPOSIXErrorDomain code=60   # ETIMEDOUT(推論: 端末側のペーストボー�
 
 ## 4. キーボードの出現判定を `describe-all` の文字列一致でやらない
 
-「`Return`/`space`/`delete` が含まれるか」で判定したが、キーボードが出ていないのに判定が揺れた
-(FEEDBACK §4)。**キーボードは別プロセス(SpringBoard 側)の要素**なので、アプリの走査結果に
+「`Return`/`space`/`delete` が含まれるか」だけの判定は安定しない。
+**キーボードは別プロセス(SpringBoard 側)の要素**なので、アプリの走査結果に
 安定して現れない。
 
 → 確実にやるなら **XCUITest の `app.keyboards.element`**。idb 側でやるならスクショの下部領域を見る。

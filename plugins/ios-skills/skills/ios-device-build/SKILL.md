@@ -9,152 +9,37 @@ compatibility: >-
   devicectl を使う。Simulator は対象外(それは ios-simulator)。
 ---
 
-# iOS Device Build
+# iOS実機ビルド
 
-iOS実機へのビルド・インストール・起動を自動化するスキル。
+対象を推測せず、プロジェクト・scheme・UDIDを明示して実行する。スクリプトはstdoutへJSON、
+診断へstderr、工程別の終了コードを返す。
 
-## 実行フロー
+## 手順
 
-### Step 1: 設定確認
+1. 接続済み実機を列挙し、ユーザーが指定した端末のUDIDを選ぶ。
 
-まず設定ファイルの存在を確認:
+   ```bash
+   scripts/device_build.sh --list-devices
+   ```
 
-```bash
-cat ~/.claude/skills/ios-device-build/config/settings.conf 2>/dev/null || echo "NOT_FOUND"
-```
+2. 外部変更を行う前にplanを確認する。
 
-### Step 2: 設定がない場合 → ユーザーに質問
+   ```bash
+   scripts/device_build.sh \
+     --project ./MyApp.xcodeproj \
+     --scheme MyApp \
+     --device '<UDID>' \
+     --dry-run
+   ```
 
-設定ファイルが存在しない、または `NOT_FOUND` の場合:
+3. 同じ明示引数から`--dry-run`だけ外し、build → install → launchを実行する。
+   起動不要なら`--no-launch`、複数app productがあるなら`--bundle-id`を追加する。
 
-1. **接続中のデバイス一覧を取得**:
+4. stdoutの`status`、終了コード、実機上の起動結果を確認する。コマンド終了だけで
+   アプリ機能のE2E成功とは判定しない。
 
-```bash
-xcrun devicectl list devices 2>/dev/null
-```
+`--device`は環境変数`IOS_DEVICE_UDID`でも指定できる。名前・接続順・`booted`に基づく暗黙選択はしない。
+毎回新しい明示DerivedDataを使うため、グローバルDerivedDataの古い`.app`を拾わない。
 
-2. **AskUserQuestion ツールを使ってユーザーに質問**:
-   - 「どのデバイスをデフォルトとして使用しますか？」
-   - 取得したデバイス一覧から選択肢を提示
-   - 選択肢に「自動検出（毎回最初のデバイスを使用）」も含める
-
-3. **設定ファイルを作成**:
-
-```bash
-mkdir -p ~/.claude/skills/ios-device-build/config
-cat > ~/.claude/skills/ios-device-build/config/settings.conf << 'EOF'
-# iOS Device Build - 設定ファイル
-DEFAULT_DEVICE_NAME="<ユーザーが選んだデバイス名>"
-DEFAULT_SCHEME=""
-NOTIFY_LANGUAGE="ja"
-BUILD_LOG_LINES=30
-EOF
-```
-
-### Step 3: ビルド実行
-
-設定が確認できたら、ビルドスクリプトを実行:
-
-```bash
-bash ~/.claude/skills/ios-device-build/scripts/device_build.sh <project_path> [scheme] [device_name] [bundle_id]
-```
-
-## パラメータ
-
-| パラメータ     | 説明               | デフォルト                             |
-| -------------- | ------------------ | -------------------------------------- |
-| `project_path` | プロジェクトのパス | `.`（カレントディレクトリ）            |
-| `scheme`       | ビルドスキーム     | 設定ファイル → xcodeproj名から自動検出 |
-| `device_name`  | デバイス名         | 設定ファイル → 接続中の最初のデバイス  |
-| `bundle_id`    | バンドルID         | Info.plistから自動取得                 |
-
-**優先順位**: コマンド引数 > 設定ファイル > 自動検出
-
-## 設定の変更
-
-ユーザーが「デバイスを変更したい」「設定をリセットしたい」と言った場合:
-
-1. 現在の設定を表示:
-
-```bash
-cat ~/.claude/skills/ios-device-build/config/settings.conf
-```
-
-2. AskUserQuestion で新しい設定を確認
-3. 設定ファイルを更新
-
-## 設定ファイル形式
-
-`~/.claude/skills/ios-device-build/config/settings.conf`:
-
-```bash
-# デフォルトのデバイス名（部分一致で検索）
-# 空欄の場合は毎回自動検出
-DEFAULT_DEVICE_NAME=""
-
-# デフォルトのスキーム名（空欄で自動検出）
-DEFAULT_SCHEME=""
-
-# 完了通知の言語（"ja" or "en"）
-NOTIFY_LANGUAGE="ja"
-
-# ビルドログの表示行数
-BUILD_LOG_LINES=30
-```
-
-## 手動実行コマンド
-
-### 接続デバイス一覧
-
-```bash
-xcrun devicectl list devices
-```
-
-### ビルド
-
-```bash
-xcodebuild -project <project>.xcodeproj -scheme <scheme> -destination 'id=<UDID>' build
-```
-
-### インストール
-
-```bash
-APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "<scheme>.app" -path "*/Debug-iphoneos/*" -type d | head -1)
-xcrun devicectl device install app --device <UDID> "$APP_PATH"
-```
-
-### 起動
-
-```bash
-xcrun devicectl device process launch --device <UDID> <bundle_id>
-```
-
-## 前提条件
-
-- Xcode がインストール済み
-- 有効な開発者証明書とプロビジョニングプロファイル
-- デバイスがMac に接続され、信頼済みであること
-- デバイスのロックが解除されていること
-
-## トラブルシューティング
-
-| エラー                                  | 解決策                                                       |
-| --------------------------------------- | ------------------------------------------------------------ |
-| Timed out waiting for CoreDeviceService | サンドボックス制限。`required_permissions: ["all"]` で再実行 |
-| No devices found                        | デバイスが接続・ロック解除されているか確認                   |
-| Device not found                        | 「デバイス変更したい」と言って再設定                         |
-| Build failed                            | Xcodeでエラー詳細確認、証明書/プロビジョニング確認           |
-| Install failed                          | 「設定 > 一般 > VPNとデバイス管理」で開発元を信頼            |
-| Launch failed                           | バンドルIDが正しいか確認                                     |
-
-## ファイル構成
-
-```
-~/.claude/skills/ios-device-build/
-├── SKILL.md                          # このファイル
-├── config/
-│   ├── settings.conf                 # ユーザー設定（Claudeが生成）
-│   └── settings.conf.example         # 設定例
-└── scripts/
-    └── device_build.sh               # メインスクリプト
-```
+詳細なオプションと終了コードは`scripts/device_build.sh --help`を読む。失敗時は
+`references/troubleshooting.md`を読む。

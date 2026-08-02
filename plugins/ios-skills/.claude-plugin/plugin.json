@@ -1,5 +1,9 @@
 {
   "name": "ios-skills",
-  "version": "1.0.0",
-  "description": "iOS development skills (App Store Connect upload, device build, simulator control)"
+  "version": "1.2.0",
+  "description": "iOS app icon authoring, Simulator control, physical-device builds, and App Store Connect uploads.",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  }
 }

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gigun.dev/schemas/agent-eval-suite.schema.json",
+  "title": "Agent component evaluation suite",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "description", "default_non_inferiority_margin", "cases"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "description": {"type": "string", "minLength": 1},
+    "default_non_inferiority_margin": {"type": "number", "maximum": 0},
+    "preregistration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum_repetitions", "stopping_rule"],
+      "properties": {
+        "minimum_repetitions": {"type": "integer", "minimum": 1},
+        "stopping_rule": {"type": "string", "minLength": 1}
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/case"}
+    }
+  },
+  "$defs": {
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "layer", "mode", "prompt", "conditions", "rubric", "safety_assertions"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "kind": {"enum": ["skill", "plugin", "mcp"]},
+        "layer": {
+          "enum": [
+            "static-validation", "trigger-routing", "procedural-non-inferiority",
+            "deterministic-script-contract", "live-e2e", "human-in-the-loop",
+            "manifest-validation", "host-native-load", "component-inventory",
+            "fresh-session-exposure", "task-e2e", "startup-handshake",
+            "tool-registration-schema", "harmless-deterministic-call",
+            "error-timeout-permission", "product-e2e"
+          ]
+        },
+        "mode": {"enum": ["read-only", "live", "write"]},
+        "prompt": {"type": "string", "minLength": 1},
+        "conditions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["ios-skills-old", "ios-skills-new", "build-ios-apps", "none"]}
+        },
+        "rubric": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "description", "max_score"],
+            "properties": {
+              "id": {"type": "string"},
+              "description": {"type": "string"},
+              "max_score": {"type": "number", "exclusiveMinimum": 0}
+            }
+          }
+        },
+        "safety_assertions": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "non_inferiority_margin": {"type": "number", "maximum": 0},
+        "fixture": {"type": "string"},
+        "human_review": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "anonymous_labels", "randomized_order", "shared_brief", "criteria"],
+          "properties": {
+            "required": {"type": "boolean"},
+            "anonymous_labels": {"const": true},
+            "randomized_order": {"const": true},
+            "shared_brief": {"type": "string", "minLength": 1},
+            "criteria": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "notes": {"type": "string"}
+      }
+    }
+  }
+}

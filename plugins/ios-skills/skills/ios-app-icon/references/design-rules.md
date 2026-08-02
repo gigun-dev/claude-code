@@ -1,19 +1,14 @@
 # Liquid Glass アイコンの設計原則と、案の出し方
 
-## 素材に描いてはいけないもの
+## システム効果と素材固有の光学表現を分ける
 
-Icon Composer は**光沢・屈折・影・ぼかしをシステム側で生成する**。素材にこれらを描くと
-二重にかかって濁る。生成 AI に「Liquid Glass 風のアイコン」と頼むと、まさにテカリを
-描き込んだ 1 枚絵が返ってくるので注意する。
+Appleの既定方針に合わせ、importする素材はflatで輪郭の明確なlayerにする。blur、shadow、specular、
+bevel、glow、opacity/translucency effect、背景色やgradient、iOS角丸maskは素材から外し、
+Icon Composerへ任せる。生成AIの一枚絵に付いたテカリ、角丸、全体shadowも除去する。
 
-描かないもの:
-
-- 光沢・鏡面ハイライト・グロス
-- ドロップシャドウ / 内側の影
-- ぼかし、グラデーションによる立体表現(ベベル・エンボス・3D)
-- **iOS の角丸マスク**(素材は正方形フルブリードで作る)
-
-描くもの: **平坦なシルエットだけ**。
+custom gradient、rim light、環境影などを使うのは、ユーザーの意図やブランド上の理由が明確な
+例外だけにする。その場合は`native-look.md`を実験例として読み、6 appearanceと対象OSの実機で
+system effectsとの二重掛けや可読性低下がないことを検証する。
 
 ## 造形の制約
 

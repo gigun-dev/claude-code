@@ -1,0 +1,29 @@
+{
+  "name": "ios-skills",
+  "version": "1.2.0",
+  "description": "iOS app icon authoring, Simulator control, physical-device builds, and App Store Connect uploads.",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
+  "homepage": "https://github.com/gigun-dev/claude-code/tree/main/plugins/ios-skills",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "keywords": ["ios", "swift", "xcode", "app-icon", "simulator"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "iOS Skills",
+    "shortDescription": "Build, test, and ship iOS apps",
+    "longDescription": "Create Liquid Glass app icons, control iOS Simulator, build for physical devices, and upload archives to App Store Connect.",
+    "developerName": "gigun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/gigun-dev/claude-code/tree/main/plugins/ios-skills",
+    "defaultPrompt": [
+      "Create and integrate a Liquid Glass app icon for this iOS project."
+    ]
+  }
+}

@@ -18,6 +18,10 @@ import CoreGraphics
 import Foundation
 
 let args = CommandLine.arguments
+if args.dropFirst().contains("--help") || args.dropFirst().contains("-h") {
+    print("Usage: swift contact_sheet.swift <png-dir> <out.png> [columns]")
+    exit(0)
+}
 guard args.count >= 3 else {
     FileHandle.standardError.write("usage: swift contact_sheet.swift <dir> <out.png> [cols]\n".data(using: .utf8)!)
     exit(2)

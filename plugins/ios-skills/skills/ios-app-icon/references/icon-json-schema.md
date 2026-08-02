@@ -55,7 +55,7 @@ Liquid Glass の効果は**グループ単位**で効く。だから「ガラス
 | --- | --- | --- |
 | `layers` | Layer[] | 必須 |
 | `name` | string | 表示名 |
-| `specular` | bool | 鏡面ハイライト。iOS 27 では内外どちらに出すかをシステムが自動判断する |
+| `specular` | bool | システムの鏡面ハイライトを有効にする。見え方は対象OSとappearanceごとに確認する |
 | `blur-material` | number\|null | すりガラス感 |
 | `translucency` | `{enabled,value}` | 透過。**背景側にだけ使うと可読性が保てる**(前景に強くかけると沈む) |
 | `shadow` | `{kind,opacity}` | kind は `neutral` / `layer-color` / `none` |

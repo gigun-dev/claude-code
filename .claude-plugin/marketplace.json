@@ -48,7 +48,7 @@
     {
       "name": "ios-skills",
       "source": "./plugins/ios-skills",
-      "description": "iOS development skills (App Store Connect upload, device build, simulator control)"
+      "description": "iOS app icon authoring, Simulator control, physical-device builds, and App Store Connect uploads."
     },
     {
       "name": "workers-fetch",

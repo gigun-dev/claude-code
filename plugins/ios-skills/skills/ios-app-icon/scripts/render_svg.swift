@@ -29,6 +29,10 @@ import AppKit
 import WebKit
 
 let argv = CommandLine.arguments
+if argv.dropFirst().contains("--help") || argv.dropFirst().contains("-h") {
+    print("Usage: swift render_svg.swift <input.svg> <out-dir> [--size N]")
+    exit(0)
+}
 guard argv.count >= 3 else {
     fputs("usage: swift render_svg.swift <input.svg> <outDir> [--size N]\n", stderr)
     exit(2)

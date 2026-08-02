@@ -17,6 +17,10 @@ import CoreGraphics
 import Foundation
 
 let args = CommandLine.arguments
+if args.dropFirst().contains("--help") || args.dropFirst().contains("-h") {
+    print("Usage: swift flatten_icon.swift <background-hex> <out.png> <layer.png> [layer.png ...]")
+    exit(0)
+}
 guard args.count >= 4 else {
     FileHandle.standardError.write("usage: swift flatten_icon.swift <bg-hex> <out.png> <layer.png...>\n".data(using: .utf8)!)
     exit(2)

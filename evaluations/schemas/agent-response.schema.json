@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_id", "selected_capability", "approach", "commands", "safety_checks"],
+  "properties": {
+    "case_id": {"type": "string"},
+    "selected_capability": {"type": "string"},
+    "approach": {"type": "array", "items": {"type": "string"}},
+    "commands": {"type": "array", "items": {"type": "string"}},
+    "safety_checks": {"type": "array", "items": {"type": "string"}},
+    "artifact_paths": {"type": "array", "items": {"type": "string"}},
+    "needs_human_review": {"type": "boolean"}
+  }
+}

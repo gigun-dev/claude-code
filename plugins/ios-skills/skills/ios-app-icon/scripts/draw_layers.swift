@@ -43,6 +43,10 @@ import Foundation
 // MARK: - 入力
 
 let args = CommandLine.arguments
+if args.dropFirst().contains("--help") || args.dropFirst().contains("-h") {
+    print("Usage: swift draw_layers.swift <layers.json> <out-dir>")
+    exit(0)
+}
 guard args.count >= 3 else {
     FileHandle.standardError.write("usage: swift draw_layers.swift <layers.json> <outDir>\n".data(using: .utf8)!)
     exit(2)

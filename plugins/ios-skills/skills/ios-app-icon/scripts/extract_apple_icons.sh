@@ -29,7 +29,20 @@
 
 set -euo pipefail
 
-OUT="${1:?usage: $0 <outDir> [AppName...]}"
+if [[ ${1:-} == "-h" || ${1:-} == "--help" ]]; then
+  cat <<'EOF'
+Usage: extract_apple_icons.sh <out-dir> [AppName ...]
+
+Extract app icons from the first installed iOS Simulator runtime. With no app names,
+extract from all runtime applications.
+EOF
+  exit 0
+fi
+if [[ $# -lt 1 ]]; then
+  echo "usage: $0 <out-dir> [AppName ...]" >&2
+  exit 2
+fi
+OUT="$1"
 shift || true
 
 APPS=("$@")
