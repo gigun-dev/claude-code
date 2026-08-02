@@ -30,7 +30,13 @@ from typing import Any
 
 # run ディレクトリからコピーしてよいファイル。**allowlist であることが重要** ——
 # denylist にすると、runner が新しい成果物を吐き始めたときに黙って混入する。
-RUN_ALLOWLIST = ("stdout.jsonl", "stderr.log", "final.json", "metadata.json")
+RUN_ALLOWLIST = (
+    "stdout.jsonl", "stderr.log", "final.json", "metadata.json",
+    # live/write のときだけ出る。**採点者が safety assertion を自己申告ではなく
+    # 実状態で裏取りするための唯一の材料**なので必ず渡す。
+    # condition 名が混ざる可能性は下の leak scan が捕まえる。
+    "simulator-delta.json",
+)
 BATCH_ALLOWLIST = ("schedule.json",)
 NEVER_COPY = ("condition-map.json", "workspace", "tmp")
 
