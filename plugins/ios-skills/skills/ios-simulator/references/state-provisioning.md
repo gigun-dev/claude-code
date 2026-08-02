@@ -23,6 +23,30 @@ flagなしの対照か、実際にenvを読むコードpathを確認する。OS�
 xcrun simctl openurl "$SIM_UDID" 'myapp://add-server?name=x&url=https%3A%2F%2Fexample.com'
 ```
 
+## 1-b. 端末の命名がライフサイクル契約(必ず守る)
+
+**端末は「誰が何のために作ったか」を持たない。** `simctl list -j` が返すのは
+`udid` / `name` / `state` / `lastBootedAt` などで、**作成者も用途も目的も無い**。
+→ **名前が唯一の耐久性のあるライフサイクル信号**なので、名前に廃棄可能性を埋め込む。
+
+| 種別 | 命名 | 寿命 | 誰が消すか |
+|---|---|---|---|
+| seed | `seed-<用途>` | 永続。手で保守する | **人間だけ** |
+| worker | `w-<用途>-<識別子>` | タスク1回分 | **作ったセッションが必ず消す**。取りこぼしは`sim-reap.sh` |
+| eval | `EVAL-<run-id>` | run 1回分 | 評価ハーネス |
+
+```bash
+NEW="$(xcrun simctl clone "$SEED" "w-caldav-$$")"   # ← workerは必ず w- で始める
+trap 'xcrun simctl delete "$NEW" 2>/dev/null' EXIT  # ← 途中で落ちても消す
+```
+
+- **既定名の端末(`iPhone 17`など)を作業台にしない。** 消してよいか誰にも判断できなくなる。
+  実測: 既定名の`iPhone 17`にCalDAVアカウントが入った状態で放置されていた。
+- **消し忘れは事故として現れる。** 実測(2026-08-02)で、放置された種端末が
+  **評価のbaselineの近道になり、スキルの効果を消した**(`evals/METHODOLOGY.md` §11)。
+  「あとで消す」は消さない。`trap`で消す。
+- 迷ったら`scripts/sim-reap.sh --dry-run`で棚卸しする。
+
 ## 2. OS状態はseedを`simctl clone`する
 
 Keychain、Accounts database、インストール済みapp、UserDefaultsなどを一度だけseedへ用意し、複製する。
@@ -31,7 +55,7 @@ clone sourceはShutdown必須、clone先は`bootstatus -b`でboot完了まで待
 ```bash
 SEED='<seed-UDID>'
 xcrun simctl shutdown "$SEED"
-NEW="$(xcrun simctl clone "$SEED" 'Worker-01')"
+NEW="$(xcrun simctl clone "$SEED" "w-<用途>-$$")"   # 命名は §1-b
 xcrun simctl bootstatus "$NEW" -b
 printf '%s\n' "$NEW"
 ```

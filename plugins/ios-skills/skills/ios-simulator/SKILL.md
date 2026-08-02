@@ -89,6 +89,10 @@ buildはプロジェクト側の手順に任せ、本skillは状態づくり、i
 - `simctl io recordVideo`は静止区間で実時間と一致しないことがある。停止時は実PIDへSIGINTし、
   process exitをpollする。詳しくは`references/recording.md`。
 - 複数端末のログはホスト側`log stream`で混ぜず、`xcrun simctl spawn <UDID> log ...`で分離する。
+- 端末は作成者も用途も持たない(`simctl list -j`は`lastBootedAt`まで)。**名前がライフサイクル契約**で、
+  使い捨ては`w-`、永続seedは`seed-`、既定名の端末は作業台にしない。`trap`で消す
+  (`references/state-provisioning.md` §1-b)。放置した端末が後の測定のbaselineの近道になり、
+  スキルの効果を消した実例がある。
 
 ## 同梱スクリプト
 
@@ -104,6 +108,7 @@ buildはプロジェクト側の手順に任せ、本skillは状態づくり、i
 | `scripts/sim-shot.sh` | screenshotとpixel/point/scale取得 |
 | `scripts/sim-trust-ca.sh` | 対象端末だけへroot CAを追加。`--dry-run`あり |
 | `scripts/sim-rec.sh` | 実時間が必要で録画中に操作しない場合のffmpeg録画 |
+| `scripts/sim-reap.sh` | 使い捨て端末(`w-`)の棚卸しと回収。既定はdry-run |
 
 ## 必要なときだけ読むreferences
 
