@@ -1,9 +1,19 @@
 # 意図的なcustom effectの実験例(グラデーション・透明感・多層表現)
 
-通常はこのreferenceを使わない。Appleの既定方針はflatで明確なlayerをimportし、blur、shadow、
-specular、opacity/translucency、背景効果をIcon Composerへ任せること。ここにあるrecipeは、
-ユーザーが意図的なcustom effectを求め、system effectだけでは表現できない理由がある場合の
-実験例である。使う場合は6 appearanceと対象OSの実機で二重効果・可読性を必ず検証する。
+Appleの既定方針は「flatで明確なlayerをimportし、blur・shadow・specular・translucency・
+背景効果はIcon Composerへ任せる」。これは**systemが作れる効果**についての話で、
+**素材自身の色とその階調は別**。純正を実測すると背景もlayerも多段gradientを持っており、
+そこを平坦にしたまま作ると、艶や陰影がすべてsystem由来になって案ごとの違いが消える
+(実際「gradientが無くLiquid Glassに頼っているだけに見える」と評価される状態が続いた)。
+
+境界はこう:
+
+| systemへ任せる(焼かない) | 素材へ焼く |
+| --- | --- |
+| specularの艶、layer間のshadow、translucencyの合成、角丸mask、appearanceごとの再着色 | 面のfill色とその階調、形の内部の陰影、背景のgradient |
+
+rim lightはspecularに近いので中間。細く(1024で線幅6程度)焼くぶんには二重にならないことを
+6 appearanceで確認済みだが、太くすると衝突しうるので焼いたら必ず全appearanceを見る。
 
 ## 1. 何を測ったか
 
@@ -169,3 +179,20 @@ Resources/
 │   └── Assets/*.png
 └── AppIcon.svg          ← 生成元。これが無いと作り直すしかない
 ```
+
+**layer名の番号は描画順(奥→手前)にそろえる。** `icon.json` の `layers` は先頭が最前面なので、
+生成側は名前でソートしてから反転する運用になりやすい。番号が描画順と逆だと、
+反転した結果の重なり順が黙って狂う(要素が重なっていない構図では見た目に出ないまま残る)。
+
+### 生成元を失った既存 `.icon` から復元する
+
+成果物しか無くても、多くは復元できる。
+
+1. **PNG の外接矩形を測る。** alpha 閾値を上げて測ると、ぼかした影を除いた「面そのもの」の
+   位置・大きさ・中心が出る。これが幾何の正解値になる。
+2. **作ったときのセッションログを検索する。** `~/.claude/projects/<project>/*.jsonl` に
+   spec がそのまま残っていることがある。JSONL 内は JSON がエスケープされているので、
+   `\"` を `"` に戻してから探す。
+3. **突き合わせて再生成し、外接矩形が一致するまで設定を詰める。** 一致しない場合、
+   多くは spec ではなく**生成時のオプションの違い**(典型は `autofit`)。実例では
+   `"autofit": false` にした瞬間に 3 layer すべてが 1px の差もなく一致した。

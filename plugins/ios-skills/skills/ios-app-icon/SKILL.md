@@ -26,10 +26,14 @@ compatibility: >-
    swift scripts/contact_sheet.swift /tmp/apple-icons /tmp/apple-sheet.png
    ```
 
-   判断基準は`references/design-rules.md`を読む。既定はflatで輪郭の明確なlayerにし、blur、shadow、
-   specular、bevel、glow、opacity/translucency effectはIcon Composerへ任せる。
-   ユーザーが意図的なcustom effectを求める場合だけ`references/native-look.md`を例外集として読み、
-   6 appearanceと対象OSの実機で慎重に比較する。iOS角丸maskは素材へ焼かない。
+   判断基準は`references/design-rules.md`を読む。blur、shadow、specular、bevel、glow、
+   opacity/translucency effectはIcon Composerへ任せ、iOS角丸maskも素材へ焼かない。
+
+   一方で**素材自身の色とその階調はsystemが作らない**。純正を実測するとbackgroundもlayerも
+   多段gradientを持っており、全layerをベタ塗りにすると案が平坦になり、質感がすべてsystem由来に
+   なって案ごとの違いが消える。gradient、重なりの合成、rim light、環境影を素材へ焼く判断と
+   失敗パターンは`references/native-look.md`。焼いたときはsystem effectとの二重を
+   6 appearanceで必ず確認する(rim lightはspecularに近いので特に)。
 
 2. 素材の複雑さで経路を選ぶ。
 
@@ -80,7 +84,7 @@ compatibility: >-
 | `scripts/flatten_icon.swift` | 旧形式appiconset向けflat 1024 PNG |
 | `scripts/extract_apple_icons.sh` | Simulator runtimeから純正iconを抽出 |
 | `references/design-rules.md` | システム効果との境界、安全域、構図の規則 |
-| `references/native-look.md` | 明示的なcustom effectが必要な場合だけ使う実験的SVG例と失敗パターン |
+| `references/native-look.md` | 素材へ焼くgradient/rim light/環境影のSVG recipe、純正の実測値、失敗パターン |
 | `references/icon-json-schema.md` | layer順、FillValue、appearance、ictool |
 | `references/xcode-integration.md` | Xcode/XcodeGen/appiconset/検証 |
 
