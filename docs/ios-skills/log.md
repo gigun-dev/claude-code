@@ -59,3 +59,20 @@
   `docs/ios-skills/`(next-directions.md + このログ)へ再配置。
   `.claude/rules/ios-skills.md` は pointer だけを持つ薄い rule に、
   SessionStart フック(Claude + Codex 両対応)で軽量な pointer を常時注入するよう整備。
+- 2026-08-04: 別セッションが `ios-app-icon` の設計知見を追加(`0f98411`、未 push)。
+  `e112915` の整理で「flat で import し効果は Icon Composer へ任せる」に一本化されていたが、
+  **適用範囲が広すぎた** —— system が作れる効果(specular の艶・layer 間 shadow・
+  translucency の合成・角丸 mask・appearance ごとの再着色)と、**素材自身が持つべき
+  色の階調**は別物で、後者まで平坦にすると艶も陰影も全部 system 由来になり案ごとの
+  違いが消える(「gradient が無く Liquid Glass に頼っているだけに見える」と評価された)。
+  純正の実測(ショートカットの背景 `#502896→#2d1b66` の縦 gradient、前景板の色相を
+  またぐ gradient、半透明の重なりが第3の色に合成)を根拠に `native-look.md` を修正。
+  あわせて layer 番号を描画順(奥→手前)に揃える運用規則と、生成元を失った `.icon` からの
+  復元手順を追加。
+- 2026-08-04: 現状把握。`ios-skills@gigun` が08-02の評価バッチ用 disable のままだったが
+  **実害なしと判断**(評価ハーネスは `--plugin-dir` で候補を直接注入するので disable 状態に
+  依存せず、通常セッションがファイルを直接編集する分にも影響しない)。
+  `~/.cache/claude-eval` に評価バッチの残骸 58MB(9 run)、Simulator は14台で汚染なし。
+  継続コンテキストの仕組み(rule/hook/log)が `0f98411` のセッションで機能したかは
+  **未確認**(`plugins/ios-skills/**` を編集しているので rule は発火したはずだが log は
+  未更新。rule 導入 `d42eca2` 前にセッションが始まっていた可能性もあり特定できず)。
