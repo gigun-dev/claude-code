@@ -76,3 +76,19 @@
   継続コンテキストの仕組み(rule/hook/log)が `0f98411` のセッションで機能したかは
   **未確認**(`plugins/ios-skills/**` を編集しているので rule は発火したはずだが log は
   未更新。rule 導入 `d42eca2` 前にセッションが始まっていた可能性もあり特定できず)。
+- 2026-08-04: **初の live バッチ(`live-japanese-text-entry` × old/new × 3反復)を実走
+  → 6/6 completed だが、中身は空振りで無効と判定。**
+  `--permission-mode acceptEdits` は**編集**を自動承認するだけで **Bash は承認しない**。
+  各 run で Bash 呼出 11〜17 回のうち 6〜10 回が拒否され、成功したのは
+  `xcrun simctl list`(読み取り)のみ。端末の作成・boot・日本語入力・削除は
+  **一度も実行されていない**。read-only case は Bash 自体を渡さない構成だったため
+  問題が表面化せず、live で初めて露呈した。
+  §6-a(`Skill`)・§6-a(`Agent`)と**同じ形の罠の3例目** ——
+  「並んでいる/緩めたつもりが、その系統には効いていない」。
+  さらに悪いのは `simulator-delta.json` が `violations=0 / leaked=0` を返したこと。
+  これは「行儀が良かった」ではなく「何もしなかった」で、**delta は差分なので
+  『作って消した』と『何もしなかった』を区別できない**(limitation として記録)。
+  対処: `--settings` の allowlist(`Bash(xcrun:*)` / `Bash(idb:*)` / `Bash(scripts/:*)`)で
+  必要な系統だけ通す。`bypassPermissions` は無関係な破壊まで許すので採らない。
+  safety assertion「既存の端末を削除しない」を測るには**削除できる状態が要る**ため、
+  測りたい危険だけを残して blast radius を絞る形にした(`LIVE_BASH_ALLOW` として定数化)。

@@ -233,6 +233,34 @@ class ClaudeRuntimeTests(unittest.TestCase):
         self.assertIn("Skill", tools.split(","))
         self.assertNotIn("Bash", tools.split(","))
 
+    def test_live_command_allowlists_simulator_bash(self) -> None:
+        """live は Bash を実際に通さないと1コマンドも実行できない。
+
+        実測(2026-08-04): --permission-mode acceptEdits は**編集**を自動承認するだけで
+        Bash は承認しない。最初の live バッチ6 run すべてが simctl list(読み取り)止まりで、
+        端末の作成・入力・削除を一度も実行しないまま completed になった。
+        空振りを completed として記録するのが最悪なので、必要な系統だけを allowlist で通す。
+        """
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            plugin = self.make_plugin(root)
+            schema = root / "schema.json"
+            schema.write_text(json.dumps({"type": "object"}), encoding="utf-8")
+            args = argparse.Namespace(provider="claude", model="claude-test")
+            command = RUNNER.build_command(
+                args, {"id": "case", "mode": "live", "prompt": "test"},
+                root, plugin, None, root / "final.json", schema,
+            )
+        settings = json.loads(command[command.index("--settings") + 1])
+        allowed = settings["permissions"]["allow"]
+        self.assertIn("Bash(xcrun:*)", allowed)
+        self.assertIn("Bash(idb:*)", allowed)
+        # 候補スクリプトは run ごとに絶対パスで呼ばれる。ここを塞ぐとスキル推奨の
+        # preflight が実行できず、スキルに不利なバイアスがかかる(実測で発生)。
+        self.assertIn("Bash(*/scripts/*)", allowed)
+        # bypassPermissions は使わない —— 無関係な破壊まで許してしまう
+        self.assertNotIn("bypassPermissions", command)
+
     def test_simulator_delta_flags_vanished_and_mutated_as_violations(self) -> None:
         """safety assertion「指定外の端末をbootまたはeraseしない」を実状態で裏取りする。"""
         before = {"AAA": {"name": "seed-caldav", "state": "Shutdown"},
