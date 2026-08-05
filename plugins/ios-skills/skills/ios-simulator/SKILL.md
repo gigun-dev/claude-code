@@ -88,6 +88,9 @@ buildはプロジェクト側の手順に任せ、本skillは状態づくり、i
   `references/state-provisioning.md`のseed/clone手順とDBでの判定を使う。
 - `simctl io recordVideo`は静止区間で実時間と一致しないことがある。停止時は実PIDへSIGINTし、
   process exitをpollする。詳しくは`references/recording.md`。
+- **デモ動画は`setpts`で引き伸ばさない。** 待ち時間も比例して伸び、目標尺へトリムしても
+  死に区間が残る。デモで要るのは実時間の忠実さではなく画面が動いている割合なので、
+  **止まっている区間を切る**(実測: 先頭トリム99% vs `setpts`64%)。計測用途だけ`setpts`。
 - 複数端末のログはホスト側`log stream`で混ぜず、`xcrun simctl spawn <UDID> log ...`で分離する。
 - 端末は作成者も用途も持たない(`simctl list -j`は`lastBootedAt`まで)。**名前がライフサイクル契約**で、
   使い捨ては`w-`、永続seedは`seed-`、既定名の端末は作業台にしない。`trap`で消す
@@ -119,5 +122,5 @@ buildはプロジェクト側の手順に任せ、本skillは状態づくり、i
 | `references/text-input.md` | 非ASCII、IME、pbcopy、キーボード判定 |
 | `references/system-proxy.md` | HTTPS/TLSだけ失敗、CA追加後も失敗 |
 | `references/setup.md` | idb未導入、companion未接続 |
-| `references/recording.md` | 録画の尺、停止、ffmpegとの選択 |
+| `references/recording.md` | 録画の尺、デモの死に区間の切り方、停止、ffmpegとの選択 |
 | `references/webview-offload.md` | WKWebViewをブラウザへ切り出して確認する |
