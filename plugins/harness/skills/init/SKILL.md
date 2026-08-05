@@ -1,6 +1,6 @@
 ---
 name: init
-description: gigun 標準のプロジェクトハーネス(docs/next-directions.md セッション引き継ぎ正典 + SessionStart 頭注入フック + パススコープ付きコメント方針 rules + CLAUDE.md/AGENTS.md 配線)を現在のリポジトリに導入する。「ハーネスを導入して」「/harness:init」で発火。
+description: gigun 標準のプロジェクトハーネス(docs/next-directions.md セッション引き継ぎ正典 + SessionStart 頭注入フック + パススコープ付きコメント方針 rules + pre-push 品質ゲート + CLAUDE.md/AGENTS.md 配線)を現在のリポジトリに導入する。「ハーネスを導入して」「/harness:init」で発火。
 ---
 
 # harness:init — プロジェクトハーネスの導入
@@ -124,7 +124,25 @@ description: gigun 標準のプロジェクトハーネス(docs/next-directions.
   (完了は打ち消し線+✅、変化は `> **YYYY-MM-DD 更新:**` を積層。計画は消さない)。
 ```
 
-### 6. 他エージェントへの配線
+### 6. pre-push フックの配線
+
+壊れたコードが main に乗るのを止める最後の関門(main への push で自動 deploy される
+構成なら本番を守る関門)。**サーバー側の branch protection は個人開発では admin が
+bypass できるので実効的でない** — ローカルで止めるのが効く。
+
+- `assets/pre-push` を `.githooks/pre-push` へコピーし `chmod +x`。
+- `{{CHECK_COMMAND}}` をこのリポジトリの検証コマンドに置換する
+  (例: `make check` / `bun run check` / `npm test`。**CI と同じ内容にする** —
+  手元で通って CI で落ちるなら関門の意味がない)。
+  ネットワークや認証を要する重い工程(deploy dry-run 等)が含まれる場合は、
+  push のたびに待たされてよいかユーザーに確認する。
+- 配線: `git config core.hooksPath .githooks` を実行する。
+  **これは .git/config に入るため git 管理されず、clone ごとに1回必要**。
+  Makefile や package.json のセットアップスクリプトに含め、README にも書いておく。
+- 検証: `git push --dry-run` ではフックは走らない。実際の push か、
+  `echo "refs/heads/main <sha> refs/heads/main <sha>" | .githooks/pre-push` で確認する。
+
+### 7. 他エージェントへの配線
 
 - **AGENTS.md**: 無ければ `AGENTS.md -> CLAUDE.md` の symlink を作成(caldav /
   swift-mcp-app の確立パターン)。実ファイルの AGENTS.md が既にあれば統合を相談。
@@ -135,7 +153,7 @@ description: gigun 標準のプロジェクトハーネス(docs/next-directions.
   - `.codex/config.toml` に `[features]\nhooks = true` を確保
   - 必要なら path 別 `AGENTS.md` symlink で rules も共有
 
-### 7. 検証
+### 8. 検証
 
 - **普段 claude を起動するディレクトリで** `bash .claude/hooks/session-start.sh` を実行し、
   頭(マーカーまで)だけが出力されることを確認。
@@ -145,7 +163,7 @@ description: gigun 標準のプロジェクトハーネス(docs/next-directions.
 - 注意: 導入後にビルトイン `/init` を実行すると CLAUDE.md が定型2節を持たない形で
   上書きされうる。実行してしまった場合は手順5の2節を復元すること。
 
-### 8. 報告
+### 9. 報告
 
 作成・変更したファイルの一覧と、next-directions.md に書いた現在地の要約をユーザーに示す。
 コミットはユーザーの指示があってから。
