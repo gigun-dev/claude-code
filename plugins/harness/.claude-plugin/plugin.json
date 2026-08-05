@@ -1,7 +1,7 @@
 {
   "name": "harness",
-  "version": "0.7.0",
-  "description": "Project harness scaffolding, best-practice doctor, and auditing: next-directions session handoff, SessionStart head-injection hook, comment-culture rules, pre-push quality gate, and cclens/best-practice health checks.",
+  "version": "0.8.0",
+  "description": "Project harness: scaffold session-handoff docs, hooks, rules and a pre-push gate into a repo (init), and check the result against Claude Code best practices (doctor).",
   "author": {
     "name": "gigun",
     "url": "https://github.com/gigun-dev"

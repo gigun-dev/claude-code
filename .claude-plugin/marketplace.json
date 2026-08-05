@@ -58,7 +58,7 @@
     {
       "name": "harness",
       "source": "./plugins/harness",
-      "description": "Project harness scaffolding: next-directions session handoff, SessionStart head-injection hook, comment-culture rules"
+      "description": "Scaffold session-handoff harness into a repo (init) and check it against best practices (doctor)"
     },
     {
       "name": "telemetry",

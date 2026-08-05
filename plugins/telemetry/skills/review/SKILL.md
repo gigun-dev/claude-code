@@ -32,7 +32,7 @@ Claude Code のフック(`~/.claude/hooks/langfuse-otlp.sh`)が、ターン・�
    - 同じ外部リクエストを繰り返している → 手順を skill 化して固定する
    - 特定操作が毎回遅い → コマンドを変える、キャッシュする、subagent に逃がす
    - 権限プロンプトで止まっている → `/fewer-permission-prompts` で allowlist を整える
-   - 設定そのものの健全性は `/harness:doctor`、方針の再検討は `/harness:audit`
+   - 設定そのものの健全性は `/harness:doctor`、使われ方の実測は `/cclens:doctor`
 
 ## 読むときの注意(データの癖)
 
