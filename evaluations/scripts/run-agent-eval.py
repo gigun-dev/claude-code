@@ -36,6 +36,11 @@ LIVE_BASH_ALLOW = [
     # バイアスがかかる** —— 実測(2026-08-04)で 3 run 中 2 run が preflight を拒否されていた。
     # `Bash(*/scripts/*)` が絶対パス・相対パスの両方に一致することを実測で確認済み。
     "Bash(*/scripts/*)",
+    # 録画系 case で必須。動画の後処理(死に区間のトリム)と検証(尺・変化区間の実測)は
+    # これが無いと**両条件とも不可能**になり、case そのものが成立しない。
+    # 読み取り(ffprobe)と加工(ffmpeg)は成果物に閉じるので、既存端末への blast radius は増えない。
+    "Bash(ffmpeg:*)",
+    "Bash(ffprobe:*)",
 ]
 EXPECTED_VERSIONS = {"claude": "2.1.220", "codex": "0.145.0"}
 CONDITIONS = {"ios-skills-old", "ios-skills-new", "build-ios-apps", "none"}

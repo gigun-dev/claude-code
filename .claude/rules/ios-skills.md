@@ -21,7 +21,7 @@ paths:
 `xcode-mcp` は公式バイナリ(`xcrun mcpbridge`)の薄いラッパーで、
 私たちが開発しているものではないため対象外。
 
-Codex からは `plugins/ios-skills/AGENTS.md` / `evaluations/AGENTS.md`
-(このファイルへの symlink)経由で同じ pointer を読む。対応関係は `.codex/README.md`。
+Codex からは `evaluations/AGENTS.md`
+(このファイルへの symlink)経由で同じ pointer を読む。`plugins/` は配布物なので symlink を置かない。対応関係は `.codex/README.md`。
 セッション開始時には SessionStart フックが軽量な pointer 一行を常時注入する
 (`.claude/hooks/session-start.sh` / `.codex/hooks/session-start.sh`)。

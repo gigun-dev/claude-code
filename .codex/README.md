@@ -9,9 +9,18 @@ SessionStart フックだけは(下記の理由で)Claude/Codex 両方に用意�
 
 | Codex | 正典 | 方式 |
 | --- | --- | --- |
-| `plugins/ios-skills/AGENTS.md` | `.claude/rules/ios-skills.md` | symlink |
 | `evaluations/AGENTS.md` | `.claude/rules/ios-skills.md` | symlink |
 | `.codex/hooks/session-start.sh` | `.claude/hooks/session-start.sh` | symlink |
+
+> **`plugins/ios-skills/AGENTS.md` は置かない(2026-08-05 撤去)。**
+> `plugins/` 配下は**配布物**で、marketplace 経由でインストールされた先へそのまま渡る。
+> repo 外(`../../.claude/`)を指す symlink を置くと**インストール先でリンク切れになる**。
+> 実際、評価ハーネスの安全チェック
+> (`candidate/fixture may not contain symlinks`)が候補プラグインに混入したこの
+> symlink を検出して停止し、発覚した。
+> **配布物に repo 内部の運用ファイルを持ち込まない。**
+> Codex が `plugins/ios-skills/**` を編集するときは、SessionStart フックの pointer と
+> `evaluations/AGENTS.md` から辿る。
 
 ## コンテキストの正典(3層)
 
