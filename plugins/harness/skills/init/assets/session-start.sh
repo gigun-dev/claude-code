@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.2.0 (配布元: gigun-dev/claude-code plugins/harness。配布先の世代確認はこの行を grep)
+# harness-template v0.2.1 (配布元: gigun-dev/claude-code plugins/harness。配布先の世代確認はこの行を grep)
 # SessionStart フック: セッション開始時にプロジェクトの「現在地」を確定的に注入する。
 #
 # 設計意図(caldav で確立した方式 + 2026-08-05 敵対的検証での補強):
@@ -58,7 +58,9 @@ awk -v marker="$marker_line" -v maxlines="$CATALOG_MAX_LINES" -v maxblocks="$UPD
 
 # 鮮度検査: 頭の「## 現在地(YYYY-MM-DD)」の日付より新しいコミットがあれば、更新漏れの可能性を警告。
 # 日付粒度の比較なので当日中の連続作業では鳴らない(緩い検査。強制機構ではなく検知器)。
-head_date=$(sed -n "1,${marker_line}p" "$doc" | grep -oE '# 現在地\(20[0-9]{2}-[0-9]{2}-[0-9]{2}\)' | head -1 | grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}' || true)
+# 括弧は全角/半角の両方を許容する(caldav 第5版棚卸しで、全角「現在地（…）」が読めず
+# 鮮度検査が一度も効いていなかったことが判明。計測は寛容に・教える書式は半角で統一)。
+head_date=$(sed -n "1,${marker_line}p" "$doc" | grep -oE '# 現在地[(（]20[0-9]{2}-[0-9]{2}-[0-9]{2}[)）]' | head -1 | grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}' || true)
 if [ -n "$head_date" ] && command -v git >/dev/null 2>&1; then
   last_commit=$(git -C "${CLAUDE_PROJECT_DIR:-.}" log -1 --format=%cs 2>/dev/null || true)
   if [ -n "$last_commit" ] && [ "$last_commit" \> "$head_date" ]; then
