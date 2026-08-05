@@ -1,7 +1,7 @@
 {
   "name": "harness",
-  "version": "0.9.0",
-  "description": "Project harness: scaffold session-handoff docs, hooks, rules and a pre-push gate into a repo (init), and check the result against Claude Code best practices (doctor).",
+  "version": "0.10.0",
+  "description": "Project harness: scaffold session-handoff docs, hooks, rules and a pre-push gate (init), check against Claude Code best practices (doctor), and tidy up before closing a session (tidy).",
   "author": {
     "name": "gigun",
     "url": "https://github.com/gigun-dev"

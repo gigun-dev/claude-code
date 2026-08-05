@@ -58,7 +58,7 @@
     {
       "name": "harness",
       "source": "./plugins/harness",
-      "description": "Scaffold session-handoff harness into a repo (init) and check it against best practices (doctor)"
+      "description": "Scaffold session-handoff harness (init), check it against best practices (doctor), tidy up before closing a session (tidy)"
     },
     {
       "name": "telemetry",
