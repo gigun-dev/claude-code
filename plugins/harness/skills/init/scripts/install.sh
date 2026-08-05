@@ -20,6 +20,7 @@ CHECK_CMD=""       # pre-push で走らせる検証コマンド(未指定なら�
 DOCS_DIR="docs"    # next-directions.md の置き場(docs/ が公開サイトのリポでは変える)
 WITH_CODEX=0
 SKIP_PREPUSH=0
+WITH_LOG=0        # docs/log.md(追記専用アーカイブ)。小規模では git 履歴で足りるので既定 off
 
 usage() {
   cat <<'EOF'
@@ -32,6 +33,8 @@ usage() {
                         Makefile から自動検出する(make 依存は強制しない)。
   --docs-dir <dir>      next-directions.md の置き場(既定: docs)。
   --with-codex          .codex/ アダプタも配線する(Codex を併用するリポジトリ)。
+  --with-log            docs/log.md(時系列の追記専用アーカイブ)も作る。長期・大規模向け。
+                        小規模では git 履歴で足りるので、作っても書かれないファイルが増えるだけ。
   --skip-prepush        pre-push フックを入れない。
 EOF
 }
@@ -42,6 +45,7 @@ while [ $# -gt 0 ]; do
     --check-cmd) CHECK_CMD="${2:-}"; shift 2 ;;
     --docs-dir) DOCS_DIR="${2:-}"; shift 2 ;;
     --with-codex) WITH_CODEX=1; shift ;;
+    --with-log) WITH_LOG=1; shift ;;
     --skip-prepush) SKIP_PREPUSH=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "不明な引数: $1" >&2; usage >&2; exit 2 ;;
@@ -68,6 +72,17 @@ else
   sed "s/{{DATE}}/$(date +%Y-%m-%d)/g" "$ASSETS/next-directions.md" > "$ND"
   DID+=("$ND: テンプレートから作成")
   TODO+=("$ND の {{CURRENT_STATE}} / {{NEXT_STEPS}} / {{CATALOG}} を、README・直近コミット・会話の文脈から埋める")
+fi
+
+# --- 1b. log.md(追記専用アーカイブ・任意) -----------------------------------
+if [ "$WITH_LOG" -eq 1 ]; then
+  LOG="$DOCS_DIR/log.md"
+  if [ -e "$LOG" ]; then
+    DID+=("$LOG: 既存 — 変更なし")
+  else
+    sed "s/{{DATE}}/$(date +%Y-%m-%d)/g" "$ASSETS/log.md" > "$LOG"
+    DID+=("$LOG: 作成(時系列の追記専用アーカイブ)")
+  fi
 fi
 
 # --- 2. SessionStart フック ---------------------------------------------------
@@ -170,7 +185,37 @@ if [ "$WITH_CODEX" -eq 1 ]; then
   if [ -f .codex/config.toml ] && grep -q 'hooks = true' .codex/config.toml; then :; else
     printf '\n[features]\nhooks = true\n' >> .codex/config.toml
   fi
-  DID+=(".codex/: hooks.json + session-start.sh symlink + config.toml を配線")
+  # 保守規約(Claude 側が正典・symlink で共有)を書き残す。これが無いと、次に触る人が
+  # Codex 側を直接編集して正典が2つに割れる。
+  [ -e .codex/README.md ] || cp "$ASSETS/codex-README.md" .codex/README.md
+  # project skills があれば Codex からも同じ実体を見せる(.agents/skills/* -> .claude/skills/*)。
+  if [ -d .claude/skills ]; then
+    mkdir -p .agents/skills
+    for s in .claude/skills/*/; do
+      [ -d "$s" ] || continue
+      n=$(basename "$s")
+      [ -e ".agents/skills/$n" ] || ln -s "../../.claude/skills/$n" ".agents/skills/$n"
+    done
+    DID+=(".agents/skills/: .claude/skills/* への symlink を作成")
+  fi
+  DID+=(".codex/: hooks.json + session-start.sh symlink + config.toml + README を配線")
+fi
+
+# --- 6b. .gitignore(個人環境ファイルの流出防止) ------------------------------
+# settings.local.json は permission allowlist などマシン固有の設定で、コミットすると
+# 他人・他マシンへ個人環境が漏れる。plans も一時作業物。**実害があるので必ず入れる。**
+for entry in ".claude/settings.local.json" ".claude/plans/"; do
+  if ! grep -qxF "$entry" .gitignore 2>/dev/null; then
+    if ! grep -q "claude local settings" .gitignore 2>/dev/null; then
+      printf '\n# claude local settings(個人環境の設定。プロジェクト共有の設定は .claude/settings.json に置く)\n' >> .gitignore
+    fi
+    printf '%s\n' "$entry" >> .gitignore
+    DID+=(".gitignore: $entry を追加")
+  fi
+done
+# 既に追跡されてしまっている場合は gitignore が効かないので、明示的に知らせる。
+if git ls-files --error-unmatch .claude/settings.local.json >/dev/null 2>&1; then
+  TODO+=("⚠️ .claude/settings.local.json が既に git 追跡されている(個人環境の permission が共有される)。'git rm --cached .claude/settings.local.json' で追跡を外すこと")
 fi
 
 # --- 7. CLAUDE.md の定型節(存在チェックのみ。本文はエージェントが書く) --------

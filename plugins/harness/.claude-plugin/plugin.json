@@ -1,6 +1,6 @@
 {
   "name": "harness",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Project harness scaffolding and auditing: next-directions session handoff, SessionStart head-injection hook, comment-culture rules, pre-push quality gate, and best-practice/cclens health audits.",
   "author": {
     "name": "gigun",

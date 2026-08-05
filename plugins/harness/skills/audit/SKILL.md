@@ -41,6 +41,21 @@ cclens doctor が新しいパターンを出したとき / 概ね四半期ごと
   (settings/rules/skills/hooks)・AGENTS.md/.codex 配線・docs/next-directions.md の鮮度。
 - 横断比較: 同じ内容(コメント方針等)が複数リポで乖離していないか。git log -S で系譜を追える。
 
+### 2b. ハーネスの世代ドリフト
+
+配布物にはバージョン刻印があるので、配布先が古い世代のまま取り残されていないか見る:
+
+```sh
+for d in ~/ghq/github.com/*/*/; do
+  v=$(grep -rhos 'harness-template v[0-9.]*' "$d.claude" "$d.githooks" 2>/dev/null | sort -u | tr '\n' ' ')
+  [ -n "$v" ] && echo "$(basename "$d"): $v"
+done
+```
+
+刻印は「そのファイルの内容が最後に変わった版」なので、ファイルごとに違うのは正常。
+プラグイン側の assets と比べて古いものがあれば `/harness:init` を再実行すれば更新される
+(冪等なので既存の正典・rules は壊れない)。ハーネス未導入のリポジトリも洗い出す。
+
 ### 3. 実測(cclens)
 
 ```sh
