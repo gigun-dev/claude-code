@@ -59,6 +59,11 @@
       "name": "harness",
       "source": "./plugins/harness",
       "description": "Project harness scaffolding: next-directions session handoff, SessionStart head-injection hook, comment-culture rules"
+    },
+    {
+      "name": "telemetry",
+      "source": "./plugins/telemetry",
+      "description": "Review your own Claude Code sessions from Langfuse traces and turn findings into config improvements"
     }
   ]
 }

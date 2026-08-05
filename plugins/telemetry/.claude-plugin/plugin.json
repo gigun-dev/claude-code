@@ -1,0 +1,9 @@
+{
+  "name": "telemetry",
+  "version": "0.1.0",
+  "description": "Review your own Claude Code sessions from Langfuse traces (tool usage, failures, latency, subagents) and turn the findings into config improvements.",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  }
+}
