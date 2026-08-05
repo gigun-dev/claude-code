@@ -1,6 +1,6 @@
 {
   "name": "harness",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Project harness: scaffold session-handoff docs, hooks, rules and a pre-push gate into a repo (init), and check the result against Claude Code best practices (doctor).",
   "author": {
     "name": "gigun",

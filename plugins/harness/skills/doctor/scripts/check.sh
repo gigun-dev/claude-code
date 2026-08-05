@@ -43,9 +43,14 @@ else
     grep -nE '毎回|必ず[^。]*(実行|走ら|チェック)|する前に必ず|常に.*(実行|確認)' CLAUDE.md | head -3 | sed 's/^/       /'
   fi
   # 「絶対に〜するな」= 長いセッションで破綻しうる → permissions/hooks で強制するのが正解。
-  if grep -nE '絶対に[^。]*(な|禁止)|してはいけない|しないこと' CLAUDE.md >/dev/null 2>&1; then
+  # ただし「コードから絶対に読み取れない」のような**可能表現**は禁止指示ではない。
+  # 2026-08-05 に cf-asc-dashbord の CLAUDE.md(コメント方針の説明文)で誤検知したため、
+  # 可能形(読み取れ/分から/でき/見え/得られ)が続く場合は除外する。
+  prohibit_re='絶対に[^。]*(な|禁止)|してはいけない|してはならない|しないこと'
+  capability_re='絶対に[^。]*(読み取れ|分から|でき|見え|得られ|判断でき)'
+  if grep -nE "$prohibit_re" CLAUDE.md 2>/dev/null | grep -vE "$capability_re" | head -1 | grep -q .; then
     warn "CLAUDE.md に強い禁止指示がある。サーバー側(permissions / PreToolUse hook)で止める方が確実:"
-    grep -nE '絶対に[^。]*(な|禁止)|してはいけない|しないこと' CLAUDE.md | head -3 | sed 's/^/       /'
+    grep -nE "$prohibit_re" CLAUDE.md | grep -vE "$capability_re" | head -3 | sed 's/^/       /'
   fi
   # 長い手順が埋まっていないか(節ごとの行数)。
   awk '/^## /{if(name && n>'"$SECTION_MAX"') print "       " name " (" n " 行)"; name=$0; n=0; next} {n++} END{if(name && n>'"$SECTION_MAX"') print "       " name " (" n " 行)"}' CLAUDE.md > /tmp/.doctor_sections 2>/dev/null
