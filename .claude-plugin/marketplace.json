@@ -54,6 +54,11 @@
       "name": "workers-fetch",
       "source": "./plugins/workers-fetch",
       "description": "Test Cloudflare Workers apps via workers-fetch CLI"
+    },
+    {
+      "name": "harness",
+      "source": "./plugins/harness",
+      "description": "Project harness scaffolding: next-directions session handoff, SessionStart head-injection hook, comment-culture rules"
     }
   ]
 }
