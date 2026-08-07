@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.3.0 — トークン係数を**実際のトークナイザ**で較正する(明示起動専用)。
+# harness-template v0.5.0 — トークン係数を**実際のトークナイザ**で較正する(明示起動専用)。
 #
 # 設計意図(2026-08-08):
 #   harness の予算は2軸ある —— **文字**(切り詰め。正確・ベンダー非依存)と
@@ -25,7 +25,7 @@ set -uo pipefail
 
 usage() {
   cat <<'EOF'
-使い方: calibrate.sh (--claude | --gpt) <ファイル> [<ファイル> ...] [--model <id>]
+使い方: calibrate.sh (--manual | --gpt | --claude) <ファイル|ファイル:実測tok> ... [--model <id>]
 
 トークン係数を実際のトークナイザで測り、harness の概算式との差と、
 そのまま貼れる `export HARNESS_TOK_*` を出す。
@@ -35,16 +35,32 @@ usage() {
    (例: 英語の SKILL.md + 日本語の next-directions.md)。
    1本だけ渡した場合は概算とのズレだけを出し、係数は出さない。
 
-モード(どちらか必須。既定は無い = 引数なしでは何もしない):
+モード(いずれか必須。既定は無い = 引数なしでは何もしない):
   ⚠️ **検証状態が違う。混ざっていることを隠さない**(原則4):
+     --manual 🔵 算術は検証済み(--gpt と同じ最小二乗を通る)
      --gpt    🔵 実走済み(2026-08-08、日本語率 1%/25%/44% の3本。残差 0.8%)
      --claude ⚪ **一度も実走していない**(API キーが無いため)。使うとき最初の1回は
               出た数字を疑うこと —— 未検証の経路を検証済みの顔で使うのが一番まずい
 
+  --manual   **Claude の実測値を人が運ぶ。追加の呼び出しもキーも要らない。**
+             ⚠️ **ローカルでトークナイズしているのではない。**トークナイズは Anthropic 側で
+             起きていて、`/context` の数字は **Claude Code がセッション認証で既に呼んだ
+             結果**。--manual はその「もう払った計算」を捨てずに拾うだけ。
+             (本体も API に届かなければ文字数からの概算に落ち、"Token counts are estimates
+              and may differ from actual usage." と出す。バイナリで確認済み。)
+             `/context` で見た数字を `ファイル:トークン数` の形で渡す。
+             例: --manual CLAUDE.md:4625 docs/next-directions.md:9303
+             ⚠️ `/context` はカテゴリ合計を出すので、その合計に対応するファイルを
+                すべて並べて1件の観測にすること(1ファイルに対応していなくてよい —
+                最小二乗は「文字数の組 → トークン数」の対応があれば解ける)。
+
   --claude   `POST /v1/messages/count_tokens` で正確に数える。
              **ファイルの全文が Anthropic の API へ送られる。**
              ANTHROPIC_API_KEY が要る。API は無料(RPM 制限のみ)。
-  --gpt      ローカルの tiktoken(o200k_base)で数える。**送信は発生しない。**
+  --gpt      **本当にローカルで数える唯一の経路。**送信は発生しない。
+             非対称の理由: **OpenAI は BPE テーブルを公開していて tiktoken が同梱する。
+             Anthropic は公開していない。**だから Claude 側は誰かが API を呼ぶしかない。
+             tiktoken(o200k_base)を使う。
              Codex / GPT 系クライアントで harness を使う場合の係数を出す。
              tiktoken が無ければ uv があれば一時実行する(環境は汚さない)。
 
@@ -69,6 +85,7 @@ EOF
 MODE=""; MODEL="claude-opus-5"; FILES=()
 while [ $# -gt 0 ]; do
   case "$1" in
+    --manual) MODE=manual; shift ;;
     --claude) MODE=claude; shift ;;
     --gpt)    MODE=gpt; shift ;;
     --model)  MODEL="${2:-}"; [ -n "$MODEL" ] || { echo "--model に値が無い" >&2; exit 2; }; shift 2 ;;
@@ -77,11 +94,22 @@ while [ $# -gt 0 ]; do
     *)  FILES+=("$1"); shift ;;
   esac
 done
-[ -n "$MODE" ] || { echo "モードが無い(--claude か --gpt)。引数なしでは何もしない —— このスクリプトは外向きの通信を行いうるため。" >&2; usage >&2; exit 2; }
+[ -n "$MODE" ] || { echo "モードが無い(--manual / --gpt / --claude)。引数なしでは何もしない —— このスクリプトは外向きの通信を行いうるため。" >&2; usage >&2; exit 2; }
 [ "${#FILES[@]}" -gt 0 ] || { echo "ファイルが無い" >&2; usage >&2; exit 2; }
-for f in "${FILES[@]}"; do [ -r "$f" ] || { echo "読めない: $f" >&2; exit 2; }; done
+# --manual は "path:tokens" 形式。ここで分解しておく(以降は $FILES/$GIVEN が対応する)。
+GIVEN=()
+for i in "${!FILES[@]}"; do
+  if [ "$MODE" = manual ]; then
+    case "${FILES[$i]}" in
+      *:*) GIVEN+=("${FILES[$i]##*:}"); FILES[$i]="${FILES[$i]%:*}" ;;
+      *) echo "✗ --manual は 'ファイル:実測トークン数' の形で渡すこと: ${FILES[$i]}" >&2; exit 2 ;;
+    esac
+    case "${GIVEN[$i]}" in ''|*[!0-9]*) echo "✗ トークン数が数値でない: ${GIVEN[$i]}" >&2; exit 2 ;; esac
+  fi
+  [ -r "${FILES[$i]}" ] || { echo "読めない: ${FILES[$i]}" >&2; exit 2; }
+done
 
-command -v python3 >/dev/null 2>&1 || { echo "⏭ python3 が無いので測れない(JSON の組み立てと解析に要る)。" >&2; exit 2; }
+command -v python3 >/dev/null 2>&1 || { echo "⏭ python3 が無いので測れない(算術に要る)。" >&2; exit 2; }
 
 # 実測を1本ぶん返す。標準出力にトークン数だけを出し、失敗したら空を返す。
 read -r -d '' TIKTOKEN_PY <<'PY' || true
@@ -105,7 +133,9 @@ PY
 # そのまま実行されなくなる(2026-08-08 の初回は実際にここで止まった)。uv があれば
 # 環境を汚さずに解決できるので、諦める前に一段だけ試す。⚠️ どちらも無ければ exit 2。
 GPT_RUNNER=""
-if [ "$MODE" = gpt ]; then
+if [ "$MODE" = manual ]; then
+  LABEL="${HARNESS_TOKENIZER_LABEL:-Claude 4.7+}(人が運んだ実測)"
+elif [ "$MODE" = gpt ]; then
   if printf '%s' "$TIKTOKEN_PY" | python3 - /dev/null >/dev/null 2>&1; then
     GPT_RUNNER=python3
   elif command -v uv >/dev/null 2>&1; then
@@ -127,12 +157,16 @@ printf '  %-46s %8s %8s %8s %9s %8s\n' "ファイル" "ASCII" "非ASCII" "実測
 
 # 中間データ: 1行 "ascii wide actual" を溜めて、最後にまとめて解く。
 OBS=$(mktemp); trap 'rm -f "$OBS"' EXIT
+idx=-1
 for f in "${FILES[@]}"; do
+  idx=$((idx+1))
   chars=$(LC_ALL=C tr -d '\200-\277' < "$f" | wc -c | tr -d ' ')
   ascii=$(LC_ALL=C tr -cd '\000-\177' < "$f" | wc -c | tr -d ' ')
   wide=$((chars - ascii))
   est=$(( (ascii * ${HARNESS_TOK_ASCII_PCT:-33} + wide * ${HARNESS_TOK_WIDE_PCT:-140}) / 100 ))
-  if [ "$MODE" = gpt ]; then
+  if [ "$MODE" = manual ]; then
+    actual="${GIVEN[$idx]}"
+  elif [ "$MODE" = gpt ]; then
     if [ "$GPT_RUNNER" = uv ]; then
       actual=$(printf '%s' "$TIKTOKEN_PY" | uv run --quiet --with tiktoken python - "$f" 2>/dev/null)
     else
@@ -204,5 +238,5 @@ PY
 printf '\n  ⚠️ 実測は「このファイルをそのまま user メッセージにしたとき」の値で、system prompt や\n'
 printf '     ツール定義は含まない。**文書の相対コストを見るための数字**であって、\n'
 printf '     セッション全体の実費ではない。全体は `/context` が出す。\n'
-printf '\n=== 較正完了(calibrate.sh v0.3.0) ===\n'
+printf '\n=== 較正完了(calibrate.sh v0.5.0) ===\n'
 exit 0
