@@ -80,6 +80,12 @@
 - [ ] `H-17` トークン概算の係数を /context で較正する
       → 完了条件: 英語 0.25 / 日本語 1.1 tok/字 を /context の実測と突き合わせ、context-mechanics.md §4.5 の未較正 ⚠️ を消すこと
   > **2026-08-08 更新:** 2026-08-08: calibrate.sh を追加(doctor 配下・明示起動専用。--gpt はローカル tiktoken、--claude は count_tokens API で無料)。**GPT/o200k は実測済み: ASCII 25 / 非ASCII 102、日本語率 1%/25%/44% の3本で最大残差 0.8%** —— 線形モデルは成立する。**残るのは Claude 側**(API キーが無く未測定。既定 33/140 は文献値)。
+- [ ] `H-18` 書式の散文をポインタ1行へ寄せる(配布テンプレの HTML コメント / .claude/rules/harness.md)
+      → 完了条件: 着手順の書式が nd-tasks.sh の --help と --lint 以外に散文で書かれていないこと。配布テンプレと rules は「書式は /harness:status --help が正」の1行ポインタになっていること
+- [ ] `H-19` editor.awk がパーサの出力で位置を特定するようにする(書式の二重実装を1本に)
+      → 完了条件: 書式の解釈が parser.awk 1箇所になり、editor.awk が独自の項目照合を持たないこと。先に --lint を回帰テストとして固めてから着手する
+- [ ] `H-20` report.sh を ~/.harness/inbox/ 方式へ単純化する(可視性ゲート・欠陥/証拠の分割・GitHub 起票を撤去)
+      → 完了条件: git の外にローカルのメモを書くだけになり、/harness:status が未処理の件数を出すこと。still 184行ある機構が大幅に減っていること
 
 <!-- session-head-end: ここから下は詳細カタログ。着手する節をそのとき読む -->
 
