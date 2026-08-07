@@ -1,6 +1,6 @@
 # Claude Code の文脈機構 — 寿命の対応表
 
-> **最終検証: 2026-08-08(Claude Code 2.1.222)。**
+> **最終検証: 2026-08-08(Claude Code 2.1.222)。同日の敵対的検証で事実誤り7件を訂正済み。**
 > **180日を超えていたら、使う前に一次情報を取り直すこと。**この分野は数ヶ月で変わる。
 > 再検証の手順は末尾。
 
@@ -21,7 +21,7 @@
 | **タスクが変わったら死ぬ** | `.claude/rules/*.md` の `paths:` 付き | — |
 | **セッション中ずっと要る** | `CLAUDE.md`(project-root) | 40,000字で警告 🟠 |
 | **開始時に方向づければよい** | SessionStart フックの stdout | **10,000字** 🟠 |
-| **呼ばれたときだけ要る** | skill 本体 | **5,000 tok** 🟢 |
+| **呼ばれたときだけ要る** | skill 本体 | **compaction 後の再注入時に 5,000 tok** 🟢(初回ロードの上限ではない) |
 | **永久に残すがロードしない** | ディスク上のファイル + ポインタ | — |
 
 ---
@@ -54,18 +54,32 @@
 > **Truncation is a byte offset, not a semantic boundary.** The cut keeps the **head**
 > and discards the **tail** (the actual procedure). **That is backwards.** — issue #82144
 
+⚠️ **5,000 tok は「compaction 後の再注入時のキャップ」であって、初回 invoke 時のロード上限ではない。**
+2026-08-08 まで無条件の上限として書いていた。公式:
+> Skill bodies are **re-injected after compaction**, but large skills are truncated to fit the
+> per-skill cap. — context-window docs
+agentskills.io 側も上限ではなく推奨(`Instructions (< 5000 tokens recommended)`)。
+
 **長い SKILL.md は compaction 後に「前置きが残って手順が消える」。**
 日本語は約 1.4 tok/字(4.7 以降)なので **5,000 tok ≒ 3,500 字**。行ではなく文字/トークンで測ること。
 
 ---
 
-## 3. SessionStart フックの出力上限は 10,000 文字 🟠(公式の 50K は誤り)
+## 3. フックの出力上限は 10,000 文字 🟢(公式明記)
 
-| issue | 状態 | 内容 |
-|---|---|---|
-| #70460 | OPEN | 10,000字超は**2KB のプレビューだけ**注入。残りは無言で消える |
-| #42369 | CLOSED | **v2.1.89 の CHANGELOG は 50K と書いているが、実測は 10K** |
-| #84021 | OPEN(2026-08-05) | 内部関数 `persistHookOutput` の閾値が 10,000。`additionalContext` も同じ |
+> Hook output strings, including `additionalContext`, `systemMessage`, and plain stdout,
+> are capped at **10,000 characters**. Output that exceeds this limit is **saved to a file and
+> replaced with a preview and file path**. — https://code.claude.com/docs/en/hooks
+
+⚠️ **2026-08-08 まで、ここを「🟠 issue 報告(#70460 / #42369 / #84021)。公式の 50K は誤り」と
+書いていた。**数字も挙動も合っていたが、**位置づけが古かった** —— いま公式が明記している。
+issue が指していた 50K は docs ではなく v2.1.89 の CHANGELOG。
+**「賞味期限が短い」と書いた当のファイルが、再検証の手順を持ちながら実行されずに腐っていた。**
+
+⚠️ 超過時の挙動は「2KB のプレビュー」ではなく「**ファイルへ退避 + プレビューとパス**」。
+   harness の警告文言はプレビューが出る前提で書いてあり、そこは変わらない
+   (**頭の後半が読まれない**のは同じ)。
+
 
 **harness の頭の予算 8,000 *文字* はこれに対する余裕**(2,000字ぶん)。
 ⚠️ 2026-08-07 まで 8,000 *バイト* で運用していたが、これは #70460 の "10K" を
@@ -75,8 +89,9 @@
 **🔵 実測: `SessionStart:compact` は発火する。**このリポジトリで7回(中央値 37ms)。
 `matcher` に `compact` を書けば compaction 後にも走る。
 
-> ⚠️ **matcher の完全な一覧は ⚪ 未確認。** 公式ドキュメントから確認できたのは
-> `startup` / `resume` / `clear`。`compact` は実測で発火するが、`fork` は未確認。
+**matcher の完全な一覧 🟢**(https://code.claude.com/docs/en/hooks のマッチャ表):
+`startup` / `resume` / `clear` / `compact` / `fork` の5つ。
+⚠️ 2026-08-08 まで「⚪ 未確認、`fork` は不明」と書いていた。**公式に一覧がある。**
 
 ---
 
@@ -105,8 +120,12 @@ budget = contextWindow × 4 × skillListingBudgetFraction
 > $ grep -ao 'e.source==="plugin")return"on"' .claude-wrapped
 > e.source==="plugin")return"on"
 > ```
-> **設定を読む前に無条件で `"on"` を返す。**公式ドキュメントにこの但し書きは無い。
-> 効くのは `~/.claude/skills/` 配下と bundled skill だけ。
+> **設定を読む前に無条件で `"on"` を返す。**効くのは `~/.claude/skills/` 配下と bundled skill だけ。
+> ⚠️ **2026-08-08 まで「公式ドキュメントにこの但し書きは無い」と書いていたが、誤り。**
+> 公式に明記されている: `Plugin skills are not affected by skillOverrides.
+> Manage those through /plugin instead.` — https://code.claude.com/docs/en/skills
+> **「公式に書かれていない挙動が実在する」の実例としてここを使っていたが、その用途では成立しない**
+> (挙動そのものはバイナリで再現できるので、事実としては残る)。
 
 **🔵 `disable-model-invocation: true` はプラグイン skill でも効く**(`/context` の一覧に
 `harness:status` が出てこない)。description ごと listing から外れるので予算も食わない。
@@ -210,13 +229,34 @@ g.push("  Token counts are estimates and may differ from actual usage.")
 |---|---|
 | 親の会話履歴 | 🟢 継承しない(`context: fork` のみ例外) |
 | `CLAUDE.md` | 🟢 継承する。**ただし Explore と Plan だけは省く** |
-| **`.claude/rules/`** | 🟠 **継承しないと複数人が報告。**公式は CLAUDE.md しか名指ししていない |
-| **SessionStart フック** | 🟠 **subagent では発火しない**(#46696) |
+| **`.claude/rules/`** | 🟢 **継承する。**公式が `project rules` を名指しで列挙(下の引用) |
+| **SessionStart フック** | 🟢 **subagent では発火しない。**ただし **`SubagentStart` が存在する**(下記) |
 | skills | 🟢 継承しない。`skills:` に明示列挙が要る |
 | auto memory | 🟢 継承しない ⚠️ ただし「実際には入っていた」という反証報告あり(#77261) |
 
-**帰結: 引き継ぎ情報は subagent のプロンプト本文に明示的に載せる。**
-「rules に置けば届く」は main セッション限定の話。
+> A non-fork subagent's initial context contains: … **CLAUDE.md files**: every level of the
+> CLAUDE.md hierarchy the main conversation loads, including `~/.claude/CLAUDE.md`,
+> **project rules**, `CLAUDE.local.md`, and managed policy files.
+> **The built-in Explore and Plan agents skip this.**
+> — https://code.claude.com/docs/en/sub-agents
+
+⚠️ **2026-08-08 まで逆を書いていた**(「rules は継承しないと複数人が報告。公式は CLAUDE.md
+しか名指ししていない」)。**公式は project rules を名指ししている。**
+🟠 の第三者報告を、公式を取り直さずに採用していたのが原因 —— このファイルの再検証手順は
+「公式を取り直す(要約や記憶で判定しない)」と書いてあり、**それを実行していなかった。**
+
+**帰結(訂正後):** `paths:` 付き rules は**サブエージェントにも届く**(Explore / Plan を除く)。
+ただし `paths:` のスコープが効くので、**そのサブエージェントが該当ファイルを触るまでは載らない**。
+確実に届けたいものは、いまも**プロンプト本文に明示的に載せるのが最短**。
+
+### `SubagentStart` フックがある 🟢
+
+| Event | When it fires | 注入 |
+|---|---|---|
+| `SubagentStart` | When a subagent is spawned | `hookSpecificOutput.additionalContext`(decision control 無し) |
+
+入力に `agent_id` / `agent_type` が入る。**「SessionStart が発火しないから本文へ載せるしかない」は
+誤り** —— サブエージェント向けの注入経路は存在する(2026-08-08 に公式で確認)。
 
 ### ⚠️ subagent の返り値はセッションを殺せる 🟠
 
@@ -231,7 +271,16 @@ g.push("  Token counts are estimates and may differ from actual usage.")
 
 ## 6. その他の実測値
 
-- **CLAUDE.md**: 40,000字で警告が出る 🟠。**ハード上限の証拠は無い** ⚪。
+- **CLAUDE.md**: ⚠️ **「40,000字で警告」の出典は確認できなかった** ⚪(2026-08-08 に再検証)。
+  公式 memory docs にあるのは行数の目安だけ:
+  > **Size**: target under 200 lines per CLAUDE.md file. Longer files consume more context and
+  > reduce adherence. … **CLAUDE.md files are loaded in full regardless of length.**
+
+  バイナリ 2.1.222 を `40,000` / `40000` / `4e4` で走査しても CLAUDE.md 関連の文字列は出ない
+  (同じ手法で `skillListingBudgetFraction` 等は取れるので、探索が効かなかったわけではない)。
+  **harness は `CLAUDE_MD_HARD_CHARS` を撤去した** —— 機構の裏付けが無い閾値は持たない。
+  残るのはトークン予算(毎セッションの実費 + サブエージェントぶんの乗算)で、こちらは
+  自前の根拠で立つ。
   mid-session の編集は現セッションに反映されない(次の `/clear` `/compact` 再起動から)🟢
 - **auto memory**: 先頭200行 or 25KB、**先に来た方**。ハードコード 🟢
 - **`@import`**: CLAUDE.md 内では session start に無条件展開 🟢。
@@ -247,13 +296,13 @@ g.push("  Token counts are estimates and may differ from actual usage.")
 
 ## 分かっていないこと(⚪ 未確認。埋まったらここから消す)
 
-1. **SessionStart matcher の完全な一覧**(`fork` は有効か)
-2. **compaction 後に `paths:` 付き rules は本当に消えるか**(§2 の矛盾1)
+1. **compaction 後に `paths:` 付き rules は本当に消えるか**(§2 の矛盾1)
 3. **`name-only` に落とした skill が自動発火するか** —— on-the-wire でバイト数は実測されているが、
    **発火するかの前後比較は世界中どこにも無い**
 4. **description を磨くと発火率が上がるか** —— 測定を試みた3件は lift ゼロ / 0/40(原因は
    隣接 skill による捕捉)/ 代理指標のみ。**成功報告は見つかっていない**
-5. CLAUDE.md がサイズを理由に無視される証拠
+4. **CLAUDE.md にサイズ由来の警告・切り詰めが本当に無いか**(公式は「長さに関わらず全文ロード」)
+5. **`SubagentStart` に harness の頭を載せるべきか**(載せると乗算コストになる。未裁定)
 
 ---
 
