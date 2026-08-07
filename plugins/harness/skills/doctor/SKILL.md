@@ -1,6 +1,13 @@
 ---
 name: doctor
-description: このリポジトリの Claude Code 設定がベストプラクティスを守れているか検査する。CLAUDE.md の肥大化・rules の paths 未設定/不一致(silent 無効化)・個人設定の混入・ハーネスの配線漏れ・skill の description 不足を指摘する。「設定を点検して」「ベスプラ守れてる?」「/harness:doctor」で発火。
+description: >-
+  I invoke this when I need to know whether this repository's Claude Code setup is
+  sound before relying on it — I am about to trust CLAUDE.md or a path-scoped rule to
+  be reaching me, I suspect a rule is silently not firing, or the user asks how the
+  setup is doing. Reports bloated CLAUDE.md, rules whose `paths:` match nothing (they
+  fail silently), personal settings leaking into version control, missing
+  session-handoff wiring, and skills whose descriptions are too thin to trigger.
+  Read-only. Also on '/harness:doctor'.
 ---
 
 # harness:doctor — 設定の健全性検査
@@ -9,9 +16,23 @@ description: このリポジトリの Claude Code 設定がベストプラクテ
 bash "${CLAUDE_SKILL_DIR}/scripts/check.sh"
 ```
 
-上の検査結果を読んで、指摘があれば直す。**すべての指摘に従う必要はない** — このリポジトリの
-事情で意図的に外している場合は、その理由を CLAUDE.md か next-directions に書き残すこと
-(次のセッションが同じ指摘を蒸し返さないため)。
+## Operating Posture
+
+あなたは**検査官であって、修理工でも弁護人でもない**。既定は厳しい側 —— 各指摘は
+「直す」か「棄却して理由を書き残す」かの二択で、**素通りという第3の選択肢は無い**。
+
+失敗モードは2つ。**前者の方が重い**:
+
+1. **緩和を既定にしてしまう。** 「このリポジトリの事情で意図的に外している」を理由を書かずに
+   使うと、次のセッションが同じ指摘を発見して同じ判断をやり直す。**検査そのものが無意味になる。**
+   棄却したら理由を CLAUDE.md か next-directions に残すこと(蒸し返しを止めるのはこの記録だけ)。
+2. **誤検知に従って、正しい設定を壊す。** `check.sh` は実際に外れたことがある(2026-08-05、
+   可能表現を禁止指示として誤検知)。**指摘は裁定するものであって、従うものではない。**
+   おかしいと思ったら下の起票へ回す。**検査は当たらないことがある前提で使う。**
+
+**全部棄却して1行も直さずに終わる実行は成功。** 逆に、指摘を作るために設定をいじるのは失敗。
+
+上の検査結果を読んで、指摘を1件ずつ裁定する。
 
 ## 指摘の読み方(なぜそれが問題か)
 
@@ -47,9 +68,6 @@ CLAUDE.md の構成や rules の paths は判断が要るので手で直す。
 (外向きの操作を黙って実行しない)。発生リポジトリ・配布物の世代・そのときの doctor 出力は
 自動で本文に入るので、再現材料が揃った状態で残る。
 
-実績: 2026-08-05 に「コードから絶対に読み取れないもの」(可能表現)を禁止指示として誤検知。
-可能形を除外する修正を入れた。**検査は当たらないことがある前提で使う。**
-
 ## 判定基準そのものを疑うとき
 
 **最終検証: 2026-08-05。180日を超えていたら、まず一次情報で基準を確認し直してから使うこと**
@@ -59,24 +77,16 @@ CLAUDE.md の構成や rules の paths は判断が要るので手で直す。
    https://claude.com/blog/steering-claude-code-skills-hooks-rules-subagents-and-more
 2. 仕様の確認が要る項目だけ公式ドキュメントに接地する: https://code.claude.com/docs/
    — hooks / memory(rules・CLAUDE.md)/ plugins / skills。
-   2026-08-05 の敵対的検証では、深刻度「高」の誤指摘を原文引用で棄却した実績がある。
 3. 変わっていたら `scripts/check.sh` の閾値・検査項目と、この節の日付を更新する。
 4. 前回の状態は `references/audit-2026-08-05.md`(記事要旨の表・当時の監査結果)。
-   ライブ版との差分が「何が変わったか」。
+   ライブ版との差分が「何が変わったか」。テレメトリ方針は `references/telemetry-2026-08-05.md`。
 
 ## 関連(役割分担)
 
 - **`/harness:init`** — 指摘された配線漏れを直す(冪等)。
-- **`/cclens:doctor`** — 設定の静的検査ではなく**実際の使われ方**の実測
-  (失敗の癖・未使用設定・常時コスト)。両方見ると「設定は正しいが使い方が悪い」が分かる。
+- **`/harness:tidy`** — セッションを畳む。正典の更新・log 追記・未コミット作業の始末まで。
+- **`/harness:next`** — 「着手順」を読んで次にやることを一覧する(読み取り専用)。
+- **`/cclens:doctor`** — 静的検査ではなく**実際の使われ方**の実測(失敗の癖・未使用設定・常時コスト)。
 - **`/telemetry:review`** — Langfuse のトレースからツール別の時間と失敗を見る。
 - 大きな設計変更を入れる前は**敵対的検証**をかける。方法は
   `references/adversarial-verification.md`(観点分割・fresh context・偽陽性前提の裁定)。
-
-## 監査履歴
-
-- **2026-08-05(初回)**: caldav / swift-mcp-app は模範解。乖離4変種のコメント方針を正典化、
-  harness:init を新設し store-redirect へ初適用。cclens 実測(edit-precondition 344件・
-  path-not-found 137件・cd 25%)からグローバル CLAUDE.md を新設。敵対的検証で
-  フェイルオープン等を修正。詳細: `references/audit-2026-08-05.md`。
-  テレメトリ方針は `references/telemetry-2026-08-05.md`。
