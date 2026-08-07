@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.11.0 — ベストプラクティス遵守を機械的に検査する(読み取り専用)。
+# harness-template v0.12.0 — ベストプラクティス遵守を機械的に検査する(読み取り専用)。
 #
 # 設計意図(2026-08-05):
 #   機械判定できる項目だけを確定的に検査する。スキルやハーネスを作った直後に
@@ -196,7 +196,7 @@ finish() {
   else
     echo "指摘 ${findings} 件。各指摘の意味と直し方はこの skill の本文を参照。"
   fi
-  echo "=== 検査完了: ${findings} 件(check.sh v0.11.0) ==="
+  echo "=== 検査完了: ${findings} 件(check.sh v0.12.0) ==="
   exit 0
 }
 
@@ -336,47 +336,100 @@ fi
 # --- ハーネス本体 -------------------------------------------------------------
 echo
 echo "## セッション引き継ぎハーネス"
-nd=""
-for cand in docs/next-directions.md docs/*/next-directions.md; do
-  [ -f "$cand" ] && { nd="$cand"; break; }
+# 正典の列挙は plugins/harness/skills/status/scripts/nd-tasks.sh の nds_of_repo()
+# (670行あたり)・skills/tidy/ の探索と同じ形: docs/next-directions.md(単一プロダクト型)
+# があればそれ、加えて docs/*/next-directions.md(複数コンポーネント型)を全部。
+# Why not nd-tasks.sh を source する/関数を複製した共通ライブラリへ切り出す:
+# check.sh は SKILL.md の `!` 記法で**単体として**配布・自動実行される契約のスクリプトで、
+# 他スクリプトへ依存を持たせると「check.sh だけ取り出しても動く」という前提が崩れる。
+# 同じ数行の列挙ロジックを二重管理するコストより、単体で完結する保証を優先した
+# (親コメント「読み取り専用・単体配布」の帰結)。
+#
+# 追記(2026-08-08): 旧実装はここで**最初に見つかった1本だけを見て break していた**。
+# このリポジトリ自身が docs/harness/ と docs/ios-skills/ の2正典を持つ複数コンポーネント
+# モノレポなのに、辞書順で先に来る docs/harness/next-directions.md しか検査されず、
+# docs/ios-skills/next-directions.md はマーカー検査も鮮度検査も一度も受けていなかった
+# —— それでいて出力は「✓ 正典: docs/harness/next-directions.md」とだけ出て、全部合格した
+# ように読める。同じリポジトリの status/tidy の各スキルは nds_of_repo() 形式で最初から
+# 複数正典に対応していたので、**doctor だけが単一プロダクト前提のまま取り残されていた**。
+# 検知器自身が原則4「検知器は黙って死ぬ前提で検知器を検証する」の実例になっていたことに、
+# このリポジトリを検査しても誰も気付かなかった —— それをここに残す。
+nds=()
+[ -f docs/next-directions.md ] && nds+=("docs/next-directions.md")
+for cand in docs/*/next-directions.md; do
+  [ -f "$cand" ] && nds+=("$cand")
 done
-if [ -z "$nd" ]; then
+if [ "${#nds[@]}" -eq 0 ]; then
   warn "next-directions.md が無い(セッション間の引き継ぎが会話履歴頼みになる)。/harness:doctor で導入できる"
 else
-  ok "正典: $nd"
-  if grep -q '^<!-- session-head-end' "$nd"; then
-    # ⚠️ **ここで頭のサイズを測らないのは意図的**(2026-08-08 に削除)。
-    # 旧実装は「頭が N 行(目安 80)」を出していたが、頭のサイズはこの時点で
-    # **3箇所が3つの単位で測っていた** —— session-start.sh が行、nd-tasks.sh がバイトと行、
-    # ここが行(しかも 80 をハードコード)。原則7「正典は1箇所」に正面から反する。
-    # 正典は assets/session-start.sh(注入の当事者・毎セッション走る)、横断の一覧は
-    # /harness:status。doctor の仕事は**構造が壊れていないか**(マーカーの有無)であって、
-    # サイズの再計測ではない。数字が要るときは status を叩く。
-    ok "session-head-end マーカーあり(頭のサイズは /harness:status が出す)"
-  else
-    # pointer 方式(マーケットプレイス型)なら頭注入しないのでマーカーは不要。
-    if grep -qs 'next-directions' .claude/hooks/session-start.sh 2>/dev/null; then
-      note "マーカー無し(pointer 方式のフックなら正常)"
+  for nd in "${nds[@]}"; do
+    ok "正典: $nd"
+    if grep -q '^<!-- session-head-end' "$nd"; then
+      # ⚠️ **ここで頭のサイズを測らないのは意図的**(2026-08-08 に削除)。
+      # 旧実装は「頭が N 行(目安 80)」を出していたが、頭のサイズはこの時点で
+      # **3箇所が3つの単位で測っていた** —— session-start.sh が行、nd-tasks.sh がバイトと行、
+      # ここが行(しかも 80 をハードコード)。原則7「正典は1箇所」に正面から反する。
+      # 正典は assets/session-start.sh(注入の当事者・毎セッション走る)、横断の一覧は
+      # /harness:status。doctor の仕事は**構造が壊れていないか**(マーカーの有無)であって、
+      # サイズの再計測ではない。数字が要るときは status を叩く。
+      ok "$nd: session-head-end マーカーあり(頭のサイズは /harness:status が出す)"
     else
-      warn "$nd に session-head-end マーカーが無い(頭注入型フックでは fail-closed で止まる)"
+      # pointer 方式(マーケットプレイス型)なら頭注入しないのでマーカーは不要。
+      if grep -qs 'next-directions' .claude/hooks/session-start.sh 2>/dev/null; then
+        note "$nd: マーカー無し(pointer 方式のフックなら正常)"
+      else
+        warn "$nd に session-head-end マーカーが無い(頭注入型フックでは fail-closed で止まる)"
+      fi
     fi
-  fi
-  # 鮮度: 現在地の日付より新しいコミットがあるか。
-  # ⚠️ 旧実装は**ファイル全文から最初の日付**を拾っていた。動いてはいたが、頭の本文に
-  #    日付(更新ブロックなど)が現在地の見出しより前に来ると別の日付を読む。
-  #    session-start.sh(v0.3.0)と同じく**見出し行を特定してからその行の日付を拾う**形に揃えた
-  #    —— 同じ検査が2実装で違う答えを出す状態を残さない。
-  hl=$(grep -m1 -E '^#+[[:space:]]*現在地' "$nd" || true)
-  hd=$(printf '%s' "$hl" | grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}' | head -1 || true)
-  lc=$(git log -1 --format=%cs 2>/dev/null)
-  # 見出しはあるのに日付が取れない = 鮮度検査が無効化されている。黙って通さない(原則4)。
-  if [ -z "$hl" ]; then
-    warn "$nd に \`## 現在地\` の見出しが無い(鮮度検査が無効化されている)"
-  elif [ -z "$hd" ]; then
-    warn "現在地の見出しから日付が読めない(鮮度検査が無効化されている): $hl"
-  elif [ -n "$lc" ] && [ "$lc" \> "$hd" ]; then
-    warn "正典の日付($hd)より新しいコミット($lc)がある = 更新漏れの可能性"
-  fi
+    # 鮮度: 現在地の日付より新しいコミットがあるか。
+    # ⚠️ 旧実装は**ファイル全文から最初の日付**を拾っていた。動いてはいたが、頭の本文に
+    #    日付(更新ブロックなど)が現在地の見出しより前に来ると別の日付を読む。
+    #    session-start.sh(v0.3.0)と同じく**見出し行を特定してからその行の日付を拾う**形に揃えた
+    #    —— 同じ検査が2実装で違う答えを出す状態を残さない。
+    hl=$(grep -m1 -E '^#+[[:space:]]*現在地' "$nd" || true)
+    hd=$(printf '%s' "$hl" | grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}' | head -1 || true)
+    lc=$(git log -1 --format=%cs 2>/dev/null)
+    # 見出しはあるのに日付が取れない = 鮮度検査が無効化されている。黙って通さない(原則4)。
+    if [ -z "$hl" ]; then
+      warn "$nd に \`## 現在地\` の見出しが無い(鮮度検査が無効化されている)"
+    elif [ -z "$hd" ]; then
+      warn "$nd: 現在地の見出しから日付が読めない(鮮度検査が無効化されている): $hl"
+    elif [ -n "$lc" ] && [ "$lc" \> "$hd" ]; then
+      warn "$nd: 正典の日付($hd)より新しいコミット($lc)がある = 更新漏れの可能性"
+    fi
+
+    # コンポーネントと rules の名前一致(2026-08-08 追加)。
+    # docs/<name>/next-directions.md 形式(複数コンポーネント型)で見つかった各 <name> に
+    # ついて、.claude/rules/<name>.md が実在するかを見る。無いと、そのコンポーネントを
+    # 触っているセッションに規約が届かない —— しかも**エラーも記録も出ずに静かに失敗する**
+    # (rules は paths にマッチしなければ単に読み込まれないだけで、doctor 以外の何かが
+    # 教えてくれるわけではない)。
+    # 出典: docs/principles.md 規則4「集合の定義は、その集合を既に使っている機構から取る」。
+    # 「コンポーネント」という集合の定義そのものを新しく作らず、nds_of_repo() が既に
+    # 使っている「docs/<name>/next-directions.md を持つディレクトリ」を流用する。
+    # 対象は docs/next-directions.md(単一プロダクト型)を除く —— この形式には
+    # コンポーネント名という概念自体が無く、判定のしようがない。
+    # .claude/rules ディレクトリが無いときも回さない —— 下の「## rules」節が別途
+    # note "rules 無し" を出しており、ここでも警告すると同じ欠落を二重に報告することになる
+    # (読み手には「rules を導入すれば両方直る」の1回で伝わってほしい)。
+    if [ "$nd" != "docs/next-directions.md" ] && [ -d .claude/rules ]; then
+      comp=${nd#docs/}
+      comp=${comp%/next-directions.md}
+      if [ ! -f ".claude/rules/${comp}.md" ]; then
+        # Why not plugins/<comp>/ の実在も検査する: 配布先は必ずしもプラグイン
+        # リポジトリとは限らない(harness はどんなリポジトリへも配れる汎用ハーネス)うえ、
+        # このリポジトリを含めこの検査が発火した実例が現時点で1件も無い ——
+        # 起きてもいないケースへ分岐を投機で増やすより、実際に壊れていた
+        # 「rules が届かない」側だけを見る。
+        # ⚠️ 「$comp」のように変数展開の直後を多バイト文字(全角カギ括弧)で閉じると、
+        # ロケール設定によっては bash が継続バイトを識別子の一部と誤認して
+        # "comp<バイト列>: unbound variable" で落ちることを実測した(set -u 下で発火)。
+        # ${comp} と明示的に中括弧で閉じれば識別子の境界がロケールに依存せず確定する
+        # —— この検査は「必ず exit 0」が契約なので、配布先ロケール次第で落ちる書き方は禁止。
+        warn "$nd: コンポーネント「${comp}」に対応する .claude/rules/${comp}.md が無い(このコンポーネントを触るセッションに規約が届かない。エラーも記録も出ない静かな失敗)"
+      fi
+    fi
+  done
 fi
 [ -e .claude/hooks/session-start.sh ] && ok "SessionStart フックあり" || warn "SessionStart フックが無い(正典が自動で思い出されない)"
 
