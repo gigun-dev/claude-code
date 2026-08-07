@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.4.0 — 配布先で見つけた harness の欠陥を、配布元へ起票する。
+# harness-template v0.5.0 — 配布先で見つけた harness の欠陥を、配布元へ起票する。
 #
 # ⚠️ **2026-08-08 に全面的に作り直した。旧版は実際に情報を漏らした。**
 #
@@ -47,7 +47,9 @@ usage() {
   --title "<要約>"  必須。着手順の項目名になる
   --note "<補足>"   何度でも。欠陥の説明(**配布元へ渡る = 公開されうる**)
   --kind bug|idea   既定 bug
-  --github          GitHub issue も作る(opt-in)。
+  --create          **実際に書き込む。**これが無いと下書きを出すだけで1バイトも書かない
+                    (旧版が持っていた既定で、作り直しの過程で一度落としてしまった規約)。
+  --github          GitHub issue も作る(--create と併用。opt-in)。
                     ⚠️ 配布先が private で配布元が public なら**拒否する**(fail-closed)
   --upstream-nd <path>  配布元の next-directions.md(既定は $HARNESS_UPSTREAM_ND)
   -h, --help        これ
@@ -60,12 +62,13 @@ usage() {
 EOF
 }
 
-TITLE=""; KIND="bug"; GITHUB=0; notes=()
+TITLE=""; KIND="bug"; GITHUB=0; CREATE=0; notes=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --title) TITLE="${2:-}"; shift 2 ;;
     --note)  notes+=("${2:-}"); shift 2 ;;
     --kind)  KIND="${2:-bug}"; shift 2 ;;
+    --create) CREATE=1; shift ;;
     --github) GITHUB=1; shift ;;
     --upstream-nd) UPSTREAM_ND="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -98,6 +101,38 @@ done
 
 criteria="配布元で再現し、直したうえで、配布先($repo_name)へ再配布して解消を確認する"
 detail=$(for n in ${notes[@]+"${notes[@]}"}; do printf '%s ' "$n"; done)
+
+# **書く前に、何をどこへ書くかを見せる。**
+# ⚠️ 可視性ゲート(--github 側)が守れるのは**自動添付だけ**で、`--title` / `--note` に
+#    エージェントが書いた文は守れない。しかも配布元の正典は公開リポジトリの中にあるので、
+#    そこへ機微を書けば `git push` 経由で同じことが起きる —— 違いは「公開が push のとき、
+#    つまり人が diff を見た後になる」ことだけ。
+# **だが diff は判断の場所から遠い。**書き込みの直前にそのまま出せば、書いた本人が
+# その場で見直せる。**機構で塞げないものは、せめて見える場所へ持ってくる。**
+# Why not ここで公開状態を照会しないのか: 既定の経路をネットワーク依存にしたくない
+# (オフラインで黙って壊れる)。照会は --github のときだけ行う。
+# ⚠️ **既定は下書きだけ。** --create が無ければ1バイトも書かない。
+#    「見せてから書く」では、見えた時点で既に書き終わっている —— 判断の機会になっていない。
+#    旧版はこの規約(既定は下書き / --create で実行)を持っていたのに、作り直しの過程で
+#    私が落とした。**外向き・破壊的な既定を、書き直しのついでに緩めてはいけない。**
+cat >&2 <<PREVIEW
+
+⚠️ 次の文面を**配布元の正典**へ書き込みます。この正典は公開リポジトリに入っている
+   ことがあり、その場合 \`git push\` の時点で公開されます。
+   書き込み先: $UPSTREAM_ND
+
+   [$KIND] ${TITLE}${detail:+ — $detail}
+
+   **配布先($repo_name)の具体(ファイルの中身・インシデントの詳細・commit SHA など)が
+   混じっていないか、いま確認してください。**混じっているなら中止して書き直すこと
+   —— doctor の出力や CLAUDE.md の行は、この後 .harness/reports/ 側にだけ入ります。
+   証拠の書き込み先: $root/.harness/reports/<採番される ID>.md
+
+PREVIEW
+if [ "$CREATE" -eq 0 ]; then
+  echo "=== 下書きです。まだ1バイトも書いていません。実行するには同じコマンドに --create を付けてください ===" >&2
+  exit 0
+fi
 add_out=$(bash "$nd_tasks" "$UPSTREAM_ND" --add "[$KIND] ${TITLE}${detail:+ — $detail}" --criteria "$criteria" 2>&1) || {
   echo "✗ 着手順への起票に失敗した:" >&2; echo "$add_out" >&2; exit 2; }
 echo "$add_out"

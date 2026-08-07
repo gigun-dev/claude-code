@@ -114,12 +114,29 @@ block above: `!` may only hold scripts that always succeed, are read-only, and s
 it while working downstream, so without a cross-repo path the "fix it later" is lost:
 
 ```sh
-"${CLAUDE_SKILL_DIR}/scripts/report.sh" --title "<one-line>" --note "<the wrong output, or what you expected>"
+"${CLAUDE_SKILL_DIR}/scripts/report.sh" --title "<one-line>" --note "<what you expected>"
 ```
 
-Default is **draft only**. Show it to the user and get agreement before adding `--create`
-(never perform an outward-facing action silently). The repo, the artifact generation, and
-the doctor output are attached automatically, so it lands with reproduction material.
+**It splits the report in two, by whose data it is:**
+
+| | Whose | Where it goes |
+|---|---|---|
+| **The defect** | the harness's | filed into the upstream `## 着手順` via `nd-tasks.sh --add`, which assigns an ID |
+| **The evidence** (doctor output, the actual offending lines) | **this repo's** | `./.harness/reports/<ID>.md` — stays at this repo's visibility |
+
+The ID is the only link. Whoever can see this repo can see the evidence; whoever cannot,
+never learns it exists. **Nobody has to judge visibility — the location makes it correct.**
+
+**Default is draft only: without `--create` it writes nothing.** Show the draft to the user
+and get agreement first. `--github` additionally opens an issue upstream; it queries both
+repos' visibility with `gh` and **refuses on a mismatch, and refuses when it cannot tell.**
+
+⚠️ **What that gate does not cover.** It protects the automatic attachment; it cannot
+protect prose you write in `--title` / `--note`, and the upstream canon itself lives in a
+repo that may be public. **Do not put this repo's specifics — file contents, incident
+details, commit SHAs — in those flags.** They belong in the evidence file. An earlier
+version attached doctor output unconditionally and published a private repo's CLAUDE.md
+lines to a public issue; deleting the issue did not undo it (GH Archive ingests hourly).
 
 ## When you doubt the criteria themselves
 
