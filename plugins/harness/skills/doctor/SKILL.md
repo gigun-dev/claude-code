@@ -41,7 +41,12 @@ runs only after you show the user what will change and they agree. The name `doc
 borrowed from `brew doctor` — it carries the expectation of diagnosis, so diagnosis stays
 the default. Breaking that would make the name lie.
 
-Read the check output above and adjudicate each finding.
+**First check that the output ends with `=== 検査完了: N 件(check.sh vX.Y.Z) ===`.** Without
+that line the check did not finish — a partial report reads exactly like a clean one, because
+the checks that never ran report nothing. Say so and re-run; do not adjudicate a truncated
+report as complete. (The marker has existed since v0.6.0; until 2026-08-08 nothing read it.)
+
+Then read the check output and adjudicate each finding.
 
 ## Reading the findings (why each one matters)
 
