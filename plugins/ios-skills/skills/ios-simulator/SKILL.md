@@ -20,8 +20,23 @@ compatibility: >-
 
 # iOS SimulatorをCLI操作する
 
-buildはプロジェクト側の手順に任せ、本skillは状態づくり、install/launch、画面操作、証拠収集を扱う。
-すべてのコマンドでUDIDを固定し、暗黙の`booted`を使わない。
+buildはプロジェクト側の手順に任せる。すべてのコマンドでUDIDを固定し、暗黙の`booted`を使わない。
+
+## Operating Posture
+
+観測を信じる前に、その観測が有効かを疑うSimulatorオペレータとして振る舞う。
+**UI操作を1回も撃たずに終えてよい** —— env/URL scheme/cloneで状態を作れるならタップは削るのが
+正解で、WKWebViewはブラウザへ逃がす。「Simulatorでは検証しない」で終える判断も成功に数える。
+
+失敗モードは3つ。**上ほど重い。**
+
+1. **何も起きていないのに成功として報告する。** `idb ui tap`も`idb ui text`も外して/送れずに
+   exit 0を返す。**以降の観測がすべてこの上に積まれる**ので最も高くつく。別経路(スクショ差分・
+   `AXValue`・対象UDIDのログ)で裏を取る。
+2. **汚れた土台の上で測る。** preflightを飛ばすと以降の観測が無効になる。放置した端末が
+   `simctl clone`の近道になり、スキルの差が消えた実例がある(既定名の端末を作業台にしない)。
+3. **実時間へ寄せようとしてデモを壊す。** `setpts`は待ち時間ごと引き伸ばす(実測: 先頭トリム99%
+   vs `setpts`64%)。
 
 ## 基本手順
 
@@ -65,7 +80,6 @@ buildはプロジェクト側の手順に任せ、本skillは状態づくり、i
    `sim-tap.py`、出現待ちは`sim-wait.py`を使う。
 
 5. stdoutのJSON、終了コード、スクリーンショットまたは対象UDIDのログを合わせて成否を判定する。
-   `idb ui tap/text`のexit 0だけを成功証拠にしない。
 
 ## 実測で確定した境界
 
@@ -88,14 +102,11 @@ buildはプロジェクト側の手順に任せ、本skillは状態づくり、i
   `references/state-provisioning.md`のseed/clone手順とDBでの判定を使う。
 - `simctl io recordVideo`は静止区間で実時間と一致しないことがある。停止時は実PIDへSIGINTし、
   process exitをpollする。詳しくは`references/recording.md`。
-- **デモ動画は`setpts`で引き伸ばさない。** 待ち時間も比例して伸び、目標尺へトリムしても
-  死に区間が残る。デモで要るのは実時間の忠実さではなく画面が動いている割合なので、
-  **止まっている区間を切る**(実測: 先頭トリム99% vs `setpts`64%)。計測用途だけ`setpts`。
+- **デモ動画は`setpts`で引き伸ばさない。** 要るのは実時間の忠実さではなく画面が動いている
+  割合なので、**止まっている区間を切る**。`setpts`は計測用途だけ。
 - 複数端末のログはホスト側`log stream`で混ぜず、`xcrun simctl spawn <UDID> log ...`で分離する。
 - 端末は作成者も用途も持たない(`simctl list -j`は`lastBootedAt`まで)。**名前がライフサイクル契約**で、
-  使い捨ては`w-`、永続seedは`seed-`、既定名の端末は作業台にしない。`trap`で消す
-  (`references/state-provisioning.md` §1-b)。放置した端末が後の測定のbaselineの近道になり、
-  スキルの効果を消した実例がある。
+  使い捨ては`w-`、永続seedは`seed-`。`trap`で消す(`references/state-provisioning.md` §1-b)。
 
 ## 同梱スクリプト
 
@@ -118,7 +129,7 @@ buildはプロジェクト側の手順に任せ、本skillは状態づくり、i
 | reference | 読む条件 |
 |---|---|
 | `references/state-provisioning.md` | env/URL/cloneでタップを減らす、CalDAV seedを作る、`.mobileconfig`可否を判断する |
-| `references/diagnosis.md` | preflight後もtap/AX/座標/所有権が直らない |
+| `references/diagnosis.md` | `describe-all`が空・部分的、または`frame:{0,0,0,0}`で`AXLabel`が`null`の1要素だけ / 画面に見えている要素が走査に出ない / 長いリストの下側が出てこない / 座標タップが効かない(特に小さい要素) / タップ後にアプリがSpringBoardへ落ちる / 他プロセスの`xcodebuild`と同じ端末を取り合う |
 | `references/text-input.md` | 非ASCII、IME、pbcopy、キーボード判定 |
 | `references/system-proxy.md` | HTTPS/TLSだけ失敗、CA追加後も失敗 |
 | `references/setup.md` | idb未導入、companion未接続 |

@@ -14,8 +14,34 @@ compatibility: >-
 
 # Liquid Glassアプリアイコンを作る
 
-`.icon`は`icon.json`と`Assets/`からなるbundleで、GUIなしに生成できる。素材と最終renderは別物なので、
-作成 → `ictool` render → 実サイズ比較のloopを必ず回す。
+素材と最終renderは別物。作成 → `ictool` render → 実サイズ比較のloopを必ず回す。
+
+## Operating Posture
+
+iOS 26のホーム画面に並べて古く見えないかだけを見る、目の厳しいアイコンデザイナーとして振る舞う。
+既定は通さないこと —— 素材を描く前に下のゲートで落とす。**モチーフを振り直す判断だけで終えてよく、
+PNGが0枚でも失敗ではない。**
+
+失敗モードは3つ。**上ほど重い。**
+
+1. **一世代前の設計言語のまま作り切る。** 手順は全部通り6 appearanceも出るのに、ホーム画面へ
+   置くと古い。手順の中では検出できないので、**描く前のゲートだけが止められる場所**になる。
+2. **はみ出しと潰れを目で判断する。** 回転は外接矩形を対角へ膨らませるため見積もれず、実地では
+   右端1024pxまで溢れたまま**3世代連続で見落とした**。bboxを実測する。
+3. **素材の見た目で採否を決める。** `_composite.png`とictool通過後は別物で、1024pxで成立して
+   いても80ptで潰れる。
+
+## 描く前のゲート
+
+素材を1枚でも描く前に通す。**該当したらモチーフを振り直す**(根拠は`references/design-rules.md`)。
+
+| 該当 | 直し方 |
+|---|---|
+| 意味を説明する絵(吹き出し=チャット、リング=カレンダー) | 説明的ピクトグラムは古びる。抽象的な記号と構成で成立させる(純正のカレンダーは数字でなくドット格子) |
+| シェイプが5個以上、または細い線・小さい形がある | 屈折が汚れる(Appleが最多の失敗として名指し)。2〜4個へ削る |
+| 文字・数字・ロゴタイプがある | 形へ置き換える(SVGを使うならアウトライン化) |
+| 前景が濃色・多色 | Tintedでコントラストを失う。前景は白〜near-whiteの単色にする |
+| 純正アイコンをまだ並べていない | 思い込み(たいてい一世代前)に沿った案しか出ない。手順1を先に回す |
 
 ## 手順
 
@@ -26,14 +52,11 @@ compatibility: >-
    swift scripts/contact_sheet.swift /tmp/apple-icons /tmp/apple-sheet.png
    ```
 
-   判断基準は`references/design-rules.md`を読む。blur、shadow、specular、bevel、glow、
-   opacity/translucency effectはIcon Composerへ任せ、iOS角丸maskも素材へ焼かない。
-
-   一方で**素材自身の色とその階調はsystemが作らない**。純正を実測するとbackgroundもlayerも
-   多段gradientを持っており、全layerをベタ塗りにすると案が平坦になり、質感がすべてsystem由来に
-   なって案ごとの違いが消える。gradient、重なりの合成、rim light、環境影を素材へ焼く判断と
-   失敗パターンは`references/native-look.md`。焼いたときはsystem effectとの二重を
-   6 appearanceで必ず確認する(rim lightはspecularに近いので特に)。
+   blur、shadow、specular、bevel、glow、opacity/translucency effect、iOS角丸maskは
+   素材へ焼かずIcon Composerへ任せる。一方で**素材自身の色とその階調はsystemが作らない** ——
+   全layerをベタ塗りにすると案ごとの違いが消える。gradient、重なりの合成、rim light、環境影を
+   焼く判断と失敗パターンは`references/native-look.md`。焼いたら6 appearanceで
+   system effectとの二重を確認する(rim lightはspecularに近いので特に)。
 
 2. 素材の複雑さで経路を選ぶ。
 
@@ -69,23 +92,19 @@ compatibility: >-
    `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`、`Assets.car`、`CFBundleIconName`、actool warningを確認する。
    配置、XcodeGen、旧OS向けappiconset、生成元の除外は`references/xcode-integration.md`を読む。
 
-6. 最終的にSimulatorまたは実機のホーム画面で確認する。system versionごとに効果が異なりうるため、
+6. 最終的にSimulatorまたは実機のホーム画面で確認する。効果はsystem versionで異なりうるので、
    サポート対象OSごとにappearanceを確認する。
 
 ## 同梱resource
 
-| resource | 用途 |
+手順で使う`scripts/`(`render_svg` / `draw_layers` / `build_icon` / `render_icon` /
+`contact_sheet` / `extract_apple_icons`)の引数は`--help`で確認する。
+`scripts/flatten_icon.swift`は旧形式appiconset向けのflat 1024 PNGを作る。
+生成元のSVG/specはcommitし、アプリbundleからは除外する。
+
+| reference | 読む条件 |
 |---|---|
-| `scripts/render_svg.swift` | SVG/CSS → `data-layer`別の透過PNG |
-| `scripts/draw_layers.swift` | JSON構図 → bbox/autofit付き透過PNG |
-| `scripts/build_icon.sh` | PNG群 → `.icon`。既存置換は`--force`必須 |
-| `scripts/render_icon.sh` | `.icon` → 6 appearance。失敗を非0で返す |
-| `scripts/contact_sheet.swift` | 複数PNGを大/120pt/80ptで比較 |
-| `scripts/flatten_icon.swift` | 旧形式appiconset向けflat 1024 PNG |
-| `scripts/extract_apple_icons.sh` | Simulator runtimeから純正iconを抽出 |
-| `references/design-rules.md` | システム効果との境界、安全域、構図の規則 |
+| `references/design-rules.md` | ゲート各項目の根拠、安全域、構図の規則、案の出し方 |
 | `references/native-look.md` | 素材へ焼くgradient/rim light/環境影のSVG recipe、純正の実測値、失敗パターン |
 | `references/icon-json-schema.md` | layer順、FillValue、appearance、ictool |
 | `references/xcode-integration.md` | Xcode/XcodeGen/appiconset/検証 |
-
-各scriptの引数は`--help`で確認する。生成元のSVG/specはcommitし、アプリbundleからは除外する。
