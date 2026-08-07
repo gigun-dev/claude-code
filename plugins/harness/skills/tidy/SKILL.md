@@ -8,7 +8,7 @@ description: >-
   Also on '/harness:tidy'.
 ---
 
-# harness:tidy — セッションを畳む
+# harness:tidy — close out a session
 
 ```!
 bash "${CLAUDE_SKILL_DIR}/scripts/tidy.sh"
@@ -16,87 +16,102 @@ bash "${CLAUDE_SKILL_DIR}/scripts/tidy.sh"
 
 ## Operating Posture
 
-あなたは**次のセッションの自分へ引き渡す当番**。関心は「設定が正しいか」(それは `doctor`)
-ではなく、**次に開いた自分がこの会話を覚えていなくても再開できるか**。診断で止めず片付けきる。
+You are **on duty handing off to your next self**. Your concern is not whether the setup is
+correct (that is `doctor`) but **whether the next session can resume without remembering
+this conversation**. Do not stop at diagnosis; finish the cleanup.
 
-失敗モードは2つ。**前者の方が重い**:
+Two failure modes. **The first is heavier:**
 
-1. **このセッションで触っていないものまで片付けようとする。** 実際に起きた(2026-08-06、
-   harness を触っただけで ios-skills の正典まで催促した)。催促が増えるほど催促は無視され、
-   最後は「tidy はうるさいから使わない」になって**機構ごと死ぬ**。触った範囲だけを見る。
-2. **正典を更新しないままコミット・push まで進める。** 次のセッションが差分の意図を読めない。
+1. **Trying to tidy things this session never touched.** This has actually happened
+   (2026-08-06: working only on harness, it nagged about the ios-skills canon too). The
+   more it nags, the more the nagging is ignored, and it ends at "tidy is noisy, don't use
+   it" — **the mechanism dies entirely.** Look only at what was touched.
+2. **Committing and pushing without updating the canon.** The next session cannot read the
+   intent behind the diff.
 
-**何も書かずに終わってよい。** log.md の条件に当たらなければ `- (記録不要: 定型作業のみ)`
-の1行で正しく終わる。「書くことを探す」のは失敗で、**書かないと決めた記録**が成功。
+**Writing nothing is a valid outcome.** If none of log.md's conditions apply, the correct
+ending is the single line `- (記録不要: 定型作業のみ)`. Hunting for something to write is the
+failure; **a recorded decision not to write** is the success.
 
-## やること
+## What to do
 
-上の検査結果を読み、次の順に実際に手を動かす:
+Read the check output above, then actually do these in order:
 
-1. **正典を更新する**(下記の書き方に従う。判断が要るのはここだけ)
-2. **コミットする** — 作業を意味のある単位に分けて。正典の更新も含める
-3. **push する** — pre-push の検証が走る。落ちたら直してから(`--no-verify` は緊急時だけ)
-4. 落ち穂拾い: log.md への追記と**索引の再生成**、配布物の世代が古ければ `/harness:init` 再実行
+1. **Update the canon** (see below — this is the only step needing judgement)
+2. **Commit** — split into meaningful units, including the canon update
+3. **Push** — pre-push runs the checks. If they fail, fix first (`--no-verify` is for emergencies)
+4. Loose ends: append to log.md and **regenerate its index**; if the distributed artifacts
+   are an old generation, re-run the install path in `/harness:doctor`
 
-**push は外向きの操作なので、実行前に何を push するか示して確認を取る**
-(コミットまでは手元の操作なので、指示があれば確認なしで進めてよい)。
-検証が落ちる・意図の分からない差分がある場合は、勝手に判断せずユーザーに聞く。
+**Push is an outward-facing action, so show what will be pushed and confirm before running it**
+(commits are local, so proceed without asking once instructed). If checks fail or a diff's
+intent is unclear, ask rather than deciding on your own.
 
-### 正典(next-directions.md)の更新 — 最重要
+### Updating the canon (next-directions.md) — the important part
 
-「今日コードを触ったのに正典を触っていない」が出たら、必ず書く。
+If the check says "code was touched today but the canon was not", you must write.
 
-- **現在地**: 今どこにいるか。特に**未検証の危険**(動かしていない実装・仕様どおりだが
-  実地未確認のもの)と**裁定待ちの判断**。**概観は書かない。**
-- **着手順**: 次にやること。理由を1行添える — 順番の根拠が無いと次のセッションが並べ替える。
-- **完了の書き方**: 「何をしたか」ではなく**何を確認したか**を書く。
+- **現在地**: where things stand. Especially **unverified risk** (code written but never
+  run, spec-correct but not field-tested) and **decisions awaiting adjudication**.
+  **Do not write an overview.**
+- **着手順**: what is next, with a one-line reason — without the reason for the ordering,
+  the next session will reorder it.
+- **How to record completion**: write **what you verified**, not what you did.
 
   ```markdown
   ~~pre-push ゲートのテンプレート化~~ ✅ 完了 — 検証: 型エラーを注入して push が
      中止されることを確認(2026-08-05, store-redirect)
   ```
 
-  コミットハッシュだけだと、後続のエージェントが「進捗があるから終わっている」と
-  読んで**勝手に完了宣言する**。
-- 変化は `> **YYYY-MM-DD 更新:**` を積層。**計画は消さない。**
+  With only a commit hash, a following agent reads "there is progress, so it must be done"
+  and **declares completion on its own.**
+- Stack changes as `> **YYYY-MM-DD 更新:**`. **Never delete the plan.**
 
-### 未コミットの作業
+**The `## 着手順` section has exactly one writer: `nd-tasks.sh`** (shipped with
+`/harness:status`). Use `--add` / `--done` / `--note` / `--archive` rather than hand-editing
+— hand edits drift the format, and numbering must scan the whole file to avoid reusing an
+archived ID. 現在地 and the catalog are prose and are edited by hand.
 
-コミットするか、正典の現在地に「何をやりかけているか」を書く。
+### Uncommitted work
 
-### log.md(あるリポジトリのみ)
+Either commit it, or write into 現在地 what is half-finished.
 
-時系列の生記録。**追記専用**で末尾へ足す。既存の記述は書き換えない。
+### log.md (only in repos that have one)
 
-**書く条件6つは log.md の先頭が正**(ここには複製しない)。**当てはめるだけで、ここで判断しない。**
-どれにも当たらないときは `- (記録不要: 定型作業のみ)` を1行だけ残す。見出しは
-`## YYYY-MM-DD 一行タイトル`。同じ日に2回書くなら見出しを2本立てる。
+A raw chronological record. **Append-only** at the end. Never rewrite existing entries.
 
-**却下・見送りには `R-n` の ID を前置する。** 書式は
-`` - `R-1` **却下: 一行タイトル** — 理由(一次資料 URL / issue 番号 / 実測値)``。
-採番は追記専用で欠番も再利用もしない(過去分は遡らない)。ID を付けた行だけが却下索引に載り、
-**「その案は前に検討したか?」を日付を知らずに引ける**ようになる。
+**The six conditions for writing are authoritative in log.md's own header** (not copied
+here). **Apply them; do not re-derive them here.** If none apply, leave the single line
+`- (記録不要: 定型作業のみ)`. Headings are `## YYYY-MM-DD one-line title`. Two entries on the
+same day get two headings.
 
-**追記したら索引を再生成する**(上の検査が「索引が古い」と言ったときも同じ)。日付索引と
-却下索引は独立で、書き換わるのはマーカー間だけなのでそのままコミットに含めてよい:
+**Prefix rejections and deferrals with an `R-n` ID.** Format:
+`` - `R-1` **却下: 一行タイトル** — 理由(一次資料 URL / issue 番号 / 実測値)``.
+Numbering is append-only with no gaps reused and no backfilling. Only ID-carrying lines make
+it into the rejection index, which is what makes **"was this idea considered before?"
+answerable without knowing the date.**
+
+**After appending, regenerate the index** (also when the check above says the index is
+stale). The date index and rejection index are independent, and only the region between
+markers is rewritten, so it is safe to include in the same commit:
 
 ```bash
-bash "${CLAUDE_SKILL_DIR}/scripts/log-index.sh"                       # 日付索引 + 却下索引
-bash "${CLAUDE_SKILL_DIR}/scripts/log-index.sh" --check                # 書き換えずに鮮度だけ見る
-bash "${CLAUDE_SKILL_DIR}/scripts/log-index.sh" --only index --check   # 却下索引が未導入の配布先
+bash "${CLAUDE_SKILL_DIR}/scripts/log-index.sh"                       # date index + rejection index
+bash "${CLAUDE_SKILL_DIR}/scripts/log-index.sh" --check                # freshness only, no writes
+bash "${CLAUDE_SKILL_DIR}/scripts/log-index.sh" --only index --check   # for repos without a rejection index
 ```
 
-`--only index|rejected` の用途は1つだけ —— 却下索引をまだ持たない配布済み log.md で、
-日付索引の鮮度検査だけを生かすため(`tidy.sh` がこの形で呼ぶ)。
+`--only index|rejected` exists for exactly one purpose: keeping the date-index freshness
+check alive in already-distributed log.md files that do not yet have a rejection index
+(`tidy.sh` calls it in that form).
 
-**上の自動検査(`!` 記法)は読み取り専用なので、索引は自動では直らない。**
-`!` で走るものに書き込みを持たせない境界を守るため、再生成はここで明示的に呼ぶ。
+**The auto-check above (`!` notation) is read-only, so the index does not fix itself.**
+Regenerating is called explicitly here, to preserve the boundary that nothing run by `!`
+may write.
 
-## 関連
+## Related
 
-- **`/harness:doctor`** — 設定がベストプラクティスを守れているか(静的検査)。
-- **`/harness:init`** — 配線漏れ・世代の古さを直す(冪等)。
-- **`/harness:next`** — 「着手順」の一覧(読み取り専用)。**その `scripts/nd-tasks.sh` が
-  着手順の唯一の書き手**でもある(`--add` / `--done` / `--note` / `--archive`)。手で書くと
-  書式がドリフトするので、起票・完了・アーカイブはスクリプトに書かせる。
-- **`/telemetry:review`** — このセッションで何に時間を使ったかの実測。
+- **`/harness:doctor`** — is the setup sound (static check), and the install/repair path.
+- **`/harness:status`** — the 着手順 listing (read-only). Ships `nd-tasks.sh`, the sole
+  writer of that section.
+- **`/telemetry:review`** — measured time spent in this session.

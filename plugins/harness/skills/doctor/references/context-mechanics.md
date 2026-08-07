@@ -55,7 +55,7 @@
 > and discards the **tail** (the actual procedure). **That is backwards.** — issue #82144
 
 **長い SKILL.md は compaction 後に「前置きが残って手順が消える」。**
-日本語は約 1.1 tok/字なので、**5,000 tok ≒ 180行**。行数ではなくトークンで測ること。
+日本語は約 1.4 tok/字(4.7 以降)なので **5,000 tok ≒ 3,500 字**。行ではなく文字/トークンで測ること。
 
 ---
 
@@ -67,8 +67,10 @@
 | #42369 | CLOSED | **v2.1.89 の CHANGELOG は 50K と書いているが、実測は 10K** |
 | #84021 | OPEN(2026-08-05) | 内部関数 `persistHookOutput` の閾値が 10,000。`additionalContext` も同じ |
 
-**harness の頭の予算 8,000B はこれに対する余裕。**日本語は 3B/字なので 8,000B ≒ 2,700字で、
-文字数上限に対しては十分に安全側。
+**harness の頭の予算 8,000 *文字* はこれに対する余裕**(2,000字ぶん)。
+⚠️ 2026-08-07 まで 8,000 *バイト* で運用していたが、これは #70460 の "10K" を
+バイトと読み違えたもの。日本語 3B/字なので実効 2,700字 —— **実際の上限の 27% で
+鳴らしていた。**単位はここでは文字。
 
 **🔵 実測: `SessionStart:compact` は発火する。**このリポジトリで7回(中央値 37ms)。
 `matcher` に `compact` を書けば compaction 後にも走る。
@@ -107,7 +109,98 @@ budget = contextWindow × 4 × skillListingBudgetFraction
 > 効くのは `~/.claude/skills/` 配下と bundled skill だけ。
 
 **🔵 `disable-model-invocation: true` はプラグイン skill でも効く**(`/context` の一覧に
-`harness:next` が出てこない)。description ごと listing から外れるので予算も食わない。
+`harness:status` が出てこない)。description ごと listing から外れるので予算も食わない。
+
+---
+
+## 4.5 トークン数の数え方 —— ローカルトークナイザは存在しない 🔵
+
+**2026-08-08、バイナリ(2.1.222・271MB)で確認。**予算をトークンで持つなら、まずこれを知ること。
+
+| 探したもの | ヒット |
+|---|---|
+| `cl100k` / `o200k` / `merges.txt` / `vocab.json` / `bpe_ranks` / `special_tokens` | **すべて 0 件** |
+| `/v1/messages/count_tokens`(POST) | あり |
+| `count_tokens_unreachable`(テレメトリのイベント名) | あり |
+
+**Claude Code は BPE テーブルを持っていない。**正確なトークン数が要るときは
+**API を叩いている**(`POST /v1/messages/count_tokens`)。
+
+そして API が届かないときの挙動が、そのまま我々の設計の答えになっている:
+
+```js
+// /plugin の詳細表示(バイナリから復元)
+w = { always_on: S.reduce((k,O) => k + O.chars.always_on, 0), ... }  // ← 文字数を集計
+A = m[p[0]]                                                          // ← API 由来のアンカー
+R = A?.always_on ?? i(w.always_on, w.always_on, void 0)              // ← 無ければ文字数だけで概算
+...
+if (A) Se("cli_plugin_details")
+else   Oe("cli_plugin_details", "count_tokens_unreachable")
+g.push("  Token counts are estimates and may differ from actual usage.")
+```
+
+**つまり Claude Code 自身が「コンポーネントごとの文字数 + API で測った1点のアンカー」で
+トークンを按分しており、アンカーが取れなければ文字数だけの概算に落ちて、
+"Token counts are estimates and may differ from actual usage." と明示する。**
+
+**帰結(harness の予算設計に直結):**
+
+1. **ローカルで正確に数える方法は無い。** tiktoken は OpenAI の語彙で、Claude とは別物
+   (特に日本語で大きくズレる)。使ってはいけない。
+2. **フックから API は叩けない。** 毎セッション開始時のネットワーク往復・認証情報・
+   オフラインでの沈黙 —— 原則4(検知器は黙って死ぬ前提)に正面から反する。
+3. **だから概算しかない。**位置づけは Claude Code の**フォールバック側と同じ**であって、
+   劣った代用品ではない。`≒` の表示は Claude Code の
+   "estimates and may differ" と同じ開示。
+4. **ただし harness の概算は言語で重み付けする**(英語 ≒ 0.33 tok/字・日本語 ≒ 1.4 tok/字)。
+   Claude Code のフォールバックは文字数のみで言語を区別しないので、日本語混在の
+   リポジトリではこちらのほうが実態に近い。
+5. ⚠️ **トークナイザはモデルの属性。4.7 で切り替わっており、同じ文字列で約 30% 増える** 🟢
+   > "Claude 4.7 and later models use a newer tokenizer. The same input text produces
+   >  **approximately 30 percent more tokens** than on earlier models."
+   > — platform.claude.com/docs/en/build-with-claude/token-counting
+
+   | モデル | トークナイザ |
+   |---|---|
+   | Opus 5 / Sonnet 5 / Fable 5 / Mythos 5 | **新**(4.7 系) |
+   | Haiku 4.5 およびそれ以前 | 旧 |
+
+   **当初 0.25 / 1.1(旧トークナイザの文献値)を置き、「日本語 1.1 は過大だから安全側」と
+   書いたが、方向が逆だった** —— 現行モデルでは約 30% **過小**、つまり
+   「予算内に見えて実は超過」= 沈黙する失敗の側に倒れていた。× 1.3 して 0.33 / 1.4。
+   スクリプトはセッションのモデルを知れないので**多い側に固定する**(旧モデルでは過大 = 安全側)。
+6. ⚠️ **係数は定数ではなく、上書き可能な既定値として実装すること。**
+   **harness はエージェント非依存**(Codex アダプタを配る)なのに、**トークナイザは
+   ベンダー固有** —— Claude と GPT では語彙が違う。文字はテキストそのものの属性だが、
+   トークンは「テキスト × トークナイザ」の属性なので、配布物に定数として埋めると
+   他クライアントで黙って嘘をつく。実装は env で差し替え可能にし、出力にラベルを出す:
+   `HARNESS_TOK_ASCII_PCT` / `HARNESS_TOK_WIDE_PCT` / `HARNESS_TOKENIZER_LABEL`。
+   **文字数の予算だけはベンダー非依存なので、ゲートは常に文字側が主。**
+   (言語で加重する構造自体はベンダー非依存 —— 英語中心の BPE なら日本語が高いのは共通で、
+    変わるのは倍率だけ。だから構造は残して係数だけ外に出す。)
+7. **較正は `scripts/calibrate.sh` で実際のトークナイザに当てられる** 🔵
+   (`--claude` = count_tokens API・**無料**、`--gpt` = ローカルの tiktoken)。
+   **`!` 記法には絶対に置かない** —— 外向きの通信を行いうるため、必ず明示起動。
+
+   **⚠️ ファイルは2本以上渡す。**未知数が2つ(ASCII 係数・非ASCII 係数)あるので
+   1本では原理的に解けない。初版は ASCII 側を固定して1本で解いており、日本語率 1% の
+   ファイルで **`WIDE_PCT = -679`(負)** を出した。いまは切片なしの最小二乗で両方を解く。
+
+   **🔵 実測(2026-08-08、日本語率 1% / 25% / 44% の3本、o200k_base):**
+
+   | トークナイザ | ASCII | 非ASCII | 最大残差 |
+   |---|---|---|---|
+   | `o200k_base`(GPT / Codex) | **25** | **102** | **0.8%** |
+   | Claude 4.7+(現行の既定・文献値) | 33 | 140 | ⚪ 未測定 |
+
+   **線形モデル(tok = a·ASCII数 + w·非ASCII数、切片なし)は残差 1% 未満で成立する。**
+   非ASCII を1種類に丸めている(かな・漢字・記号でトークン単価は違うはず)にもかかわらず
+   この精度なので、**予算の用途にはこのモデルで足りる。**
+
+   **同じ文書が Claude 換算と GPT 換算で 35% 違う** —— 係数を配布物の定数にしなかった
+   判断は、この数字で裏付けられている。
+
+   ⚠️ Claude 側は API キーが無く未測定。**測るまで 33 / 140 を「正しい」と書かないこと。**
 
 ---
 

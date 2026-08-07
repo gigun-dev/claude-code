@@ -133,7 +133,7 @@ fi
 echo
 echo "## 正典の更新"
 if [ ${#nds[@]} -eq 0 ]; then
-  warn "next-directions.md が無い。/harness:init で導入できる"
+  warn "next-directions.md が無い。/harness:doctor で導入できる"
 else
   # 今日変更されたファイル(コミット済み + 未コミット)。正典自身と docs は除く。
   changed_today=$( { git log --since="$today 00:00" --name-only --format="" 2>/dev/null
@@ -247,6 +247,6 @@ fi
 # "harness-template v " という無意味な出力になる(survey.sh の既知不具合2と同型)。
 # 必ず数字1桁以上を要求する。
 gen=$(grep -rhosE 'harness-template v[0-9]+(\.[0-9]+)*' .claude .githooks 2>/dev/null | sort -u | tr '\n' ' ')
-[ -n "$gen" ] && { echo; echo "## 配布物の世代"; note "$gen"; note "(配布元より古ければ /harness:init の再実行で更新される。冪等)"; }
+[ -n "$gen" ] && { echo; echo "## 配布物の世代"; note "$gen"; note "(配布元より古ければ /harness:doctor の再実行で更新される。冪等)"; }
 
 finish

@@ -14,7 +14,7 @@ paths:
 (完了は打ち消し線+✅、状況変化は `> 日付 更新:` を積層。計画は消さない)。
 
 **時系列の生記録は `docs/ios-skills/log.md`(追記専用アーカイブ)。** 書く条件6つ・読む条件4つ・
-見出し規約・年次ローテは `plugins/harness/skills/init/assets/log.md` の先頭が**正**(複製しない)。
+見出し規約・年次ローテは `plugins/harness/skills/doctor/assets/log.md` の先頭が**正**(複製しない)。
 索引は自動生成 — 手で書かず `skills/tidy/scripts/log-index.sh` に書かせる
 (旧書式の箇条書きからは 2026-08-07 に見出し書式へ移行済み。経緯は log.md の同日の項目)。
 

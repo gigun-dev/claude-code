@@ -72,10 +72,10 @@ else
   sed "s/{{DATE}}/$(date +%Y-%m-%d)/g" "$ASSETS/next-directions.md" > "$ND"
   DID+=("$ND: テンプレートから作成")
   TODO+=("$ND の {{CURRENT_STATE}} / {{NEXT_STEPS}} / {{CATALOG}} を、README・直近コミット・会話の文脈から埋める")
-  # 着手順はチェックリスト形式(/harness:next が読む唯一の機械可読な節)。ID の接頭辞だけは
+  # 着手順はチェックリスト形式(/harness:status が読む唯一の機械可読な節)。ID の接頭辞だけは
   # 人が決めるしかないので TODO に出す —— テンプレートの `X-` のままだと、どのプロジェクトの
   # 項目かが --all の横断一覧で判別できなくなる。
-  TODO+=("$ND の着手順の ID 接頭辞 'X-' をプロジェクトの略号へ変える(例: caldav なら 'CD-1')。書式は節の先頭コメント参照。確認は /harness:next --lint")
+  TODO+=("$ND の着手順の ID 接頭辞 'X-' をプロジェクトの略号へ変える(例: caldav なら 'CD-1')。書式は節の先頭コメント参照。確認は /harness:status --lint")
 fi
 
 # --- 1b. log.md(追記専用アーカイブ・任意) -----------------------------------

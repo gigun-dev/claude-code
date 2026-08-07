@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.8.0 — 導入判断に必要な事実を集める(読み取り専用)。
+# harness-template v0.9.0 — 導入判断に必要な事実を集める(読み取り専用)。
 #
 # 設計意図(2026-08-05):
 #   SKILL.md の `!` 記法から、スキル読み込み時に**無条件で**実行される。したがって:
@@ -82,7 +82,7 @@ skip() { printf '  ⏭ %s\n' "$*"; skips=$((skips+1)); }
 # 出口を1関数に集約する理由は check.sh / tidy.sh と同じ(マーカーの出し忘れ防止)。
 finish() {
   say ""
-  say "=== 調査完了: skip ${skips} 件(survey.sh v0.8.0) ==="
+  say "=== 調査完了: skip ${skips} 件(survey.sh v0.9.0) ==="
   exit 0
 }
 
@@ -163,7 +163,15 @@ if [ -n "$nd" ]; then
     # (check.sh の CLAUDE.md 節と同型の壊れ方)。読めない、と正直に言う。
     skip "docs/next-directions.md の読み取り権限が無く検査できなかった"
   elif grep -q '^<!-- session-head-end' docs/next-directions.md; then
-    say "  next-directions.md: あり(マーカーあり・頭 $(( $(grep -n '^<!-- session-head-end' docs/next-directions.md | head -1 | cut -d: -f1) - 1 )) 行 / 全 $(wc -l < docs/next-directions.md) 行)"
+    # 頭のサイズは**文字と概算トークン**で出す(行はどの機構も使っていない代理指標。
+    # 判断規則は docs/principles.md 規則8)。全体は行のままでよい —— 全文は注入されないので
+    # ここで見たいのは「人が読み通せる長さか」だから。**単位は機構ごとに選ぶ。**
+    _m=$(grep -n '^<!-- session-head-end' docs/next-directions.md | head -1 | cut -d: -f1)
+    _h=$(sed -n "1,$((_m - 1))p" docs/next-directions.md)
+    _c=$(printf '%s' "$_h" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' ')
+    _a=$(printf '%s' "$_h" | LC_ALL=C tr -cd '\000-\177' | wc -c | tr -d ' ')
+    say "  next-directions.md: あり(マーカーあり・頭 ${_c} 字 / ≒$(( (_a * ${HARNESS_TOK_ASCII_PCT:-33} + (_c - _a) * ${HARNESS_TOK_WIDE_PCT:-140}) / 100 )) tok(${HARNESS_TOKENIZER_LABEL:-Claude 4.7+} 換算) / 全 $(wc -l < docs/next-directions.md | tr -d ' ') 行)"
+    unset _m _h _c _a
   else
     say "  ⚠️ next-directions.md: あるがマーカー無し(旧様式 — 上書きせずマイグレーションが要る)"
   fi
@@ -186,7 +194,26 @@ if [ -e docs/log.md ]; then
 else
   say "  docs/log.md: なし(コミット数 $(git rev-list --count HEAD 2>/dev/null || echo 0) — 長期プロジェクトなら --with-log を検討)"
 fi
-say "  配布物の世代: $(grep -rhos 'harness-template v[0-9.]*' .claude .githooks 2>/dev/null | sort -u | tr '\n' ' ' || echo '(未導入)')"
+# 配布物の世代刻印。**2026-08-08 に2つのバグを直した(H-3 後半)。**
+#
+#  (1) 正規表現が `harness-template v[0-9.]*` で、`[0-9.]*` が**0文字にマッチする**。
+#      その結果 `.claude/rules/harness.md` の散文
+#      「どこが古いかは `grep -r "harness-template v"` で分かる」を拾い、
+#      バージョン番号の無い `harness-template v` を「世代」として出していた。
+#      **配布物を1つも持たないリポジトリで「導入済みに見える」**という、
+#      検知器が黙って嘘をつくパターン。→ 数字を1桁以上必須にする。
+#
+#  (2) `... | tr '\n' ' ' || echo '(未導入)'` の `||` が**永久に発火しない**。
+#      `||` はパイプライン全体の終了コード = 最後の `tr` のものを見るので、grep が
+#      1件も見つけずに 1 を返しても `tr` は 0 を返す。**未導入のとき空文字が出るだけで
+#      「未導入」とは一度も言えていなかった。** → 変数に取ってから空判定する。
+#
+# ⚠️ この2つは**同じ行に同居していた**。(1) が (2) を隠していた —— 散文が必ず1件
+#    マッチするので空になることが無く、(2) のバグが表に出なかった。
+#    **検知器のバグは互いを隠す**(原則4)。1つ直したらもう一度動かして確かめること。
+gen=$(grep -rhos 'harness-template v[0-9][0-9.]*' .claude .githooks 2>/dev/null | sort -u | tr '\n' ' ')
+gen=${gen% }
+say "  配布物の世代: ${gen:-(未導入 — 刻印を持つ配布物が .claude/ にも .githooks/ にも無い)}"
 
 # --- 現在地の材料(next-directions の {{CURRENT_STATE}} 用) --------------------
 say ""

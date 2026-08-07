@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.9.0 — ベストプラクティス遵守を機械的に検査する(読み取り専用)。
+# harness-template v0.10.0 — ベストプラクティス遵守を機械的に検査する(読み取り専用)。
 #
 # 設計意図(2026-08-05):
 #   機械判定できる項目だけを確定的に検査する。スキルやハーネスを作った直後に
@@ -16,7 +16,8 @@
 #   (1) pre-push 検査の起点を `.githooks/` 固定から `git config core.hooksPath` の実値へ
 #       変えた。詳細は該当箇所のコメント(「pre-push」節)を参照 —— dotfiles
 #       (`core.hooksPath=git/hooks`)で「pre-push が無い」と誤検知していた実物のバグ修正。
-#   (2) `CLAUDE_MD_MAX` を 200 → 80 に下げた。理由は変数定義の直上コメントを参照。
+#   (2) `CLAUDE_MD_MAX` を 200 → 80 に下げた。**→ 2026-08-08 に行という単位ごと廃止した**
+#       (`CLAUDE_MD_WARN_TOKENS` / `CLAUDE_MD_HARD_CHARS` へ)。経緯は変数定義の直上コメント。
 #   (3) `-h/--help` と未知引数の検知を追加(agentskills.io の script 規約に合わせる)。
 #       この検査自体は元々「読み取り専用・必ず exit 0」が契約なので、それは変えていない
 #       —— 引数の誤り(使い方の誤り)だけは exit 2 で区別する。
@@ -89,20 +90,87 @@ while [ $# -gt 0 ]; do
 done
 
 # --- 閾値 -----------------------------------------------------------------
-# CLAUDE_MD_MAX: ルート CLAUDE.md の推奨上限行数。
-#   2026-08-05 時点は記事の明示値である 200 行だったが、2026-08-07 に 80 行へ下げた。
-#   理由: next-directions.md の「頭」の予算は 8,000B / 80行(nd-tasks.sh の HEAD_WARN_BYTES /
-#   このリポジトリの .claude/rules/harness.md にある頭の予算と同じ数字に揃えてある)。
-#   CLAUDE.md は**無条件・毎セッション全文ロード**される —— 頭は SessionStart フックの
-#   出来次第で切り詰め・pointer 化ができるが、CLAUDE.md は Claude Code 本体が常に全文読む
-#   ぶん、むしろ頭より条件が悪い。それなのに閾値が2.5倍緩いのは逆転している。
-#   盆栽の7原則・原則3「⚠️ 閾値を上げて警告を消すのは禁止。下げ直すのは可」に従い、
-#   緩い方(200)ではなく厳しい方(80)へ揃え直す。
-#   ⚠️ この変更で新たに警告対象になる配布済みリポジトリがある(2026-08-07 実測:
-#      swift-mcp-app 109行 / cf-asc-dashbord 89行 / figmate 88行 / dotfiles 169行)。
-#      これは意図した結果 —— 個別に閾値を戻したり例外を作ったりしないこと。
-CLAUDE_MD_MAX=80
-SECTION_MAX=30         # CLAUDE.md 内の1節がこれを超えたら skill 化を検討
+# **2026-08-08: CLAUDE.md の予算を「行」から「概算トークン + 文字」へ変えた。**
+#
+#   旧 CLAUDE_MD_MAX=80(行)は、頭の予算 80 行からの**類推**で置いた数字だった。
+#   その頭の 80 行自体がどの機構にも存在しない代理指標だったので、根拠の無い数字を
+#   根拠の無いまま増やしていたことになる。**代理指標は人が目視で数えるときに要るもので、
+#   スクリプトが測るなら実単位で出せる** —— 「ロジックをスクリプトへ寄せる」方針と矛盾していた。
+#
+#   実測(2026-08-08、配布先4リポジトリの CLAUDE.md):
+#     notchbar        70行 / 3,002字 / ≒  768 tok(日本語率  0%)  旧✓ 新✓
+#     figmate         88行 / 3,420字 / ≒1,743 tok(日本語率 30%)  旧⚠️ 新✓  ← 誤検知だった
+#     swift-mcp-app  109行 / 4,986字 / ≒2,812 tok(日本語率 36%)  旧⚠️ 新⚠️
+#     dotfiles       169行 /10,358字 / ≒4,796 tok(日本語率 25%)  旧⚠️ 新⚠️
+#   **notchbar と figmate は行数が 1.26 倍しか違わないのに、トークンは 2.27 倍違う。**
+#   行は言語構成の関数であって、複数リポジトリへ配る harness にとって最悪の単位。
+#   figmate は 88 行というだけで警告されていたが、実費は予算の 87% で健全 —— **行で測っていた
+#   ことが生んだ実物の誤検知**。同じ予算が英語なら多くの行を買えるのが正しい挙動。
+#
+#   CLAUDE.md を縛る実際の機構は2つ:
+#     (1) 概算トークン —— **無条件・毎セッション全文ロードされ、compaction 後も disk から
+#         再注入される**。つまり払い続ける。これは資源配分であって検知器の閾値ではない
+#         (docs/principles.md 規則8)—— 上げるなら実費として意識的に。
+#     (2) 文字数 40,000 —— **Claude Code 本体がこの値で警告を出す**(公式)。
+#         ハード上限の証拠は無いので ✗ ではなく強い警告として扱う。
+#
+#   ⚠️ **CLAUDE.md のコストは「毎セッション1回」ではない。乗算される。**
+#      CLAUDE.md は**サブエージェントにも継承される**(Explore と Plan だけ例外)。一方で
+#      ND の頭を運ぶ SessionStart フックは**サブエージェントでは発火しない**(#46696)。
+#        ND の頭   : main のモデルで 1 回
+#        CLAUDE.md : 1 + サブエージェント起動回数
+#      implementer / artisan / architect を1セッションで回せば CLAUDE.md は4回払う。
+#      **2,000 が頭の 3,000 より緩いのは、この構造からすると逆**。ただし実効レバーは
+#      閾値ではなく置き場所 —— **main しか要らない情報を CLAUDE.md に置かない**
+#      (乗算されるのはこちらだから。手順は skill、ファイル限定の制約は paths 付き rules、
+#      現在地は ND の頭へ)。数字を測らずに下げるのは根拠が無いので、まず根拠を正した。
+#   ⚠️ 原則3「閾値を上げて警告を消すのは禁止。下げ直すのは可」。
+#      単位の是正は「上げ」ではないが、実効が緩む方向のリポジトリが出るのは事実なので隠さない。
+CLAUDE_MD_WARN_TOKENS=2000    # 常時オン層の取り分。超えたら skill / paths 付き rules へ逃がす
+CLAUDE_MD_HARD_CHARS=40000    # Claude Code 本体が警告を出す値(公式)
+SECTION_MAX=30                # CLAUDE.md 内の1節がこれを超えたら skill 化を検討(節は人が読む単位なので行が正しい)
+
+# 文字数と概算トークン数。**ロケールに依存させない** —— `wc -m` はロケール次第でバイト数を
+# 返す(LANG 未設定の macOS が実際にそう)。代わりに UTF-8 の構造を直接使う:
+#   文字数     = 継続バイト(0x80-0xBF)を落とした残りのバイト数(1文字1バイトに潰れる)
+#   ASCII 文字 = 0x00-0x7F だけ残したバイト数
+# トークンは概算(**英語 ≒ 0.33 tok/字、日本語 ≒ 1.4 tok/字** を混合率で加重)。
+#
+# **概算しかないのは、Claude Code 自身がローカルトークナイザを持たないから**(2026-08-08 に
+# バイナリ 2.1.222 で確認: cl100k / o200k / merges.txt / vocab.json / bpe_ranks すべて 0 件)。
+# 本体は `POST /v1/messages/count_tokens` を叩き(**無料**。RPM 制限のみ)、届かなければ
+# 文字数だけの概算に落ちて "Token counts are estimates and may differ from actual usage."
+# と出す。この式はそのフォールバックと同じ位置(言語で重み付けする分だけ日本語混在では実態に近い)。
+#
+# ⚠️ **係数は 2026-08-08 に 0.25 / 1.1 から引き上げた。方向を間違えていた。**
+#    公式: "Claude 4.7 and later models use a newer tokenizer. The same input text produces
+#    **approximately 30 percent more tokens** than on earlier models."
+#    0.25 / 1.1 は旧トークナイザの文献値で、**Opus 5 を含む 4.7 以降では約 30% 過小**だった。
+#    「日本語 1.1 は過大だから安全側」と書いていたのは誤りで、実際は危険側(予算内に見えて
+#    実は超過 = 沈黙する失敗)に倒れていた。× 1.3 して 0.33 / 1.4 にしてある。
+#
+# ⚠️ **トークナイザはモデルの属性であって、テキストの属性ではない。**同じ文字列でも
+#    4.7 未満と 4.7 以降で 30% 違う。スクリプトはセッションのモデルを知れないので、
+#    **新しい(=多い)側に固定する** —— 旧モデルでは過大評価になるが、過大は安全側。
+#    `mF_=200000` を固定値と読み違えたのと**同じ種類の誤り**(環境依存の値を定数扱いする)。
+# ⚠️ まだ実測で較正していない(較正の口は `/context`、または count_tokens API)。
+# ⚠️ 概算であることは出力に `≒` で明示する。精密に見えると予算が帳尻合わせに化ける。
+# 根拠と較正手順は ../references/context-mechanics.md §4.5。
+# Why not python3/tiktoken: tiktoken は **OpenAI の語彙**で Claude とは別物(日本語で大きく
+# ズレる)。加えて配布先に python3 がある保証が無く、無いと**黙って計測が消える**(原則4)。
+# tr は POSIX で必ずある。この計測は session-start.sh / nd-tasks.sh / survey.sh と同一の式。
+# ⚠️ 係数は**上書き可能な既定値**であって定数ではない。harness はエージェント非依存
+#    (Codex アダプタを同梱)だが、トークナイザはベンダー固有 —— 文字はテキストそのものの
+#    属性、トークンは「テキスト × トークナイザ」の属性。定数として埋めると他クライアントで
+#    黙って嘘になるので env で差し替えられるようにし、出力にラベルを出す。
+TOK_ASCII_PCT=${HARNESS_TOK_ASCII_PCT:-33}
+TOK_WIDE_PCT=${HARNESS_TOK_WIDE_PCT:-140}
+TOKENIZER_LABEL=${HARNESS_TOKENIZER_LABEL:-Claude 4.7+}
+measure_file() {
+  MEAS_CHARS=$(LC_ALL=C tr -d '\200-\277' < "$1" | wc -c | tr -d ' ')
+  local ascii; ascii=$(LC_ALL=C tr -cd '\000-\177' < "$1" | wc -c | tr -d ' ')
+  MEAS_TOKENS=$(( (ascii * TOK_ASCII_PCT + (MEAS_CHARS - ascii) * TOK_WIDE_PCT) / 100 ))
+}
 findings=0
 
 note() { printf '  %s\n' "$*"; }
@@ -127,7 +195,7 @@ finish() {
   else
     echo "指摘 ${findings} 件。各指摘の意味と直し方はこの skill の本文を参照。"
   fi
-  echo "=== 検査完了: ${findings} 件(check.sh v0.9.0) ==="
+  echo "=== 検査完了: ${findings} 件(check.sh v0.10.0) ==="
   exit 0
 }
 
@@ -167,10 +235,15 @@ elif [ ! -r CLAUDE.md ]; then
   skip "CLAUDE.md の読み取り権限が無く検査できなかった"
 else
   lines=$(wc -l < CLAUDE.md | tr -d ' ')
-  if [ "$lines" -gt "$CLAUDE_MD_MAX" ]; then
-    warn "CLAUDE.md が ${lines} 行(推奨 ${CLAUDE_MD_MAX} 行以下)。無条件・毎セッション全文ロードされるコストなので他より厳しめの閾値にしてある — 手順は skill、ファイル限定の制約は paths 付き rules へ"
+  measure_file CLAUDE.md
+  # 行数も出すが**予算としては出さない**(参考値)。行はどの機構も使っておらず日本語率で
+  # 2倍以上ブレるが、人が「どこを削るか」を探すときの手掛かりは結局行なので表示は残す。
+  if [ "$MEAS_CHARS" -gt "$CLAUDE_MD_HARD_CHARS" ]; then
+    warn "CLAUDE.md が ${MEAS_CHARS} 字(Claude Code 本体が ${CLAUDE_MD_HARD_CHARS} 字で警告を出す)。≒${MEAS_TOKENS} tok / ${lines} 行 — 手順は skill、ファイル限定の制約は paths 付き rules へ"
+  elif [ "$MEAS_TOKENS" -gt "$CLAUDE_MD_WARN_TOKENS" ]; then
+    warn "CLAUDE.md が ≒${MEAS_TOKENS} tok(${TOKENIZER_LABEL} 換算・予算 ${CLAUDE_MD_WARN_TOKENS} tok。${MEAS_CHARS} 字 / ${lines} 行)。**無条件・毎セッション全文ロードされ compaction 後も再注入される**ので、太った分をずっと払い続ける — 手順は skill、ファイル限定の制約は paths 付き rules へ"
   else
-    ok "CLAUDE.md ${lines} 行(推奨 ${CLAUDE_MD_MAX} 行以下)"
+    ok "CLAUDE.md ≒${MEAS_TOKENS} tok(${TOKENIZER_LABEL} 換算・予算 ${CLAUDE_MD_WARN_TOKENS} tok。${MEAS_CHARS} 字 / ${lines} 行)"
   fi
   # 「毎回X したら Y」= 指示は必ず守られるとは限らない → Hook が正解(記事のアンチパターン)。
   if grep -nE '毎回|必ず[^。]*(実行|走ら|チェック)|する前に必ず|常に.*(実行|確認)' CLAUDE.md >/dev/null 2>&1; then
@@ -255,12 +328,18 @@ for cand in docs/next-directions.md docs/*/next-directions.md; do
   [ -f "$cand" ] && { nd="$cand"; break; }
 done
 if [ -z "$nd" ]; then
-  warn "next-directions.md が無い(セッション間の引き継ぎが会話履歴頼みになる)。/harness:init で導入できる"
+  warn "next-directions.md が無い(セッション間の引き継ぎが会話履歴頼みになる)。/harness:doctor で導入できる"
 else
   ok "正典: $nd"
   if grep -q '^<!-- session-head-end' "$nd"; then
-    head_lines=$(( $(grep -n '^<!-- session-head-end' "$nd" | head -1 | cut -d: -f1) - 1 ))
-    [ "$head_lines" -gt 80 ] && warn "頭が ${head_lines} 行(目安 80)。棚卸しを検討" || ok "頭 ${head_lines} 行"
+    # ⚠️ **ここで頭のサイズを測らないのは意図的**(2026-08-08 に削除)。
+    # 旧実装は「頭が N 行(目安 80)」を出していたが、頭のサイズはこの時点で
+    # **3箇所が3つの単位で測っていた** —— session-start.sh が行、nd-tasks.sh がバイトと行、
+    # ここが行(しかも 80 をハードコード)。原則7「正典は1箇所」に正面から反する。
+    # 正典は assets/session-start.sh(注入の当事者・毎セッション走る)、横断の一覧は
+    # /harness:status。doctor の仕事は**構造が壊れていないか**(マーカーの有無)であって、
+    # サイズの再計測ではない。数字が要るときは status を叩く。
+    ok "session-head-end マーカーあり(頭のサイズは /harness:status が出す)"
   else
     # pointer 方式(マーケットプレイス型)なら頭注入しないのでマーカーは不要。
     if grep -qs 'next-directions' .claude/hooks/session-start.sh 2>/dev/null; then
@@ -270,9 +349,19 @@ else
     fi
   fi
   # 鮮度: 現在地の日付より新しいコミットがあるか。
-  hd=$(grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}' "$nd" | head -1)
+  # ⚠️ 旧実装は**ファイル全文から最初の日付**を拾っていた。動いてはいたが、頭の本文に
+  #    日付(更新ブロックなど)が現在地の見出しより前に来ると別の日付を読む。
+  #    session-start.sh(v0.3.0)と同じく**見出し行を特定してからその行の日付を拾う**形に揃えた
+  #    —— 同じ検査が2実装で違う答えを出す状態を残さない。
+  hl=$(grep -m1 -E '^#+[[:space:]]*現在地' "$nd" || true)
+  hd=$(printf '%s' "$hl" | grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}' | head -1 || true)
   lc=$(git log -1 --format=%cs 2>/dev/null)
-  if [ -n "$hd" ] && [ -n "$lc" ] && [ "$lc" \> "$hd" ]; then
+  # 見出しはあるのに日付が取れない = 鮮度検査が無効化されている。黙って通さない(原則4)。
+  if [ -z "$hl" ]; then
+    warn "$nd に \`## 現在地\` の見出しが無い(鮮度検査が無効化されている)"
+  elif [ -z "$hd" ]; then
+    warn "現在地の見出しから日付が読めない(鮮度検査が無効化されている): $hl"
+  elif [ -n "$lc" ] && [ "$lc" \> "$hd" ]; then
     warn "正典の日付($hd)より新しいコミット($lc)がある = 更新漏れの可能性"
   fi
 fi

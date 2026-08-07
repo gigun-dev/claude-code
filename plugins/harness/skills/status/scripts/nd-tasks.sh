@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.12.0 (配布元: gigun-dev/claude-code plugins/harness)
+# harness-template v0.13.0 (配布元: gigun-dev/claude-code plugins/harness)
 #   — next-directions.md の「着手順」節を読んで一覧化し(読み取り専用)、
 #     ID 指定で「着手順」節と「完了記録」節**だけ**を書き換える(--add / --done / --note / --archive)。
 #
@@ -53,22 +53,96 @@
 #   (スキルを読んだだけで無条件に走る)には**置かない**。`!` は「必ず成功する読み取り専用」だけ。
 set -euo pipefail
 
-# --- 閾値(頭のバイト数) ------------------------------------------------------
-# SessionStart フックの stdout は **10KB を超えると無言で切り詰められ、2KB のプレビューだけが
-# 注入される**(anthropics/claude-code#70460、2026-08-06 時点 open)。バイト数で効く制限なので、
-# assets/session-start.sh の HEAD_MAX_LINES=80(行数)では守れない — 1行が長い日本語の
-# 正典では 80 行で 10KB を軽く超える。よってここで**バイト数**を別途計測する。
+# --- 閾値(頭の文字数とトークン数) --------------------------------------------
+# **2026-08-08 に単位を「バイト/行」から「文字/トークン」へ変えた。**経緯:
+#
+#   旧: HEAD_WARN_BYTES=8000 / HEAD_WARN_LINES=80。どちらも**どの機構も使っていない単位**。
+#   - バイト: #70460 の "10KB" をバイトと読んだが、原文と #84021(内部の persistHookOutput)は
+#     **10,000 *文字***。日本語 3B/字なので 8,000B ≒ 2,700字 —— 実際の上限の 27% で
+#     鳴らしていた。**単位の読み違いで 3.7 倍きつく縛っていた。**
+#   - 行: 実測すると行は言語構成に完全に依存する。notchbar/CLAUDE.md(87行・日本語率1%)は
+#     1,202 tok、swift-mcp-app(109行・36%)は 2,788 tok —— 行数が同程度でトークンは 2.3 倍。
+#     **複数リポジトリへ配る harness にとって行は最悪の単位。**
+#
+#   そもそも**代理指標は人が目視で数えるときに要るもの**で、スクリプトが測るなら
+#   文字もトークンも正確に出せる。「ロジックをスクリプトへ寄せる」と決めた以上、
+#   代理を残す理由は消えている(旧実装は消すどころか行の予算を doctor 側へ増やしていた)。
+#
+# **予算は2本立てにする。単位が違うのではなく、制約している機構が違うから。**
+#
+#   (1) 文字数 —— **切り詰め**への備え。#70460 / #84021。10,000字を超えると 2KB の
+#       プレビューだけが注入され、残りは無言で消える。これは機械的な壁。
+#   (2) トークン数 —— **毎セッションの実費**。頭は SessionStart で毎回注入されるので、
+#       ここが太ると全セッションのコストになる。切り詰められなくても払い続ける。
+#       3,000 tok ≒ 200k 窓の 1.5%。**これは資源配分であって検知器の閾値ではない**
+#       (docs/principles.md 規則8)—— 上げるなら「毎セッションいくら払うか」を意識的に決める。
+#
 # ⚠️ 閾値を上げて警告を消すのは禁止(棚卸しが正)。棚卸し後に現況へ「下げ直す」方向のみ
-#    調整してよい(上げ方向を許すと検知がラチェット式に静かに死ぬ。session-start.sh と同じ規約)。
-HEAD_WARN_BYTES=8000    # ここを超えたら棚卸しを検討(切り詰めまでの余裕が 2KB を切る)
-HEAD_HARD_BYTES=10000   # ここを超えたら**実際に切り詰められている**(#70460)
+#    調整してよい(上げ方向を許すと検知がラチェット式に静かに死ぬ)。
+#    **単位を直したこの変更は「上げ」ではなく「間違った物差しの交換」**だが、実効は緩和側
+#    (実測 4,065字 = 新予算の 51%、旧バイト予算では 97% だった)。緩和だという事実は隠さない。
+#    ⚠️ **この4つの値は assets/session-start.sh と一致していなければならない。**
+#       正典はあちら(注入の当事者であり、配布先で毎セッション走るのはあちらだから)。
+#       ドリフトはファイル冒頭の `harness-template v` 刻印で検出する。
+HEAD_WARN_CHARS=8000    # ここを超えたら棚卸しを検討(切り詰めまでの余裕が 2,000字を切る)
+HEAD_HARD_CHARS=10000   # ここを超えたら**実際に切り詰められている**(#70460 / #84021)
+HEAD_WARN_TOKENS=3000   # 毎セッションの実費。切り詰められなくても払い続ける分
 
-# 行数の予算。バイト数と別に持つのは、**人が読める上限**がバイトではなく行で決まるため
-# (8KB 以内でも 200 行あればセッション頭の見通しは死ぬ)。/harness:doctor が行数を出すのと
-# 同じ 80 行を使う。書き込み操作(--add / --done / --note)は頭を必ず太らせるので、
-# **書いた直後にその場で予算を出す** —— 後から doctor を叩くまで気づかないのが一番まずい。
-# ⚠️ バイト側と同じく、閾値を上げて警告を消すのは禁止(棚卸しか --archive が正)。
-HEAD_WARN_LINES=80
+# 文字数とトークン数の計測。**ロケールに依存させない**のが要点 ——
+# `wc -m` はロケール次第でバイト数を返す(LANG 未設定の macOS が実際にそう)ので使えない。
+# 代わりに UTF-8 の構造を直接使う:
+#   - 文字数 = 継続バイト(0x80-0xBF)を全部落とした残りのバイト数(1文字1バイトに潰れる)
+#   - ASCII 文字数 = 0x00-0x7F だけ残したバイト数
+# トークンは概算。**英語 ≒ 0.33 tok/字、日本語 ≒ 1.4 tok/字** を混合率で加重する。
+#
+# **なぜ概算しかないのか(2026-08-08、バイナリ 2.1.222 で確認した事実):**
+#   Claude Code は**ローカルにトークナイザを持っていない** —— 271MB のバンドルに
+#   cl100k / o200k / merges.txt / vocab.json / bpe_ranks はいずれも 0 件。正確な数が要るときは
+#   `POST /v1/messages/count_tokens` を叩き、届かないときは `count_tokens_unreachable` を
+#   記録して**文字数だけの概算に落ち**、"Token counts are estimates and may differ from
+#   actual usage." と明示する。**この式はその フォールバックと同じ位置**であって、劣った
+#   代用品ではない(むしろ言語で重み付けする分、日本語混在では実態に近い)。
+#   ⚠️ フックや検査から API は叩けない —— 毎セッションのネットワーク往復・認証情報・
+#      オフラインでの沈黙。原則4 に正面から反する。詳細は
+#      plugins/harness/skills/doctor/references/context-mechanics.md §4.5。
+#
+# ⚠️ **係数は 2026-08-08 に 0.25 / 1.1 から引き上げた。最初に置いた方向が誤っていた。**
+#    公式(platform.claude.com/docs/en/build-with-claude/token-counting):
+#      "Claude 4.7 and later models use a newer tokenizer. The same input text produces
+#       **approximately 30 percent more tokens** than on earlier models."
+#    0.25 / 1.1 は**旧トークナイザの文献値**で、Opus 5 を含む 4.7 以降では約 30% 過小。
+#    「日本語 1.1 は過大だから過小評価には倒れない」と書いていたのは**逆で、実際は
+#    危険側**(予算内に見えて実は超過 = 沈黙する失敗)に倒れていた。× 1.3 して 0.33 / 1.4。
+#
+# ⚠️ **トークナイザはモデルの属性であって、テキストの属性ではない。**同じ文字列でも
+#    4.7 未満と 4.7 以降で 30% 違う。スクリプトはセッションのモデルを知れないので
+#    **新しい(=多い)側に固定する** —— 旧モデルでは過大評価になるが、過大は安全側。
+#    これは `mF_=200000` を固定値と読み違えたのと**同じ種類の誤り**
+#    (環境に依存する値を定数として扱う)。予算まわりで2回目なので、規則化した:
+#    docs/principles.md 規則8「測れないものを予算にするとき」。
+# ⚠️ まだ実測で較正していない。較正の口は `/context`、または count_tokens API
+#    (**無料**。RPM 制限のみ。ただし API キーが要る)。突き合わせるまで「正しい」と書かない。
+# ⚠️ **概算であることを出力に明示すること**(`≒`)—— 精密な数字に見えると、
+#    予算の議論が「あと何トークン入るか」の帳尻合わせに化ける。
+# Why not python3/tiktoken: (1) tiktoken は **OpenAI の語彙**で Claude とは別物。日本語で
+#   大きくズレるので使ってはいけない。(2) 配布先に python3 がある保証が無く、無いと
+#   **黙って計測が消える**(原則4)。tr は POSIX で必ずある。
+# 検算: 2026-08-08 に python3 の文字数計算と突き合わせて一致(chars 4065 / tok≒2577)。
+#   ⚠️ これは**式の実装が正しいことの検算であって、係数の較正ではない**。混同しないこと。
+#
+# 呼び方: `measure "$text"` → `MEAS_CHARS` / `MEAS_TOKENS` に入る。
+# Why not 標準入力から読む2関数にしないのか: 同じ入力を2回読む必要があり、
+# パイプは1回しか読めない。呼び側が毎回一時ファイルを作る羽目になるので、
+# **文字列を引数で受けて2つまとめて返す1関数**にした(呼び出し箇所は常に頭だけ = 数KB)。
+TOK_ASCII_PCT=${HARNESS_TOK_ASCII_PCT:-33}
+TOK_WIDE_PCT=${HARNESS_TOK_WIDE_PCT:-140}
+TOKENIZER_LABEL=${HARNESS_TOKENIZER_LABEL:-Claude 4.7+}
+measure() {
+  local s=$1 ascii
+  MEAS_CHARS=$(printf '%s' "$s" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' ')
+  ascii=$(printf '%s' "$s" | LC_ALL=C tr -cd '\000-\177' | wc -c | tr -d ' ')
+  MEAS_TOKENS=$(( (ascii * TOK_ASCII_PCT + (MEAS_CHARS - ascii) * TOK_WIDE_PCT) / 100 ))
+}
 
 # 中間レコードのフィールド区切り。US(0x1f)は markdown 本文に出てこない制御文字なので
 # 安全に使える(タブや `|` は本文に普通に出るので区切りには使えない)。
@@ -96,7 +170,8 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
   --format json   {"items":[...],"files":[...],"errors":[...]} を出す(エージェント用)。
                   items[] = id, status(open|done), summary, detail, done_criteria,
                   evidence[], file, component, repo。
-                  files[] = file, repo, component, head_bytes, has_marker, head_injection。
+                  files[] = file, repo, component, head_chars, head_tokens_est,
+                  has_marker, head_injection。
   --lint          検査のみ。違反があれば非0で終了する。
   -h, --help      これ。
 
@@ -138,7 +213,7 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
   - `## 完了記録` が無ければ session-head-end マーカーの直後に作る。
   - 一時ファイル + mv(atomic)。途中で落ちても正典が半分だけ書き潰されることはない。
   - fail-closed。未知の ID / 「着手順」節が無い / 接頭辞が決められない —— **何も書かずに落ちる。**
-  - 書き込み後に「頭」のバイト数と行数を出す(予算 8,000B / 80行)。超えたら警告する。
+  - 書き込み後に「頭」の文字数と概算トークン数を出す(予算 8,000字 / 3,000 tok)。超えたら警告する。
   - --all / --lint / --format json とは併用できない(読み取りと書き込みを混ぜない)。
 
 読み取る書式(この形だけを正とする):
@@ -157,10 +232,14 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
   3. 整理対象          [x] すべて。閉じた時点で「頭」に置く理由が消えるので、
                        カタログ部か log.md へ移す候補(移すのは /harness:tidy の仕事)
 
-頭のサイズ:
-  先頭から `<!-- session-head-end` までのバイト数を出す。SessionStart の stdout は
-  10KB 超で**無言に切り詰められ 2KB のプレビューだけが注入される**(claude-code#70460)。
-  8,000B 超で警告 / 10,000B 超で強い警告。⚠️ 閾値を上げて警告を消すのは禁止。
+頭のサイズ(2つの機構を、それぞれの単位で見る):
+  文字数 —— 切り詰め。SessionStart の stdout は **10,000 文字**超で無言に切り詰められ、
+    2KB のプレビューだけが注入される(claude-code#70460 / #84021)。
+    8,000字超で警告 / 10,000字超で強い警告。
+  概算トークン —— 毎セッションの実費。切り詰めに余裕があっても払い続ける分。
+    3,000 tok 超で警告(≒ 200k 窓の 1.5%)。
+  行数は**参考値としてしか出さない**。行はどの機構も使っておらず、日本語率で 2 倍以上ブレる。
+  ⚠️ 閾値を上げて警告を消すのは禁止。
 
 検査項目(--lint はこれだけを出す。他モードでも stderr に出る):
   1. [x] なのに証拠行(→ で始まる継続行)が無い(移行免除マーカーも無い)     no-evidence
@@ -179,7 +258,7 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
 
 終了コード:
   0  違反なし(読み取り)/ 書き込んだ・何もしなかった・dry-run を出した(書き込み)
-  1  違反あり(fail-closed の検知を含む)。頭のバイト数超過・--all の未移行は
+  1  違反あり(fail-closed の検知を含む)。頭のサイズ超過・--all の未移行は
      警告であって違反ではない
   2  使い方の誤り / 走査対象が1件も無い / 書き込み対象のファイルが1本に定まらない /
      --done に --evidence が無い
@@ -450,7 +529,7 @@ END {
   if (nsec == 0)
     emit_err("no-section", 0, "V", "`## 着手順` 節が無い(旧書式のまま — チェックリスト形式への移行が要る)")
   else if (nitem == 0 && nbracket == 0)
-    emit_err("not-migrated", 0, "V", "`## 着手順` 節はあるが、チェックリストの項目行(`- [ ]`)が1本も無い —— 旧書式(番号付き散文)のまま未移行。**タスクが無いという意味ではない**。移行すると `/harness:next` で読めるようになる")
+    emit_err("not-migrated", 0, "V", "`## 着手順` 節はあるが、チェックリストの項目行(`- [ ]`)が1本も無い —— 旧書式(番号付き散文)のまま未移行。**タスクが無いという意味ではない**。移行すると `/harness:status` で読めるようになる")
   else if (nitem == 0)
     emit_err("empty-section", 0, "V", "`## 着手順` 節に項目行らしき行(`- [`)は " nbracket " 本あるのに1件も読めない —— **書式が変わったかパーサの正規表現が腐った可能性**。「- [ ] `ID-1` 概要」の形(ID はバッククォート囲み)になっているか確認すること。**タスクが無いと解釈してはいけない**")
 }
@@ -468,7 +547,7 @@ emit_rec() { local IFS="$US"; printf '%s\n' "$*" >> "$RECS"; }
 # マーカー欠落の意味は、フックの配線で3通りに分かれる:
 #   (a) 頭注入型のフックがある + マーカー無し → **注入が fail-closed で停止している**(違反)
 #   (b) pointer 型フック(この repo)         → そもそも頭を注入しないので停止ではない(警告)
-#   (c) フックが無い(ハーネス未導入)         → 同上(警告。直すのは /harness:init)
+#   (c) フックが無い(ハーネス未導入)         → 同上(警告。直すのは /harness:doctor)
 # 一律に違反にすると (b)(c) で毎回鳴り、検知器が信用されなくなる —— このリポジトリは
 # 「検知器が黙って死ぬ」と同じくらい「鳴りすぎて無視される」を嫌う。実測では
 # tdr-concierge は (c) だった(フック自体が無い。「停止中」ではなく未導入)。
@@ -498,23 +577,24 @@ comp_of() {
 
 # 1ファイルを走査して F/I/E レコードを積む。
 scan_file() {
-  local f=$1 root comp repo marker head_bytes has_marker inject
+  local f=$1 root comp repo marker head_chars head_tokens has_marker inject
   root=$(root_of "$f"); comp=$(comp_of "$f"); repo=$(basename "$root")
   inject=$(head_injection_mode "$root")
 
-  # 頭(SessionStart が注入する範囲)のバイト数。フックは marker 行の**手前まで**を
+  # 頭(SessionStart が注入する範囲)の文字数とトークン数。フックは marker 行の**手前まで**を
   # 出すので、計測もそこに揃える(marker 行自身と、フックが足す見出し行は含めない)。
   # 行頭アンカーで探すのはフックと同じ理由 —— 散文中で session-head-end に言及しただけで
   # 頭が切れる誤爆を防ぐ。
   marker=$(grep -n -m1 '^<!-- session-head-end' "$f" | cut -d: -f1 || true)
   if [ -n "$marker" ]; then
     has_marker=1
-    head_bytes=$(sed -n "1,$((marker - 1))p" "$f" | wc -c | tr -d ' ')
+    measure "$(sed -n "1,$((marker - 1))p" "$f")"
   else
     has_marker=0
-    head_bytes=$(wc -c < "$f" | tr -d ' ')   # 頭が定義できない。参考値として全文サイズを出す
+    measure "$(cat "$f")"   # 頭が定義できない。参考値として全文サイズを出す
   fi
-  emit_rec F "$repo" "$comp" "$f" "$head_bytes" "$has_marker" "$inject" "$root"
+  head_chars=$MEAS_CHARS; head_tokens=$MEAS_TOKENS
+  emit_rec F "$repo" "$comp" "$f" "$head_chars" "$has_marker" "$inject" "$root" "$head_tokens"
 
   if [ "$has_marker" -eq 0 ]; then
     if [ "$inject" -eq 1 ]; then
@@ -522,17 +602,23 @@ scan_file() {
         "session-head-end マーカーが無い —— このリポジトリのフックは頭注入型なので、**注入が fail-closed で停止している**(誰も気づかないまま止まる)。現在地・着手順の直後に行頭から <!-- session-head-end --> を復元すること"
     else
       emit_rec E "$repo" "$comp" "$f" no-marker 0 W \
-        "session-head-end マーカーが無い(このリポジトリに頭注入型のフックが無い = pointer 型かハーネス未導入。注入が止まっているわけではないが、頭/カタログの境界が無いので読み手は全文を読むことになる。導入は /harness:init)"
+        "session-head-end マーカーが無い(このリポジトリに頭注入型のフックが無い = pointer 型かハーネス未導入。注入が止まっているわけではないが、頭/カタログの境界が無いので読み手は全文を読むことになる。導入は /harness:doctor)"
     fi
   else
-    # #70460: SessionStart の stdout は 10KB 超で無言に切り詰められ、2KB のプレビューだけが
-    # 注入される。行数閾値では検知できないので、ここはバイト数で見る。
-    if [ "$head_bytes" -gt "$HEAD_HARD_BYTES" ]; then
+    # #70460 / #84021: SessionStart の stdout は **10,000 文字**超で無言に切り詰められ、
+    # 2KB のプレビューだけが注入される。バイトでも行でもなく**文字**で効く制限。
+    if [ "$head_chars" -gt "$HEAD_HARD_CHARS" ]; then
       emit_rec E "$repo" "$comp" "$f" head-truncated 0 W \
-        "頭が ${head_bytes}B(> ${HEAD_HARD_BYTES}B)—— SessionStart の stdout は 10KB 超で**無言に切り詰められ 2KB のプレビューだけが注入される**(anthropics/claude-code#70460)。いま実際に切れている。棚卸しして頭を縮めること"
-    elif [ "$head_bytes" -gt "$HEAD_WARN_BYTES" ]; then
+        "頭が ${head_chars}字(> ${HEAD_HARD_CHARS}字)—— SessionStart の stdout は 10,000字超で**無言に切り詰められ 2KB のプレビューだけが注入される**(anthropics/claude-code#70460・#84021)。いま実際に切れている。棚卸しして頭を縮めること"
+    elif [ "$head_chars" -gt "$HEAD_WARN_CHARS" ]; then
       emit_rec E "$repo" "$comp" "$f" head-large 0 W \
-        "頭が ${head_bytes}B(目安 ${HEAD_WARN_BYTES}B)—— 10KB を超えると SessionStart の stdout が無言に切り詰められる(#70460)。余裕が ${HEAD_HARD_BYTES}B まで"
+        "頭が ${head_chars}字(目安 ${HEAD_WARN_CHARS}字)—— 10,000字を超えると SessionStart の stdout が無言に切り詰められる(#70460)。余裕が ${HEAD_HARD_CHARS}字まで"
+    fi
+    # トークンは切り詰めとは別の機構(毎セッションの実費)。切り詰めに余裕があっても
+    # ここが太れば全セッションで払い続けるので、独立した予算として別に鳴らす。
+    if [ "$head_tokens" -gt "$HEAD_WARN_TOKENS" ]; then
+      emit_rec E "$repo" "$comp" "$f" head-costly 0 W \
+        "頭が ≒${head_tokens} tok(予算 ${HEAD_WARN_TOKENS} tok)—— 切り詰めには余裕があるが、**毎セッション注入されるので全セッションのコストになる**。棚卸しか --archive で降ろすこと"
     fi
   fi
 
@@ -586,7 +672,7 @@ $(nds_of_repo "$wbase")
 EOF
     if [ "$ncand" -eq 0 ]; then
       echo "✗ $wbase に docs/next-directions.md も docs/*/next-directions.md も無い。" >&2
-      echo "  ハーネス未導入なら /harness:init で導入できる。" >&2
+      echo "  ハーネス未導入なら /harness:doctor で導入できる。" >&2
       exit 2
     elif [ "$ncand" -gt 1 ]; then
       echo "✗ next-directions.md が $ncand 本ある —— どれに書くかを推測しない(別コンポーネントの" >&2
@@ -637,7 +723,7 @@ function locate_sections(   i) {
   ss = 0
   for (i = 1; i <= n; i++) if (L[i] ~ /^## 着手順/) { ss = i; break }
   if (ss == 0)
-    die("`## 着手順` 節が無い —— 書き込む場所が決められないので**何も書いていない**。旧書式のままなら `## 着手順(次にやること)` 見出しを作り、`- [ ] `ID-1` 概要` 形式へ移行すること(/harness:init が配る雛形が正)。")
+    die("`## 着手順` 節が無い —— 書き込む場所が決められないので**何も書いていない**。旧書式のままなら `## 着手順(次にやること)` 見出しを作り、`- [ ] `ID-1` 概要` 形式へ移行すること(/harness:doctor が配る雛形が正)。")
   # 節の終わりは読み側のパーサと同じ規則(次の `## ` か行頭 `<!-- session-head-end` か EOF)。
   # ここが読み書きでずれると、書いた行が一覧に出ない/出ない行を書き換える、が起きる。
   se = n + 1
@@ -910,7 +996,7 @@ function do_archive(   k, i, nm, dst, has_entry) {
     # 置き場が無ければ作る。位置は session-head-end マーカーの直後 ——
     # 完了記録は「頭」ではなくカタログ側に属する(閉じた項目を毎セッション注入する理由は無い)。
     if (mk == 0)
-      die("`## 完了記録` 節が無く、作る位置(`<!-- session-head-end` マーカー)も無い —— **何も書いていない。** 先に `## 完了記録` 節を作るか、マーカーを入れること(/harness:init が配る雛形が正)。")
+      die("`## 完了記録` 節が無く、作る位置(`<!-- session-head-end` マーカー)も無い —— **何も書いていない。** 先に `## 完了記録` 節を作るか、マーカーを入れること(/harness:doctor が配る雛形が正)。")
     dst = mk
     add_ins(dst, "")
     add_ins(dst, "## 完了記録(着手順から降ろしたもの)")
@@ -998,23 +1084,27 @@ AWK
   # 書き込み後の「頭」のサイズ。**その場で出す**のが要点 —— 書いた本人が予算超過に
   # 気づかないと、次のセッションで SessionStart が無言に切り詰められるまで誰も気づかない。
   print_head_size() {
-    local f=$1 marker bytes lines
+    local f=$1 marker lines
     marker=$(grep -n -m1 '^<!-- session-head-end' "$f" | cut -d: -f1 || true)
     if [ -z "$marker" ]; then
       echo "⚠️ session-head-end マーカーが無いので「頭」のサイズを測れない(境界が定義できない)。" >&2
       return 0
     fi
     lines=$((marker - 1))
-    if [ "$lines" -ge 1 ]; then bytes=$(sed -n "1,${lines}p" "$f" | wc -c | tr -d ' '); else bytes=0; fi
-    printf '頭: %s B / %s 行(予算 %s B / %s 行)\n' "$bytes" "$lines" "$HEAD_WARN_BYTES" "$HEAD_WARN_LINES"
+    if [ "$lines" -ge 1 ]; then measure "$(sed -n "1,${lines}p" "$f")"; else MEAS_CHARS=0; MEAS_TOKENS=0; fi
+    # 行数も出すが**予算としては出さない**(参考値)。行はどの機構も使っておらず、
+    # 言語構成で 2 倍以上ブレる —— 予算に使うと日本語の正典だけ不当にきつくなる。
+    # それでも表示は残す: 人が「どこを削るか」を探すときの手掛かりは結局行だから。
+    printf '頭: %s字 / ≒%s tok(予算 %s字 / %s tok)・%s 行(参考)\n' \
+      "$MEAS_CHARS" "$MEAS_TOKENS" "$HEAD_WARN_CHARS" "$HEAD_WARN_TOKENS" "$lines"
     # ⚠️ 閾値を上げて警告を消すのは禁止。減らす手段(--archive / 棚卸し)を必ず添える。
-    if [ "$bytes" -gt "$HEAD_HARD_BYTES" ]; then
-      echo "✗ 頭が ${bytes}B(> ${HEAD_HARD_BYTES}B)—— SessionStart の stdout は**無言に切り詰められ 2KB のプレビューだけが注入される**(anthropics/claude-code#70460)。いま実際に切れている。--archive で降ろすか棚卸しすること。" >&2
-    elif [ "$bytes" -gt "$HEAD_WARN_BYTES" ]; then
-      echo "⚠️ 頭が ${bytes}B(予算 ${HEAD_WARN_BYTES}B)。余裕は ${HEAD_HARD_BYTES}B まで。**閾値は上げない** —— --archive で降ろすか棚卸しすること。" >&2
+    if [ "$MEAS_CHARS" -gt "$HEAD_HARD_CHARS" ]; then
+      echo "✗ 頭が ${MEAS_CHARS}字(> ${HEAD_HARD_CHARS}字)—— SessionStart の stdout は**無言に切り詰められ 2KB のプレビューだけが注入される**(anthropics/claude-code#70460・#84021)。いま実際に切れている。--archive で降ろすか棚卸しすること。" >&2
+    elif [ "$MEAS_CHARS" -gt "$HEAD_WARN_CHARS" ]; then
+      echo "⚠️ 頭が ${MEAS_CHARS}字(予算 ${HEAD_WARN_CHARS}字)。余裕は ${HEAD_HARD_CHARS}字まで。**閾値は上げない** —— --archive で降ろすか棚卸しすること。" >&2
     fi
-    if [ "$lines" -gt "$HEAD_WARN_LINES" ]; then
-      echo "⚠️ 頭が ${lines} 行(予算 ${HEAD_WARN_LINES} 行)。**閾値は上げない** —— --archive で降ろすか棚卸しすること。" >&2
+    if [ "$MEAS_TOKENS" -gt "$HEAD_WARN_TOKENS" ]; then
+      echo "⚠️ 頭が ≒${MEAS_TOKENS} tok(予算 ${HEAD_WARN_TOKENS} tok)。切り詰めには余裕があるが**毎セッション払う**。**閾値は上げない** —— --archive で降ろすか棚卸しすること。" >&2
     fi
   }
 
@@ -1040,9 +1130,9 @@ AWK
   if [ "$OP" = "archive" ]; then
     nmove=$(report_value C)
     if [ "$APPLY" -eq 1 ]; then
-      echo "=== harness:next --archive — 完了記録へ降ろす ==="
+      echo "=== harness:status --archive — 完了記録へ降ろす ==="
     else
-      echo "=== harness:next --archive — 完了記録へ降ろす(dry-run) ==="
+      echo "=== harness:status --archive — 完了記録へ降ろす(dry-run) ==="
     fi
     echo
     emit_report
@@ -1122,7 +1212,7 @@ $(nds_of_repo "$base")
 EOF
   if [ "$nfiles" -eq 0 ]; then
     echo "✗ $base に docs/next-directions.md も docs/*/next-directions.md も無い。" >&2
-    echo "  ハーネス未導入なら /harness:init で導入できる。" >&2
+    echo "  ハーネス未導入なら /harness:doctor で導入できる。" >&2
     exit 2
   fi
 fi
@@ -1157,7 +1247,7 @@ done < "$RECS"
 
 # --- 出力: --lint --------------------------------------------------------------
 if [ "$MODE" = "lint" ]; then
-  echo "=== harness:next --lint — 着手順の書式検査 ==="
+  echo "=== harness:status --lint — 着手順の書式検査 ==="
   echo
   nwarn=0
   while IFS="$US" read -r t r c f code ln sev msg; do
@@ -1224,7 +1314,8 @@ if [ "$FORMAT" = "json" ]; then
         printf "\"file\": %s, ", jstr(f[4])
         printf "\"repo\": %s, ", jstr(f[2])
         printf "\"component\": %s, ", jstr(f[3])
-        printf "\"head_bytes\": %d, ", f[5]
+        printf "\"head_chars\": %d, ", f[5]
+        printf "\"head_tokens_est\": %d, ", f[9]
         printf "\"has_marker\": %s, ", (f[6] == "1" ? "true" : "false")
         printf "\"head_injection\": %s}", (f[7] == "1" ? "true" : "false")
       }
@@ -1251,7 +1342,7 @@ fi
 
 # --- 出力: --format text -------------------------------------------------------
 awk -v grouped="$ALL" -v nfiles="$nfiles" -v nmigr="$nmigrated_out" -v nviol="$nviolation" \
-    -v warn_bytes="$HEAD_WARN_BYTES" -v hard_bytes="$HEAD_HARD_BYTES" '
+    -v warn_chars="$HEAD_WARN_CHARS" -v hard_chars="$HEAD_HARD_CHARS" -v warn_tok="$HEAD_WARN_TOKENS" '
   # markdown の表を壊さないためのセル用エスケープ。桁揃えはしない ——
   # 日本語は文字幅が環境で変わるので、揃えようとすると必ずズレる。
   function cell(s) { gsub(/\|/, "\\|", s); return s }
@@ -1271,22 +1362,27 @@ awk -v grouped="$ALL" -v nfiles="$nfiles" -v nmigr="$nmigrated_out" -v nviol="$n
     for (k = 1; k <= m; k++) print "|  |  | " prefix cell(unwrap(d[k])) " |  |"
   }
 
-  # 頭(SessionStart が注入する範囲)のサイズ表。**横断 board の主要な健康指標**で、
-  # #70460(10KB 超は無言に切り詰められ 2KB のプレビューだけが注入される)を
-  # 行数ではなくバイト数で見るためのもの。項目が0件のリポジトリでもここだけは出す。
+  # 頭(SessionStart が注入する範囲)のサイズ表。**横断 board の主要な健康指標**。
+  # 2つの機構をそれぞれの単位で見る —— 切り詰めは**文字**(#70460 / #84021)、
+  # 毎セッションの実費は**トークン**。行は出さない(言語構成で 2 倍以上ブレる代理指標)。
+  # 項目が0件のリポジトリでもここだけは出す。
   function head_table(r,   i, f, p, verdict) {
     print ""; print "### 頭のサイズ(SessionStart が注入する範囲)"; print ""
-    print "| ファイル | 頭 | 判定 |"
-    print "|---|---|---|"
+    print "| ファイル | 文字 | 概算tok | 判定 |"
+    print "|---|---|---|---|"
     for (i = 1; i <= n; i++) {
       if (typ[i] != "F" || rp[i] != r) continue
       split(rec[i], f, US)
       p = f[4]; sub("^" root[r] "/", "", p)
+      # 判定は「重い順に1つだけ」。マーカー無し > 切り詰め > 文字が目安超 > トークン超。
+      # 複数出すと**どれから直せばいいかが消える**(表の1セルに収める以上、順位付けが要る)。
       if (f[6] != "1") verdict = (f[7] == "1" ? "✗ マーカー無し = 注入が停止中" : "⚠️ マーカー無し(頭/カタログの境界が無い)")
-      else if (f[5] + 0 > hard_bytes) verdict = "✗ 10KB 超 — 無言に切り詰められている(#70460)"
-      else if (f[5] + 0 > warn_bytes) verdict = "⚠️ 目安 " comma(warn_bytes) "B 超"
+      else if (f[5] + 0 > hard_chars) verdict = "✗ " comma(hard_chars) "字超 — 無言に切り詰められている(#70460)"
+      else if (f[5] + 0 > warn_chars) verdict = "⚠️ 目安 " comma(warn_chars) "字 超"
+      else if (f[9] + 0 > warn_tok) verdict = "⚠️ 予算 " comma(warn_tok) " tok 超(毎セッションの実費)"
       else verdict = "✓"
-      print "| " cell(p) " | " (f[6] == "1" ? comma(f[5]) " B" : "(全文 " comma(f[5]) " B)") " | " verdict " |"
+      print "| " cell(p) " | " (f[6] == "1" ? comma(f[5]) : "(全文 " comma(f[5]) ")") \
+            " | ≒" comma(f[9]) " | " verdict " |"
     }
   }
   function comma(n,   s, out) {
@@ -1302,7 +1398,7 @@ awk -v grouped="$ALL" -v nfiles="$nfiles" -v nmigr="$nmigrated_out" -v nviol="$n
     if ($1 == "F") root[$2] = $8
   }
   END {
-    print "=== harness:next — 着手順 ==="
+    print "=== harness:status — 着手順 ==="
     total_open = 0; total_done = 0
     for (ri = 1; ri <= nr; ri++) {
       r = order[ri]

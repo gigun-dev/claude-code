@@ -374,7 +374,7 @@ else
   done
   if [ ${#files[@]} -eq 0 ]; then
     echo "✗ ${base} に docs/log.md も docs/*/log.md も無い。" >&2
-    echo "  log.md を持たないリポジトリなら不要(導入は /harness:init --with-log)。" >&2
+    echo "  log.md を持たないリポジトリなら不要(導入は /harness:doctor --with-log)。" >&2
     exit 2
   fi
 fi
