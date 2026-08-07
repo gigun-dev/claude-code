@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.5.0 (配布元: gigun-dev/claude-code plugins/harness。配布先の世代確認はこの行を grep)
+# harness-template v0.6.0 (配布元: gigun-dev/claude-code plugins/harness。配布先の世代確認はこの行を grep)
 # SessionStart フック: セッション開始時にプロジェクトの「現在地」を確定的に注入する。
 #
 # 設計意図(caldav で確立した方式 + 2026-08-05 敵対的検証での補強):
@@ -36,15 +36,28 @@ doc="${CLAUDE_PROJECT_DIR:-.}/docs/next-directions.md"
 #   人が読む場面でしか走らないので、Claude 既定 + 上書きを持っていてよい。
 #   **配布物には、ベンダー非依存で機械的な壁だけを置く。**
 #
-# ⚠️ **この2つの値は skills/status/scripts/nd-tasks.sh と一致していること。**
-#    正典はこのファイル(注入の当事者であり、配布先で毎セッション走るのはこちら)。
+# ⚠️ **値はここに書かれていない。**install.sh が配布元の `plugins/harness/budgets.sh`
+#    (予算の正典)から**展開して**置く —— コンパイルと同じ。だから配布先に実行時依存が
+#    生まれず、値の正典は1箇所のままで、**ドリフトが構造的に起きない**(原則7)。
+#    直すときは budgets.sh を直して `/harness:doctor` の導入手順を再実行する。
 # ⚠️ カタログ側(CATALOG_MAX_LINES)が行のままなのは意図的 —— **カタログは注入されない**ので
 #    課金されない。ここで守っているのは「人が読み通せる長さ」で、それは実際に行で決まる。
 #    **単位は機構ごとに選ぶ。揃えることが目的ではない。**
-CATALOG_MAX_LINES=250
-UPDATE_BLOCK_MAX=12
-HEAD_WARN_CHARS=8000
-HEAD_HARD_CHARS=10000
+CATALOG_MAX_LINES={{CATALOG_MAX_LINES}}
+UPDATE_BLOCK_MAX={{UPDATE_BLOCK_MAX}}
+HEAD_WARN_CHARS={{HEAD_WARN_CHARS}}
+HEAD_HARD_CHARS={{HEAD_HARD_CHARS}}
+
+# 展開されずに置かれた場合の fail-loud。**黙って壊れないこと**が一番大事(原則4)——
+# 未展開のまま数値比較に入ると "integer expression expected" で異常終了し、
+# set -e のせいでセッション開始時に何も注入されないまま静かに終わる。
+case "$HEAD_HARD_CHARS" in
+  *'{{'*)
+    echo '⚠️ このフックは展開されていません(プレースホルダが残っています)。'
+    echo '   手でコピーしたか、install が途中で失敗しています。'
+    echo '   `/harness:doctor` の導入手順を再実行してください。それまで頭は注入されません。'
+    exit 0 ;;
+esac
 
 # マーカーは行頭アンカーで検出(散文中の "session-head-end" 言及で頭が切断される誤爆を防ぐ)。
 marker_line=$(grep -n -m1 '^<!-- session-head-end' "$doc" | cut -d: -f1 || true)

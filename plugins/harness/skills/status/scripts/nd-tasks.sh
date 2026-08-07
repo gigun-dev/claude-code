@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.13.0 (配布元: gigun-dev/claude-code plugins/harness)
+# harness-template v0.14.0 (配布元: gigun-dev/claude-code plugins/harness)
 #   — next-directions.md の「着手順」節を読んで一覧化し(読み取り専用)、
 #     ID 指定で「着手順」節と「完了記録」節**だけ**を書き換える(--add / --done / --note / --archive)。
 #
@@ -81,12 +81,17 @@ set -euo pipefail
 #    調整してよい(上げ方向を許すと検知がラチェット式に静かに死ぬ)。
 #    **単位を直したこの変更は「上げ」ではなく「間違った物差しの交換」**だが、実効は緩和側
 #    (実測 4,065字 = 新予算の 51%、旧バイト予算では 97% だった)。緩和だという事実は隠さない。
-#    ⚠️ **この4つの値は assets/session-start.sh と一致していなければならない。**
-#       正典はあちら(注入の当事者であり、配布先で毎セッション走るのはあちらだから)。
-#       ドリフトはファイル冒頭の `harness-template v` 刻印で検出する。
-HEAD_WARN_CHARS=8000    # ここを超えたら棚卸しを検討(切り詰めまでの余裕が 2,000字を切る)
-HEAD_HARD_CHARS=10000   # ここを超えたら**実際に切り詰められている**(#70460 / #84021)
-HEAD_WARN_TOKENS=3000   # 毎セッションの実費。切り詰められなくても払い続ける分
+#
+# 予算は配布元の正典 `plugins/harness/budgets.sh` から読む。**ここには数値を書かない。**
+# 2026-08-08 まで同じ値がここと assets/session-start.sh の2箇所にあり、隣には
+# 「⚠️ この4つの値は … と一致していなければならない」という**散文の規律**が置かれていた。
+# 決定論的に検査できることを人間の注意力に委ねていた形で、実際 #70460 の "10K" を
+# バイトと読み違えた誤りが**5箇所へ伝播した**のはこれが原因。
+# 配布物は install 時に展開されて値を受け取るので、実行時依存は生まれない(原則7)。
+BUDGETS="$(cd "$(dirname "$0")/../../.." && pwd)/budgets.sh"
+# shellcheck source=/dev/null
+[ -r "$BUDGETS" ] || { echo "✗ 予算の正典が読めない: $BUDGETS" >&2; exit 2; }
+. "$BUDGETS"
 
 # 文字数とトークン数の計測。**ロケールに依存させない**のが要点 ——
 # `wc -m` はロケール次第でバイト数を返す(LANG 未設定の macOS が実際にそう)ので使えない。

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.13.0 — ハーネス導入の機械的な部分をすべて実行する。
+# harness-template v0.14.0 — ハーネス導入の機械的な部分をすべて実行する。
 #
 # 設計意図(2026-08-05):
 #   SKILL.md の散文手順を LLM に解釈させると、実行のたびに揺れる(手順の読み飛ばし・
@@ -91,7 +91,30 @@ fi
 
 # --- 2. SessionStart フック ---------------------------------------------------
 mkdir -p .claude/hooks
-cp "$ASSETS/session-start.sh" .claude/hooks/session-start.sh
+# ⚠️ **素の cp ではなく、予算を展開して置く。**値の正典は plugins/harness/budgets.sh の
+#    1箇所だけで、配布物はそれを**展開済みの形で**受け取る(コンパイルと同じ)。
+#    こうすると (a) 配布先に実行時依存が生まれず (b) 値が複製されず
+#    (c) ドリフトが構造的に起きない —— 検知器すら要らない(原則7 / 原則3)。
+#    2026-08-08 まで素の cp で、同じ値が2箇所にあり、隣に「一致していること」という
+#    散文の規律が置かれていた。単位の読み違いが5箇所へ伝播したのはそれが原因。
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "$0")/../../.." && pwd)/budgets.sh"
+sed -e "s/{{CATALOG_MAX_LINES}}/$CATALOG_MAX_LINES/g" \
+    -e "s/{{UPDATE_BLOCK_MAX}}/$UPDATE_BLOCK_MAX/g" \
+    -e "s/{{HEAD_WARN_CHARS}}/$HEAD_WARN_CHARS/g" \
+    -e "s/{{HEAD_HARD_CHARS}}/$HEAD_HARD_CHARS/g" \
+    "$ASSETS/session-start.sh" > .claude/hooks/session-start.sh
+# 展開漏れは**その場で落とす**。未展開のまま配ると、配布先で毎セッション黙って死ぬ。
+# ⚠️ 検出は `{{NAME}}` の完全な形で行う。素の `{{` を探すと、テンプレ側にある
+#    「未展開を検知する fail-loud ガード」自身(`case "$X" in *'{{'*)`)を拾って
+#    **展開に成功しているのに失敗と言う**(2026-08-08 に実際に誤検知した)。
+#    検知器が、別の検知器の存在そのものに反応した形。
+if grep -qE '\{\{[A-Z_]+\}\}' .claude/hooks/session-start.sh; then
+  echo "✗ session-start.sh のプレースホルダが展開しきれていません:" >&2
+  grep -oE '\{\{[A-Z_]+\}\}' .claude/hooks/session-start.sh | sort -u | sed 's/^/    /' >&2
+  echo "  budgets.sh に対応する変数を足してください。" >&2
+  exit 1
+fi
 chmod +x .claude/hooks/session-start.sh
 DID+=(".claude/hooks/session-start.sh: 配置(既存があれば最新版へ更新)")
 
