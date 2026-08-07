@@ -35,7 +35,13 @@ HEAD_WARN_TOKENS=3000
 #      SessionStart フックは発火しない(#46696)。頭が 1 回、CLAUDE.md が
 #      1 + サブエージェント起動回数。実効レバーは閾値より「置き場所」。
 CLAUDE_MD_WARN_TOKENS=2000
-CLAUDE_MD_HARD_CHARS=40000   # Claude Code 本体がこの値で警告を出す(公式)
+# ⚠️ **`CLAUDE_MD_HARD_CHARS=40000` は 2026-08-08 に撤去した。**「Claude Code 本体が
+#    この値で警告を出す(公式)」と書いていたが、**出典が確認できなかった** ——
+#    公式 memory docs にあるのは「200行目安」だけで、「CLAUDE.md files are loaded in full
+#    regardless of length」とすら書いてある。バイナリ 2.1.222 を 40,000 / 40000 / 4e4 で
+#    走査してもヒットしない(同じ手法で skillListingBudgetFraction 等は取れる)。
+#    **機構の裏付けが無い閾値は持たない。**残るトークン予算は自前の根拠
+#    (毎セッションの実費 + サブエージェントぶんの乗算)で立つ。
 
 # --- カタログ部 / log.md(**注入されない**ので単位は行) ----------------------
 #   守っているのは「人が読み通せる長さ」で、それは実際に行で決まる。

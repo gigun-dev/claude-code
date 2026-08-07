@@ -111,9 +111,8 @@ done
 #     (1) 概算トークン —— **無条件・毎セッション全文ロードされ、compaction 後も disk から
 #         再注入される**。つまり払い続ける。これは資源配分であって検知器の閾値ではない
 #         (docs/principles.md 規則8)—— 上げるなら実費として意識的に。
-#     (2) 文字数 40,000 —— **Claude Code 本体がこの値で警告を出す**(公式)。
-#         ハード上限の証拠は無いので ✗ ではなく強い警告として扱う。
 #
+
 #   ⚠️ **CLAUDE.md のコストは「毎セッション1回」ではない。乗算される。**
 #      CLAUDE.md は**サブエージェントにも継承される**(Explore と Plan だけ例外)。一方で
 #      ND の頭を運ぶ SessionStart フックは**サブエージェントでは発火しない**(#46696)。
@@ -252,9 +251,9 @@ else
   measure_file CLAUDE.md
   # 行数も出すが**予算としては出さない**(参考値)。行はどの機構も使っておらず日本語率で
   # 2倍以上ブレるが、人が「どこを削るか」を探すときの手掛かりは結局行なので表示は残す。
-  if [ "$MEAS_CHARS" -gt "$CLAUDE_MD_HARD_CHARS" ]; then
-    warn "CLAUDE.md が ${MEAS_CHARS} 字(Claude Code 本体が ${CLAUDE_MD_HARD_CHARS} 字で警告を出す)。≒${MEAS_TOKENS} tok / ${lines} 行 — 手順は skill、ファイル限定の制約は paths 付き rules へ"
-  elif [ "$MEAS_TOKENS" -gt "$CLAUDE_MD_WARN_TOKENS" ]; then
+  # ⚠️ 文字数のハード閾値(旧 CLAUDE_MD_HARD_CHARS=40000)は撤去した —— 出典が確認できず、
+  #    公式は「長さに関わらず全文ロード」と書いている。裏付けの無い閾値は持たない。
+  if [ "$MEAS_TOKENS" -gt "$CLAUDE_MD_WARN_TOKENS" ]; then
     warn "CLAUDE.md が ≒${MEAS_TOKENS} tok(${TOKENIZER_LABEL} 換算・予算 ${CLAUDE_MD_WARN_TOKENS} tok。${MEAS_CHARS} 字 / ${lines} 行)。**無条件・毎セッション全文ロードされ compaction 後も再注入される**ので、太った分をずっと払い続ける — 手順は skill、ファイル限定の制約は paths 付き rules へ"
   else
     ok "CLAUDE.md ≒${MEAS_TOKENS} tok(${TOKENIZER_LABEL} 換算・予算 ${CLAUDE_MD_WARN_TOKENS} tok。${MEAS_CHARS} 字 / ${lines} 行)"
