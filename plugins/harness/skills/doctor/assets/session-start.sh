@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.6.0 (配布元: gigun-dev/claude-code plugins/harness。配布先の世代確認はこの行を grep)
+# harness-template v0.7.0 (配布元: gigun-dev/claude-code plugins/harness。配布先の世代確認はこの行を grep)
 # SessionStart フック: セッション開始時にプロジェクトの「現在地」を確定的に注入する。
 #
 # 設計意図(caldav で確立した方式 + 2026-08-05 敵対的検証での補強):
@@ -13,7 +13,12 @@
 set -euo pipefail
 
 # フックの cwd はプロジェクトルート。CLAUDE_PROJECT_DIR があればそれを優先(堅牢化)。
-doc="${CLAUDE_PROJECT_DIR:-.}/docs/next-directions.md"
+# ⚠️ **`docs/` を直書きしない。**install 時に `--docs-dir` の実値が展開される。
+#    2026-08-08 の敵対的検証で発覚: ここが `docs/` 固定だったため、
+#    `--docs-dir` で導入した瞬間に `[ -r "$doc" ] || exit 0` へ落ちて**フックが無言で死ぬ**。
+#    しかも `--docs-dir` は「docs/ が公開サイトなら退避せよ」と導入手順が自ら誘導する経路で、
+#    status / tidy / doctor の検知器も同時に空振りする。**原則4 への最も直接的な違反だった。**
+doc="${CLAUDE_PROJECT_DIR:-.}/{{DOCS_DIR}}/next-directions.md"
 [ -r "$doc" ] || exit 0  # 正典が無い/読めないなら無言で終了(フックはセッションを止めない)
 
 # 閾値は目安。ただし警告を消すために上げるのは禁止(棚卸しが正)。棚卸し後に現況へ
@@ -155,5 +160,6 @@ fi
 # Why not awk: 印字だけなら sed で足りる。awk が「印字と計測」を兼ねていたのが、
 # 警告を末尾へ追いやっていた構造的な原因だった(END でしか計測結果を使えないので)。
 # **計測と印字を分けた結果、順序を自由に決められるようになった。**
-echo '=== docs/next-directions.md の頭(現在地・着手順)。詳細カタログは該当節をそのとき読む。更新は「> **YYYY-MM-DD 更新:**」を積層・計画は消さない ==='
+# 見出しも実際のパスを出す(`docs/` 直書きだと --docs-dir のとき見出しだけ嘘になる)。
+printf '=== %s の頭(現在地・着手順)。詳細カタログは該当節をそのとき読む。更新は「> **YYYY-MM-DD 更新:**」を積層・計画は消さない ===\n' "{{DOCS_DIR}}/next-directions.md"
 sed -n "1,$((marker_line - 1))p" "$doc"

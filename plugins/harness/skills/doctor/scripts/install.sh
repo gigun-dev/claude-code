@@ -99,7 +99,8 @@ mkdir -p .claude/hooks
 #    散文の規律が置かれていた。単位の読み違いが5箇所へ伝播したのはそれが原因。
 # shellcheck source=/dev/null
 . "$(cd "$(dirname "$0")/../../.." && pwd)/budgets.sh"
-sed -e "s/{{CATALOG_MAX_LINES}}/$CATALOG_MAX_LINES/g" \
+sed -e "s|{{DOCS_DIR}}|$DOCS_DIR|g" \
+    -e "s/{{CATALOG_MAX_LINES}}/$CATALOG_MAX_LINES/g" \
     -e "s/{{UPDATE_BLOCK_MAX}}/$UPDATE_BLOCK_MAX/g" \
     -e "s/{{HEAD_WARN_CHARS}}/$HEAD_WARN_CHARS/g" \
     -e "s/{{HEAD_HARD_CHARS}}/$HEAD_HARD_CHARS/g" \
