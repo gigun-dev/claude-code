@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.6.0 — 導入判断に必要な事実を集める(読み取り専用)。
+# harness-template v0.8.0 — 導入判断に必要な事実を集める(読み取り専用)。
 #
 # 設計意図(2026-08-05):
 #   SKILL.md の `!` 記法から、スキル読み込み時に**無条件で**実行される。したがって:
@@ -10,11 +10,97 @@
 #
 #   狙いは「調査の決定論化」— 手順書に散文で「言語を確認せよ」と書くと読み飛ばしが起きるが、
 #   ここに書けば必ず同じ検査が走る。判断そのものはモデルに残す。
+#
+# 追記(2026-08-07): `-h/--help` と未知引数の検知を追加(agentskills.io の script 規約に
+#   合わせる)。**`!` 記法での自動実行という契約は変えていない** —— 引数無しで呼ばれた
+#   ときの挙動(=無条件で調査を実行し必ず exit 0)は従来のまま。使い方の誤り(不明な引数)
+#   だけを exit 2 で区別する。
+#
+# 追記(2026-08-07・盆栽の7原則・原則4「検知器は黙って死ぬ前提で検知器を検証する」対応):
+#   「絶対に失敗しない」の実装が `2>/dev/null` と `|| true` の多用だったため、前提
+#   (git・python3・ファイル読み取り)が欠けても**何も言わずに事実が1件減るだけ**だった
+#   —— 導入判断をする側からは「その事実は無かった」のか「調べられなかった」のか
+#   区別が付かない。git が丸ごと使えない場合は最悪で、旧実装は「git リポジトリではない」
+#   の1行だけを ✗ で出して終わっており、「git コマンド自体が無い」場合と「git はあるが
+#   このディレクトリはリポジトリの外」の場合が同じ文言になっていた。
+#   Why not 終了コードで表現しないのか: この調査は SKILL.md の `!` 記法で
+#   **スキルを読んだだけで無条件に自動実行される**契約であり、`!` に置けるのは
+#   「必ず成功する読み取り専用スクリプト」だけという境界を守るため。非0を返せるように
+#   するとこの境界が崩れるので、終了コードは 0 のまま変えない。代わりに:
+#     (1) 前提が欠けて調べられなかった箇所は `skip`(記号 ⏭)で明示し、末尾の完走マーカーに
+#         件数を出す(0件なら「何も削れず全部調べられた」ことがそのまま分かる)。
+#     (2) 出力の最後に完走マーカー `=== 調査完了: skip N 件(survey.sh vX.Y.Z) ===` を
+#         必ず出す。終了コードが常に0なので、途中で異常終了しても検知できない
+#         —— 最後の1行がこのマーカーかどうかだけが出力上の完走判定の手がかりになる。
 set -uo pipefail
 
-say() { printf '%s\n' "$*"; }
+usage() {
+  cat <<'EOF'
+使い方: survey.sh [-h|--help]
 
-git rev-parse --show-toplevel >/dev/null 2>&1 || { say "✗ git リポジトリではない(ハーネス導入不可)"; exit 0; }
+harness 導入判断に必要な事実を集める(読み取り専用)。
+SKILL.md の `!` 記法から**無条件で**実行される —— 何も変更せず、必ず成功する契約。
+コード配置(拡張子分布・トップ階層)/ 検証コマンドの候補(package.json・Makefile)/
+docs/ の用途(公開サイトかどうか)/ 既存ハーネスの状態(初回導入か再導入か・世代刻印)/
+現在地の材料(直近コミット・未コミット・ブランチ)を出す。
+
+オプション:
+  引数なし    通常の調査を実行する(既定)。
+  -h, --help  これ。
+
+使用例:
+  bash survey.sh    # git rev-parse --show-toplevel を起点にこのリポジトリを調査する
+
+終了コード:
+  0  常に。SKILL.md の `!` 記法は「必ず成功する読み取り専用スクリプト」だけを置ける
+     境界を守るため、意図的にこの調査を失敗させない設計にしている(調べられなかった
+     ことも本文の ⏭ で表現するだけで、非0では返さない)。
+  2  使い方の誤り(不明な引数)。`!` 記法での自動実行時には起きない。
+
+調査の完走判定(終了コードが常に0なので、代わりにこれで判定すること):
+  - 出力の最終行が `=== 調査完了: skip N 件(survey.sh vX.Y.Z) ===` になっているか確認する。
+    この行が無ければ調査は途中で異常終了しており、それより前の出力も信用しないこと。
+  - 本文中の ⏭ は「前提(git・python3・ファイル読み取りなど)が欠けて調べられなかった」を
+    表す。N が 0 なら全項目を調べられたということ。
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    *) echo "不明な引数: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+say() { printf '%s\n' "$*"; }
+# skip: 「前提が欠けて調べられなかった」専用。survey.sh は判断ではなく事実の収集が
+# 仕事なので「findings」ではなく「skip」という語で数える —— 0 なら「何も削れず
+# 全部調べられた」ことがそのまま伝わる。記号は ⏭(check.sh / tidy.sh と共通)。
+skips=0
+skip() { printf '  ⏭ %s\n' "$*"; skips=$((skips+1)); }
+# finish: 出力の最後に完走マーカーを出してから exit 0 する共通の出口。
+# 出口を1関数に集約する理由は check.sh / tidy.sh と同じ(マーカーの出し忘れ防止)。
+finish() {
+  say ""
+  say "=== 調査完了: skip ${skips} 件(survey.sh v0.8.0) ==="
+  exit 0
+}
+
+# --- 前提: git -------------------------------------------------------------
+# 旧実装は「git リポジトリではない」1行だけを ✗ で出していたが、これは
+# 「git コマンド自体が無い」場合と「git はあるがこのディレクトリはリポジトリの外」
+# 場合を同じ文言で潰していた —— 前者は環境の問題、後者は呼び出し場所の問題で
+# 対処が違うので分ける。またこの1行以降の全節が `git ls-files` / `git log` 等に
+# 依存しているため、ここが壊れているなら調査全体を諦めて finish する(check.sh の
+# 「前提: git」節と同じ判断。理由もそちらを参照)。
+if ! command -v git >/dev/null 2>&1; then
+  skip "git コマンドが見つからない。この調査は git 依存のため実行できなかった(PATH を確認すること)"
+  finish
+fi
+if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
+  skip "git リポジトリの外(または壊れたリポジトリ)。ハーネス導入判断のための調査を実行できなかった"
+  finish
+fi
 root=$(git rev-parse --show-toplevel)
 say "リポジトリ: $root"
 
@@ -30,14 +116,25 @@ git ls-files 2>/dev/null | awk -F/ 'NF>1{print $1}' | sort -u | head -12 | sed '
 # --- 検証コマンド(--check-cmd の判断材料) ------------------------------------
 say ""
 say "## 検証コマンドの候補(--check-cmd の材料。make は前提にしない)"
+# python3 が無いと package.json の scripts を解析できない。旧実装は
+# `python3 - <<PY 2>/dev/null || say "  package.json: 解析できず"` で、python3 が
+# 無いケースと package.json が壊れた JSON なケースが同じ文言に潰れていた
+# (このハーネスが問題提起そのものに挙げている実例と同型)。前者は ⏭、後者は
+# 「解析できず」のまま残す(JSON 自体の異常はこの調査の対象外の情報なので note 相当)。
+has_python3=1
+command -v python3 >/dev/null 2>&1 || has_python3=0
 if [ -f package.json ]; then
-  python3 - <<'PY' 2>/dev/null || say "  package.json: 解析できず"
+  if [ "$has_python3" -eq 0 ]; then
+    skip "package.json はあるが python3 が無いため scripts を解析できなかった(手動で確認すること)"
+  else
+    python3 - <<'PY' 2>/dev/null || say "  package.json: 解析できず(JSON として不正な可能性)"
 import json
 s = json.load(open("package.json")).get("scripts", {})
 for k in ("check", "test", "typecheck", "lint"):
     if k in s:
         print(f"  package.json scripts.{k}: {s[k]}")
 PY
+  fi
   [ -f bun.lock ] || [ -f bun.lockb ] && say "  → bun 系(bun run <script>)" || say "  → npm 系(npm run <script>)"
 fi
 [ -f Makefile ] && grep -E '^(check|test|verify):' Makefile 2>/dev/null | sed 's/^/  Makefile ターゲット: /'
@@ -61,7 +158,11 @@ say ""
 say "## 既存ハーネスの状態"
 nd=$(ls docs/next-directions.md 2>/dev/null || true)
 if [ -n "$nd" ]; then
-  if grep -q '^<!-- session-head-end' docs/next-directions.md; then
+  if [ ! -r docs/next-directions.md ]; then
+    # 読めないファイルに grep すると「マーカーが無い」と誤読される
+    # (check.sh の CLAUDE.md 節と同型の壊れ方)。読めない、と正直に言う。
+    skip "docs/next-directions.md の読み取り権限が無く検査できなかった"
+  elif grep -q '^<!-- session-head-end' docs/next-directions.md; then
     say "  next-directions.md: あり(マーカーあり・頭 $(( $(grep -n '^<!-- session-head-end' docs/next-directions.md | head -1 | cut -d: -f1) - 1 )) 行 / 全 $(wc -l < docs/next-directions.md) 行)"
   else
     say "  ⚠️ next-directions.md: あるがマーカー無し(旧様式 — 上書きせずマイグレーションが要る)"
@@ -77,7 +178,11 @@ say "  core.hooksPath: $(git config core.hooksPath || echo '未設定')"
 # log.md は「大きく育ったリポジトリだけ」に入れる。小規模では git 履歴で足りるので、
 # 作っても書かれないファイルが増えるだけ(判断材料としてコミット数を出す)。
 if [ -e docs/log.md ]; then
-  say "  docs/log.md: あり($(wc -l < docs/log.md | tr -d ' ') 行)"
+  if [ -r docs/log.md ]; then
+    say "  docs/log.md: あり($(wc -l < docs/log.md | tr -d ' ') 行)"
+  else
+    skip "docs/log.md の読み取り権限が無く検査できなかった"
+  fi
 else
   say "  docs/log.md: なし(コミット数 $(git rev-list --count HEAD 2>/dev/null || echo 0) — 長期プロジェクトなら --with-log を検討)"
 fi
@@ -92,4 +197,4 @@ say "  未コミット: $(git status --porcelain 2>/dev/null | wc -l | tr -d ' '
 git status --short 2>/dev/null | head -8 | sed 's/^/    /'
 say "  ブランチ: $(git branch --show-current 2>/dev/null) / upstream: $(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null || echo 'なし')"
 
-exit 0
+finish

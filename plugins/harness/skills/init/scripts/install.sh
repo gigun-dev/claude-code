@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.5.0 — ハーネス導入の機械的な部分をすべて実行する。
+# harness-template v0.13.0 — ハーネス導入の機械的な部分をすべて実行する。
 #
 # 設計意図(2026-08-05):
 #   SKILL.md の散文手順を LLM に解釈させると、実行のたびに揺れる(手順の読み飛ばし・
@@ -72,6 +72,10 @@ else
   sed "s/{{DATE}}/$(date +%Y-%m-%d)/g" "$ASSETS/next-directions.md" > "$ND"
   DID+=("$ND: テンプレートから作成")
   TODO+=("$ND の {{CURRENT_STATE}} / {{NEXT_STEPS}} / {{CATALOG}} を、README・直近コミット・会話の文脈から埋める")
+  # 着手順はチェックリスト形式(/harness:next が読む唯一の機械可読な節)。ID の接頭辞だけは
+  # 人が決めるしかないので TODO に出す —— テンプレートの `X-` のままだと、どのプロジェクトの
+  # 項目かが --all の横断一覧で判別できなくなる。
+  TODO+=("$ND の着手順の ID 接頭辞 'X-' をプロジェクトの略号へ変える(例: caldav なら 'CD-1')。書式は節の先頭コメント参照。確認は /harness:next --lint")
 fi
 
 # --- 1b. log.md(追記専用アーカイブ・任意) -----------------------------------
@@ -151,23 +155,94 @@ if [ "$SKIP_PREPUSH" -eq 0 ]; then
     TODO+=("検証コマンドを自動検出できなかったため pre-push は未導入。--check-cmd を指定して再実行するか、CI と同じ検証を用意する")
   else
     mkdir -p .githooks
+    # .githooks/pre-push 自体は session-start.sh と同じ「完全にこちらが生成する管理下ファイル」
+    # なので、常に最新版へ上書きする(既存の comments.md / AGENTS.md のような「ユーザーが書き足す
+    # 文書」の skip-if-exists とは性質が違う)。core.hooksPath が別の値を指していても、
+    # このファイル自体を置くこと自体は git から参照されないので無害 — 危険なのは
+    # 次の core.hooksPath の書き換えだけ、という前提でここは常に上書きする。
     python3 - "$ASSETS/pre-push" .githooks/pre-push "$CHECK_CMD" <<'PY'
 import sys
 src, dst, cmd = sys.argv[1], sys.argv[2], sys.argv[3]
 open(dst, "w").write(open(src).read().replace("{{CHECK_COMMAND}}", cmd))
 PY
     chmod +x .githooks/pre-push
-    git config core.hooksPath .githooks
-    DID+=(".githooks/pre-push: 配置(検証= $CHECK_CMD)+ core.hooksPath を配線")
+
+    # core.hooksPath は無条件に書き換えない(H-1: 既に別の値が設定されているリポジトリで
+    # 黙って上書きすると、既存のフック一式が丸ごと無効化される。これは騒がしく失敗する
+    # 他の不具合と違って気づかれずに壊れるので、最優先で塞ぐ)。
+    # まず既存値を読み、3パターンに分岐する。
+    #   - 未設定                → 従来どおり .githooks を設定(挙動変更なし)。
+    #   - 既に ".githooks"      → 何もしない。同じ値を再設定しても実害は無いが、
+    #                              「変更なし」であることが DID から分かるようにする。
+    #   - 既に別の値            → 絶対に上書きしない。TODO で警告し、pre-push の配線は
+    #                              人(エージェント)の判断に委ねる。
+    existing_hooks_path=$(git config --get core.hooksPath 2>/dev/null || true)
+    if [ -z "$existing_hooks_path" ]; then
+      git config core.hooksPath .githooks
+      DID+=(".githooks/pre-push: 配置(検証= $CHECK_CMD)+ core.hooksPath を配線")
+    elif [ "$existing_hooks_path" = ".githooks" ]; then
+      DID+=(".githooks/pre-push: 配置(検証= $CHECK_CMD)。core.hooksPath は既に .githooks — 変更なし")
+    else
+      DID+=(".githooks/pre-push: 配置(検証= $CHECK_CMD)。core.hooksPath は '$existing_hooks_path' のまま — 上書きせず")
+      TODO+=("⚠️ core.hooksPath が既に '$existing_hooks_path' に設定されている(このハーネスが設定したものではない)。上書きすると既存のフック一式が黙って無効化されるため、このスクリプトは core.hooksPath を変更しなかった。'.githooks/pre-push' は生成済みなので、'$existing_hooks_path/pre-push' に手で配置するか、既存の仕組み(例: $existing_hooks_path 配下のディスパッチャ)へ組み込むこと")
+    fi
+
     # 既に README に書いてあるなら催促しない(再実行のたびに済んだ TODO が出ると、
     # 出力全体が「読み飛ばしてよいもの」に見えてしまう)。
-    if ! grep -rqs 'core.hooksPath' README.md Makefile package.json 2>/dev/null; then
-      TODO+=("README に 'git config core.hooksPath .githooks' を書く(.git/config に入るため git 管理されず、clone ごとに1回必要)")
+    # core.hooksPath が別の値のまま(上記の else 分岐)なら、'.githooks' を勧める文言は
+    # 実態と食い違うので出さない — その場合は上の ⚠️ TODO が既に対応を促している。
+    if [ -z "$existing_hooks_path" ] || [ "$existing_hooks_path" = ".githooks" ]; then
+      if ! grep -rqs 'core.hooksPath' README.md Makefile package.json 2>/dev/null; then
+        TODO+=("README に 'git config core.hooksPath .githooks' を書く(.git/config に入るため git 管理されず、clone ごとに1回必要)")
+      fi
     fi
   fi
 fi
 
-# --- 5. AGENTS.md(他エージェント向けの入口) ----------------------------------
+# --- 5. CLAUDE.md ---------------------------------------------------------------
+# 課題(2026-08-05 実測): ハーネスが配る他のファイルは全部テンプレートを持つのに、CLAUDE.md
+# だけ「無ければ TODO で促すだけ」で本文をエージェント任せにしていた。結果、配布先8リポジトリで
+# 別々に育った(store-redirect 23行 〜 dotfiles 169行、見出し構成は7通り)。刻印(先頭コメントの
+# バージョン文字列)も無いので、どのリポジトリがどの世代か機械的に見分けられなかった。
+#
+# skip-if-exists(3番の comments.md と同じクラス): CLAUDE.md は「ユーザー(エージェント)が
+# 書き足していく文書」であり、session-start.sh や pre-push のような「常に最新版へ差し替えて
+# よい管理下ファイル」ではない。既にあるなら1バイトも変更しない —— 中身は人によって最初から
+# テンプレとは違う書き方で育っている可能性があり、無条件上書きは執筆済みの文書を破壊する事故に
+# なる。無ければテンプレを置き、プレースホルダを埋める判断だけ TODO としてエージェントに残す。
+#
+# ★ このセクションを AGENTS.md(次の6番)より前に置いた理由:
+#   AGENTS.md 節は「CLAUDE.md があれば symlink を作る」ことで Codex 等の入口を用意する。
+#   元の実装は AGENTS.md(旧5番)→ CLAUDE.md(旧7番、TODO を出すだけ)の順だったため、
+#   CLAUDE.md が存在しない初回導入では AGENTS.md 節を通過する時点でまだ CLAUDE.md が無く、
+#   symlink が作られないまま TODO で止まっていた(このリポジトリのルートに実際に AGENTS.md が
+#   存在しない、という形で顕在化していた)。CLAUDE.md にテンプレができた今、順序を入れ替えて
+#   ここで先に確定させれば、後続の AGENTS.md 節は初回導入でも必ず symlink を作れる。
+#   (代替案: AGENTS.md 節を後ろへ動かす手もあったが、通し番号の付け替え範囲が大きくなるだけで
+#   本質は同じなので、より小さい差分で済む「CLAUDE.md を前に出す」を採った。)
+if [ -e CLAUDE.md ]; then
+  DID+=("CLAUDE.md: 既存 — 変更なし")
+  # 中身は書かないが、定型2節(情報の書き分け方針 / 現在地・次の作業)が無ければ追記を促す。
+  # これは新規テンプレートでは自動的に満たされるが、旧来ユーザーが手書きした CLAUDE.md では
+  # 欠けていることがあるための互換チェック。
+  if ! grep -q 'next-directions' CLAUDE.md; then
+    TODO+=("CLAUDE.md に定型2節(情報の書き分け方針 / 現在地・次の作業=docs/next-directions.md が正典)を追記する")
+  fi
+else
+  cp "$ASSETS/CLAUDE.md" CLAUDE.md
+  DID+=("CLAUDE.md: テンプレートから作成")
+  # 「何を書かないか」の根拠は、テンプレート本体ではなくこの TODO に置く。理由: テンプレ内の
+  # HTML コメントは埋め終わった後も**配布先で毎セッション読まれ続ける**のに、埋める作業が
+  # 終わればエージェントの行動を1つも変えない = 純粋なコンテキストコストになる。埋めるときにだけ
+  # 要る情報なので、埋めるときにだけ出るここに置くのが正しい(テンプレ側には1行の判定基準だけ残した)。
+  TODO+=("CLAUDE.md の {{PROJECT_NAME}} / {{ONE_LINE_DESCRIPTION}} / {{CHECK_CMD}} / {{RUN_CMD}} / {{DEPLOY_CMD}} / {{NON_DEFAULT_CONVENTIONS}} を、README・package.json・直近コミットから埋める。判定は「その一文はエージェントの行動を変えるか」の一点。**書かないもの**: 技術スタック一覧(package.json 等で分かる)/ アーキテクチャ概観・ディレクトリツリー(ETH の A/B 実測 arXiv:2602.11988 —— 成果に効かずコストだけ +20%。README へ)/ コメント方針の中身(.claude/rules/comments.md と複製になりドリフトする。ポインタ1行のみ)/ 手順(skill へ)/「毎回必ず〜する」(hook へ)。80行以内を維持")
+fi
+
+# --- 6. AGENTS.md(他エージェント向けの入口) ----------------------------------
+# 上の5番で CLAUDE.md は既存 or 新規作成のどちらかで必ず存在する状態になっているため、
+# 通常はこの if 分岐が常に真になる。elif 以下は CLAUDE.md 作成に失敗した場合の防御的な分岐として
+# 残す(set -euo pipefail 下では cp 失敗時点でスクリプト自体が止まるので、実運用では到達しない
+# はずだが、削って silent な前提にするより残すコストの方が低い)。
 if [ -e AGENTS.md ] || [ -L AGENTS.md ]; then
   DID+=("AGENTS.md: 既存 — 変更なし")
 elif [ -e CLAUDE.md ]; then
@@ -177,7 +252,7 @@ else
   TODO+=("CLAUDE.md が無いため AGENTS.md を作れなかった。CLAUDE.md 作成後に 'ln -s CLAUDE.md AGENTS.md'")
 fi
 
-# --- 6. Codex アダプタ --------------------------------------------------------
+# --- 7. Codex アダプタ --------------------------------------------------------
 if [ "$WITH_CODEX" -eq 1 ]; then
   mkdir -p .codex/hooks
   cp "$ASSETS/codex-hooks.json" .codex/hooks.json
@@ -201,7 +276,7 @@ if [ "$WITH_CODEX" -eq 1 ]; then
   DID+=(".codex/: hooks.json + session-start.sh symlink + config.toml + README を配線")
 fi
 
-# --- 6b. .gitignore(個人環境ファイルの流出防止) ------------------------------
+# --- 7b. .gitignore(個人環境ファイルの流出防止) ------------------------------
 # settings.local.json は permission allowlist などマシン固有の設定で、コミットすると
 # 他人・他マシンへ個人環境が漏れる。plans も一時作業物。**実害があるので必ず入れる。**
 for entry in ".claude/settings.local.json" ".claude/plans/"; do
@@ -218,12 +293,9 @@ if git ls-files --error-unmatch .claude/settings.local.json >/dev/null 2>&1; the
   TODO+=("⚠️ .claude/settings.local.json が既に git 追跡されている(個人環境の permission が共有される)。'git rm --cached .claude/settings.local.json' で追跡を外すこと")
 fi
 
-# --- 7. CLAUDE.md の定型節(存在チェックのみ。本文はエージェントが書く) --------
-if [ ! -e CLAUDE.md ]; then
-  TODO+=("CLAUDE.md を作成する(200行以下。プロジェクト一行説明 / 主要コマンド / アーキテクチャ要点 / 情報の書き分け方針 / 現在地・次の作業の2定型節)")
-elif ! grep -q 'next-directions' CLAUDE.md; then
-  TODO+=("CLAUDE.md に定型2節(情報の書き分け方針 / 現在地・次の作業=docs/next-directions.md が正典)を追記する")
-fi
+# CLAUDE.md のテンプレート配置・skip-if-exists 判定は上の5番へ統合済み
+# (旧: ここに「存在チェックのみで本文はエージェント任せ」の節があったが、課題そのものだった
+# ので廃止した。詳細は5番のコメント参照)。
 
 # --- 結果 ---------------------------------------------------------------------
 echo "=== 実行した機械的作業 ==="
