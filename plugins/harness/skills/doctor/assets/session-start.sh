@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.4.0 (配布元: gigun-dev/claude-code plugins/harness。配布先の世代確認はこの行を grep)
+# harness-template v0.5.0 (配布元: gigun-dev/claude-code plugins/harness。配布先の世代確認はこの行を grep)
 # SessionStart フック: セッション開始時にプロジェクトの「現在地」を確定的に注入する。
 #
 # 設計意図(caldav で確立した方式 + 2026-08-05 敵対的検証での補強):
@@ -55,8 +55,23 @@ if [ -z "$marker_line" ]; then
   exit 0
 fi
 
-echo '=== docs/next-directions.md の頭(現在地・着手順)。詳細カタログは該当節をそのとき読む。更新は「> **YYYY-MM-DD 更新:**」を積層・計画は消さない ==='
+# ============================================================================
+# ⚠️ **出力の順序が設計そのもの。警告を先に、頭を後に出す。**
+#
+#   2026-08-08 まで逆だった —— 頭を全部出してから末尾に警告を付けていた。
+#   だが #70460 は「10,000字を超えると **2KB のプレビューだけ**が注入される」。
+#   **つまり切り詰められた瞬間、末尾にある『切り詰められています』の警告が最初に消える。**
+#   **切り詰めを知らせる検知器が、切り詰めによって死ぬ。**原則4 の最も純粋な実例で、
+#   しかもこの警告を書いた当人(2026-08-08)が一度も超過状態で試していなかった。
+#
+#   だから: **(1) 全部計測する → (2) 警告を出す → (3) 頭を出す。**
+#   警告は先頭 2KB に必ず入るので、何が起きているかだけは必ず届く。
+#   頭の後半が消えるのは避けられないが、**消えたことが分からない**のは避けられる。
+#
+#   Why not 警告だけ別経路で出す: フックの出力は stdout 1本しかない。順序が唯一の制御。
+# ============================================================================
 
+# --- (1) 計測。ここではまだ1バイトも出力しない ------------------------------
 # 頭の文字数。**ロケールに依存させない**のが要点 ——
 # `wc -m` はロケール次第でバイト数を返す(LANG 未設定の macOS が実際にそう)ので使えない。
 # 代わりに UTF-8 の構造を直接使う:
@@ -65,36 +80,18 @@ echo '=== docs/next-directions.md の頭(現在地・着手順)。詳細カタ�
 # ⚠️ 測っているのは頭だけだが、切り詰めの対象は**この stdout 全体**(見出し行 + 警告文も含む)。
 #    見出し行は約 130 字、警告文は出ても数百字なので、8,000 / 10,000 の 2,000 字の余裕で吸収する
 #    —— 余裕はそのためにある。ここを縮めるなら見出しと警告も計測に含めること。
-head_text=$(sed -n "1,$((marker_line - 1))p" "$doc")
-head_chars=$(printf '%s' "$head_text" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' ')
-unset head_text   # 頭は下の awk が本体から直接出す。二重に持たない(大きいので)
+head_chars=$(sed -n "1,$((marker_line - 1))p" "$doc" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' ')
 
-# 頭(マーカー手前まで)を注入し、カタログ(マーカー以降)は行数と更新ブロック数を計測。
+# カタログ(マーカー以降)の行数と更新ブロック数。**数えるだけで印字しない。**
 # 更新ブロックのパターンは寛容に取る(太字省略・スラッシュ日付も数える)。教える正書式は
 # 太字だが、書式が少しズレただけで計測が静かに死ぬ設計にしない(敵対的検証の指摘)。
-awk -v marker="$marker_line" -v maxlines="$CATALOG_MAX_LINES" -v maxblocks="$UPDATE_BLOCK_MAX" \
-    -v chars="$head_chars" \
-    -v warnchars="$HEAD_WARN_CHARS" -v hardchars="$HEAD_HARD_CHARS" '
-  NR < marker { print; next }
-  NR == marker { next }
-  {
-    catalog++
-    if ($0 ~ /^[[:space:]]*> (\*\*)?20[0-9][0-9][-\/].*更新(:|：)/) updates++
-  }
-  END {
-    # ⚠️ hardchars は「もう切れている」——「これから気をつけて」ではない。文言を弱めないこと。
-    if (chars > hardchars) {
-      printf "\n✗ 頭が %d 字あります(上限 %d 字)—— **この出力はいま無言で切り詰められており、2KB のプレビューしか届いていません**(anthropics/claude-code#70460)。棚卸しするまで頭の後半は読まれません。\n", chars, hardchars
-    } else if (chars > warnchars) {
-      printf "\n⚠️ 頭が %d 字あります(目安 %d 字・切り詰めは %d 字)。現在地・着手順は要約し、経緯の積層はカタログ側か git 履歴へ。\n", chars, warnchars, hardchars
-    }
-    if (catalog > maxlines || updates > maxblocks) {
-      printf "\n⚠️ next-directions.md のカタログが肥大化しています(%d 行 / 更新ブロック %d 個、閾値 %d 行 / %d 個)。\n", catalog, updates, maxlines, maxblocks
-      printf "   棚卸し(次版)を実施してください — 「> 日付 更新:」積層を本文へ溶かし込み、頭を最新の現在地に更新する。\n"
-      printf "   ⚠️ 閾値を上げて警告を消すのは禁止。棚卸し後に現況へ下げ直すのは可。\n"
-    }
-  }
-' "$doc"
+catalog_stats=$(awk -v marker="$marker_line" '
+  NR <= marker { next }
+  { catalog++; if ($0 ~ /^[[:space:]]*> (\*\*)?20[0-9][0-9][-\/].*更新(:|：)/) updates++ }
+  END { print catalog+0, updates+0 }
+' "$doc")
+catalog_lines=${catalog_stats%% *}
+update_blocks=${catalog_stats##* }
 
 # 鮮度検査: 頭の「## 現在地(YYYY-MM-DD)」の日付より新しいコミットがあれば、更新漏れの可能性を警告。
 # 日付粒度の比較なので当日中の連続作業では鳴らない(緩い検査。強制機構ではなく検知器)。
@@ -112,15 +109,38 @@ awk -v marker="$marker_line" -v maxlines="$CATALOG_MAX_LINES" -v maxblocks="$UPD
 head_line=$(sed -n "1,${marker_line}p" "$doc" | grep -m1 -E '^#+[[:space:]]*現在地' || true)
 head_date=$(printf '%s' "$head_line" | grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}' | head -1 || true)
 
+last_commit=""
+if [ -n "$head_date" ] && command -v git >/dev/null 2>&1; then
+  last_commit=$(git -C "${CLAUDE_PROJECT_DIR:-.}" log -1 --format=%cs 2>/dev/null || true)
+fi
+
+# --- (2) 警告を先に出す。**ここが 2KB のプレビューに必ず入る部分** ------------
+# ⚠️ hardchars は「もう切れている」——「これから気をつけて」ではない。文言を弱めないこと。
+if [ "$head_chars" -gt "$HEAD_HARD_CHARS" ]; then
+  printf '✗ 頭が %d 字あります(上限 %d 字)—— **この出力はいま無言で切り詰められており、先頭 2KB しか届いていません**(anthropics/claude-code#70460)。棚卸しするまで頭の後半は読まれません。\n\n' "$head_chars" "$HEAD_HARD_CHARS"
+elif [ "$head_chars" -gt "$HEAD_WARN_CHARS" ]; then
+  printf '⚠️ 頭が %d 字あります(目安 %d 字・切り詰めは %d 字)。現在地・着手順は要約し、経緯の積層はカタログ側か git 履歴へ。\n\n' "$head_chars" "$HEAD_WARN_CHARS" "$HEAD_HARD_CHARS"
+fi
+
+if [ "$catalog_lines" -gt "$CATALOG_MAX_LINES" ] || [ "$update_blocks" -gt "$UPDATE_BLOCK_MAX" ]; then
+  printf '⚠️ next-directions.md のカタログが肥大化しています(%d 行 / 更新ブロック %d 個、閾値 %d 行 / %d 個)。\n' "$catalog_lines" "$update_blocks" "$CATALOG_MAX_LINES" "$UPDATE_BLOCK_MAX"
+  printf '   棚卸し(次版)を実施してください — 「> 日付 更新:」積層を本文へ溶かし込み、頭を最新の現在地に更新する。\n'
+  printf '   ⚠️ 閾値を上げて警告を消すのは禁止。棚卸し後に現況へ下げ直すのは可。\n\n'
+fi
+
 # **見出しはあるのに日付が取れない = 検知器が死んでいる。**黙って通さない(原則4)。
 # ここを無警告で素通りさせたのが、上の2回の事故が長く見つからなかった理由そのもの。
-if [ -n "$head_line" ] && [ -z "$head_date" ]; then
-  printf '\n⚠️ 現在地の見出しから日付が読めません(鮮度検査が無効化されています)。見出しを `## 現在地(YYYY-MM-DD)` の形にしてください。\n   いまの見出し: %s\n' "$head_line"
-elif [ -z "$head_line" ]; then
-  printf '\n⚠️ 頭に `## 現在地` の見出しがありません(鮮度検査が無効化されています)。\n'
-elif command -v git >/dev/null 2>&1; then
-  last_commit=$(git -C "${CLAUDE_PROJECT_DIR:-.}" log -1 --format=%cs 2>/dev/null || true)
-  if [ -n "$last_commit" ] && [ "$last_commit" \> "$head_date" ]; then
-    printf '\n⚠️ 現在地の日付(%s)より新しいコミット(%s)があります — 頭の更新漏れの可能性。作業前に現在地を最新化してください。\n' "$head_date" "$last_commit"
-  fi
+if [ -z "$head_line" ]; then
+  printf '⚠️ 頭に `## 現在地` の見出しがありません(鮮度検査が無効化されています)。\n\n'
+elif [ -z "$head_date" ]; then
+  printf '⚠️ 現在地の見出しから日付が読めません(鮮度検査が無効化されています)。見出しを `## 現在地(YYYY-MM-DD)` の形にしてください。\n   いまの見出し: %s\n\n' "$head_line"
+elif [ -n "$last_commit" ] && [ "$last_commit" \> "$head_date" ]; then
+  printf '⚠️ 現在地の日付(%s)より新しいコミット(%s)があります — 頭の更新漏れの可能性。作業前に現在地を最新化してください。\n\n' "$head_date" "$last_commit"
 fi
+
+# --- (3) 頭を出す。**切り詰められるならここが消える** ------------------------
+# Why not awk: 印字だけなら sed で足りる。awk が「印字と計測」を兼ねていたのが、
+# 警告を末尾へ追いやっていた構造的な原因だった(END でしか計測結果を使えないので)。
+# **計測と印字を分けた結果、順序を自由に決められるようになった。**
+echo '=== docs/next-directions.md の頭(現在地・着手順)。詳細カタログは該当節をそのとき読む。更新は「> **YYYY-MM-DD 更新:**」を積層・計画は消さない ==='
+sed -n "1,$((marker_line - 1))p" "$doc"
