@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.15.0 (配布元: gigun-dev/claude-code plugins/harness)
+# harness-template v0.16.0 (配布元: gigun-dev/claude-code plugins/harness)
 #   — next-directions.md の「着手順」節を読んで一覧化し(読み取り専用)、
 #     ID 指定で「着手順」節と「完了記録」節**だけ**を書き換える(--add / --done / --note / --archive)。
 #
@@ -229,6 +229,8 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
   - [x] `H-1` 概要
         → 2026-08-05 / bc3350f / 何を確認したか(**証拠行**。[x] には必須)
   節の終わりは次の `## ` か行頭 `<!-- session-head-end` か EOF。
+  **読むのは最初の `## 着手順` 1節だけ**(頭にある1節が正。下はカタログ部)。
+  2つ目以降の同名見出しに項目行があると orphan-items 違反になる。
   証拠を書けない移行時のみ `(移行: 証拠なし)` を項目か継続行に含めて免除する。
 
 出力の3区分:
@@ -256,6 +258,9 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
   5. `## 着手順` 節が無い                                                    no-section
   6. 節はあるが `- [` 行が1本も無い(旧書式のまま未移行)                    not-migrated
   7. `- [` 行はあるのに1件も読めない(**ドリフト**。fail-closed)            empty-section
+  8. 2つ目以降の `## 着手順` に項目行がある(読まれず閉じられない)          orphan-items
+     読むのは最初の1節だけ。カタログ部の `## 着手順の詳細` のように項目行を
+     持たない同名見出しでは鳴らない(落とすものがあるときだけ鳴らす)。
 
   ⚠️ 5・6(未移行)は **--all のときだけ警告へ落とす**。横断 board は毎日叩くもので、
      未移行が1つでもあると常に赤になり、**赤の意味が消えて本物のドリフト(3・7)が
@@ -443,6 +448,10 @@ fi
 #   I <repo> <comp> <file> <id> <status> <summary> <detail> <done> <evidence>
 #   E <repo> <comp> <file> <code> <line> <sev> <message>       sev: V=違反 / W=警告
 #
+# `-v layout=1` で呼ぶと**上の2つは1本も出さず**、代わりに構造レコード(L / T / A)を出す。
+# 書き込み側(edit.awk)専用の出力で、詳細はパーサ本体の「layout モード」の節に書いてある。
+# 要するに **書式の解釈はこのパーサ1箇所** で、エディタは行番号を受け取るだけ。
+#
 # detail / done / evidence の中は2段の区切りを持つ:
 #   VT(0x0b) = ブロックの区切り(別の「→」行 / 別の段落)
 #   FF(0x0c) = 同じブロックの折り返し(1行に収まらなかった続き)
@@ -466,12 +475,48 @@ function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
 #    量化子も (　)+ のようにグループへ掛ける(　+ だと最終バイトにだけ掛かる)。
 function ltrim(s) { sub(/^[ \t]+/, "", s); sub(/^(　)+/, "", s); sub(/^[ \t]+/, "", s); return s }
 
+# --- layout モード(書き側へ「どの行が何か」を渡す) ---------------------------
+# **2026-08-08(H-19)追加。書式の解釈をこのパーサ1箇所に閉じるための出力。**
+#
+# 経緯: それまで書き側(edit.awk)は独自に `/^## 着手順/` を探し、独自に項目行の正規表現で
+# ID を照合していた。**同じ書式の実装が2本あり、実際に答えが割れていた** ——
+# マーカーより下に2つ目の `## 着手順` があると、読み側はそこの項目まで一覧に出すのに、
+# 書き側は最初の節しか見ないので「そんな ID は無い」と拒否する(実測)。
+# **目の前の一覧に見えている項目を閉じられない。**「1文字も違えないこと」と両方のコメントに
+# 書いてあったが、散文の規律で二重実装を同期し続けるのは無理だった(この repo が繰り返し
+# 潰してきた「複製すれば必ずドリフトする」の再発。盆栽の7原則 7)。
+#
+# したがって **「どの行が何であるか」はここだけが決める。** エディタは行番号を受け取って
+# 書き換えるだけで、節を探すことも ID を照合することもしない。
+#
+# レコード形式(US 区切り。**read モードでは1本も出さない / layout モードでは I・E を出さない**):
+#   L <key> <value>   ファイル全体の構造。key は下の END を参照
+#   T <k> <id> <status> <start> <end> <mind> <aind> <hasevi> <para> <edate> <summary>
+#       start/end  項目の開始行と最終行(継続行を含む。空行は範囲を切らない)
+#       mind/aind  継続行の最小字下げ / 「→」行の最小字下げ(0 = 該当行なし)
+#       hasevi     証拠行(「→ 完了条件:」以外の「→」)を持つか。**--lint の no-evidence と
+#                  同じ判定**を使う —— ここが割れると「lint は証拠なしと言うのに
+#                  --archive は移す」が起きる
+#       para       末尾の `> 更新:` 引用ブロックの手前の行(証拠行の挿入位置)
+#       edate      最初の証拠行の先頭にある YYYY-MM-DD("" = 無い)
+#   A <id>          `## 完了記録` に降ろし済みの ID(未知 ID の診断を親切にするため)
+# ⚠️ 値の中に US は現れない(markdown 本文に出てこない制御文字を選んである)。
+function lay(k, v) { print "L" US k US v }
+
 function emit_err(code, ln, sev, msg) {
+  # layout モードでは診断を出さない。**判定そのものは同じコードが下している** ——
+  # 出力を絞っているだけなので、ここで読み側と書き側の解釈が割れることはない。
+  # (書き込み前に検査したいなら --lint を別に回す。読み取りと書き込みは混ぜない規約。)
+  if (layout) return
   print "E" US repo US comp US file US code US ln US sev US msg
 }
 
+# c_end / c_mind / c_amin / c_para / c_edate は layout 用の位置情報。
+# **read モードでも同じコードで計算する**(モードごとに別の理屈で数えると、
+# そこがまた二重実装になる。分けてよいのは「出力するか否か」だけ)。
 function reset() { c_id=""; c_st=""; c_sum=""; c_det=""; c_done=""; c_evi=""; c_ex=0; c_ln=0
-                   c_last=""; c_aind=0 }
+                   c_last=""; c_aind=0
+                   c_end=0; c_mind=999; c_amin=999; c_para=0; c_edate="" }
 
 function flush() {
   if (c_id == "") { reset(); return }
@@ -480,28 +525,121 @@ function flush() {
   # 進捗を見て勝手に完了宣言する」罠は、✅ が証拠なしで積み上がるほど強く出る。
   if (c_st == "x" && c_evi == "" && c_ex == 0)
     emit_err("no-evidence", c_ln, "V", "完了 [x] の `" c_id "` に証拠行が無い(→ で始まる継続行に「何を確認したか」を書く。移行時のみ (移行: 証拠なし) で免除)")
-  print "I" US repo US comp US file US c_id US c_st US c_sum US c_det US c_done US c_evi
   nitem++
+  # **証拠の有無は c_evi(= no-evidence 検査が見ているもの)で判定する。**
+  # 旧エディタは「`→` 行が完了条件以外にあるか」で見ており、`→` だけ書いて中身が空の行を
+  # 証拠として数えていた —— lint が no-evidence と言う項目を --archive が移せてしまう。
+  # 1本化にあたって **lint 側の判定へ寄せた**(証拠ゲートを緩める方向へは倒さない)。
+  if (layout)
+    print "T" US nitem US c_id US c_st US c_ln US (c_end == 0 ? c_ln : c_end) \
+          US (c_mind == 999 ? 0 : c_mind) US (c_amin == 999 ? 0 : c_amin) \
+          US (c_evi == "" ? 0 : 1) US (c_para == 0 ? c_ln : c_para) US c_edate US c_sum
+  else
+    print "I" US repo US comp US file US c_id US c_st US c_sum US c_det US c_done US c_evi
   reset()
 }
 
 BEGIN {
   US = sprintf("%c", 31); VT = sprintf("%c", 11); FF = sprintf("%c", 12)
   insec = 0; nsec = 0; nitem = 0
+  # layout 用。shadow = 「2つ目以降の `## 着手順`」の中にいるか(下の節の境界を参照)。
+  shadow = 0; shline = 0; shitems = 0; at = 0; atprose = 0
+  ds = 0; de = 0; dat = 0; dhas = 0; mk = 0
   reset()
+}
+
+# --- ファイル全体の走査(layout モードのみ) ----------------------------------
+# **`next` しない。**下の節の境界規則より前に置いてあるが、素通しするので読み取りの
+# 挙動は1バイトも変わらない。read モードで無駄に正規表現を回さないよう layout で括ってある。
+#
+# ここで見るのは「着手順の外」——「## 完了記録」の位置・マーカー行・採番の材料。
+# **採番はファイル全体(完了記録・カタログ部・散文中の参照を含む)の最大値+1** という
+# 不変条件があるので、走査範囲を節の中に狭めてはいけない(狭めるとアーカイブ済みの ID を
+# 再利用して log.md からの参照が別物を指す)。
+layout {
+  if (mk == 0 && $0 ~ /^<!-- session-head-end/) mk = NR
+  # 完了記録の範囲と、その中の追記位置(最後の非空行)・既存エントリの有無。
+  # 追記位置を先に決めておくのは、エディタに `/^- /` のような**書式の判定を持たせない**ため。
+  if (ds == 0) { if ($0 ~ /^## 完了記録/) { ds = NR; dat = NR } }
+  else if (de == 0) {
+    if ($0 ~ /^## /) de = NR
+    else if ($0 !~ /^[ \t]*$/) { dat = NR; if ($0 ~ /^- /) dhas = 1 }
+  }
+  # 降ろし済みの ID。未知 ID を「打ち間違い」と「既に --archive 済み」に割るために要る。
+  if ($0 ~ /^- ~~`[A-Za-z]+-[0-9]+`/) {
+    match($0, /`[A-Za-z]+-[0-9]+`/)
+    print "A" US substr($0, RSTART + 1, RLENGTH - 2)
+  }
+  # 接頭辞は**項目位置に現れたもの**からしか採らない(着手順の `- [ ] `X-1`` と
+  # 完了記録の `- ~~`X-1``)。散文やコードブロックには `iteration-4` のような
+  # 「ID に見えるだけの文字列」が実在するので、そこから拾うと別系列を作ってしまう。
+  if ($0 ~ /^- \[[ x]\] `[A-Za-z]+-[0-9]+`/ || $0 ~ /^- ~~`[A-Za-z]+-[0-9]+`/) {
+    match($0, /`[A-Za-z]+-[0-9]+`/)
+    lp = substr($0, RSTART + 1, RLENGTH - 2)
+    lq = length(lp); while (substr(lp, lq, 1) != "-") lq--
+    lp = substr(lp, 1, lq - 1)
+    if (!(lp in pcount)) porder[++pn] = lp
+    pcount[lp]++
+  }
+  # 最大番号は**行のどこに現れた ID でも**採る(散文中の `T-9` も含む)。欠番は安全だが
+  # 再利用は嘘を作るので、迷ったら大きい方へ倒す。
+  lt = $0
+  while (match(lt, /`[A-Za-z]+-[0-9]+`/)) {
+    ltok = substr(lt, RSTART + 1, RLENGTH - 2)
+    lq = length(ltok); while (substr(ltok, lq, 1) != "-") lq--
+    lpfx = substr(ltok, 1, lq - 1); lnum = substr(ltok, lq + 1) + 0
+    if (lnum > maxnum[lpfx]) maxnum[lpfx] = lnum
+    lt = substr(lt, RSTART + RLENGTH)
+  }
 }
 
 # --- 節の境界 ---------------------------------------------------------------
 # 見出しの残りは任意。「## 着手順(次にやること)」のような表記揺れを許す
 # (教える書式は厳密に、計測は寛容に)。
-/^## 着手順/                     { flush(); insec = 1; nsec++; next }
-insec && /^## /                  { flush(); insec = 0; next }
-insec && /^<!-- session-head-end/ { flush(); insec = 0; next }
+#
+# ⚠️ **読むのは「最初の `## 着手順`」1節だけ。**2026-08-08(H-19)にここを直した。
+#    それまでは `/^## 着手順/` に当たるたび何度でも節へ再入していたので、**マーカーより
+#    下(= カタログ部)にある同名見出しの項目まで一覧に出していた。**書き側は昔から
+#    最初の1節しか見ないので、一覧に出ているのに `--done` できない項目が生まれていた。
+#
+#    **どちらへ寄せるかは「書き側」を正とした。**根拠は3つ:
+#      1. 正典の設計では「着手順」は**頭(マーカーより上)にある1節**で、下はカタログ部。
+#         2つ目を頭の続きとして読むのは設計に無い解釈だった。
+#      2. 一覧に出す以上は閉じられなければならない(出るなら閉じられる/閉じられないなら
+#         出ない)。読み側を書き側に合わせる方が、この対応を1行で言い切れる。
+#      3. **マーカーを前提にしない。**「マーカーより下は読まない」という規則にすると
+#         pointer 型(マーカーを持たないリポジトリ。--lint の no-marker 警告がその状態)で
+#         別の壊れ方をする。「最初の1節」ならマーカーの有無に依存しない。
+#
+#    実物の `docs/ios-skills/next-directions.md` には**カタログ部に `## 着手順の詳細`**
+#    という見出しが実在する(前方一致でここに当たる)。**そこに項目行は無い**ので実害は
+#    出ていなかったが、いつ項目を書いても不思議のない場所だった。黙って落とすのは
+#    このリポジトリが最も嫌う壊れ方なので、落とす項目があるときだけ END で違反にする。
+/^## 着手順/ {
+  flush()
+  if (insec) { insec = 0; secend = NR }        # 節の中に同名見出し = ここで節は終わり
+  if (nsec == 0) { insec = 1; nsec++; secline = NR; shadow = 0 }
+  else           { shadow = 1; shline = NR }   # 2つ目以降 = カタログ側。読まないが数える
+  next
+}
+insec && /^## /                  { flush(); insec = 0; secend = NR; next }
+insec && /^<!-- session-head-end/ { flush(); insec = 0; secend = NR; next }
+# 2つ目以降の「着手順」節の中身。**読まないが、項目行があったことだけは覚える。**
+# 節の終わりの規則は本物の節と同じ(次の `## ` か行頭マーカーか EOF)。
+shadow && /^## /                  { shadow = 0; next }
+shadow && /^<!-- session-head-end/ { shadow = 0; next }
+shadow && /^- \[/                 { shitems++; if (shfirst == 0) shfirst = NR; next }
 !insec                           { next }
 
 # --- ここから下は「着手順」節の中 -------------------------------------------
 # 空行は継続を切らない(補足が段落に分かれて書かれることがある)。
 /^[ \t]*$/ { next }
+
+# 節の中の最後の非空行と、それが「散文」か(= 新しい項目を足す前に空行が要るか)。
+# **--add の挿入位置の判断材料。**エディタに `/^- /` のような書式の判定を持たせないため、
+# ここで決めて行番号だけを渡す。layout で括っていないのは、括る意味が無い(代入だけ)のと、
+# **モードで別の理屈で数えると、そこがまた二重実装になる**から。
+{ at = NR; atprose = ($0 !~ /^- / && $0 !~ /^[ \t]/) ? 1 : 0 }
 
 # 項目行。`- [` で始まるのに書式に合わない行は**違反**にする —— これが書式ドリフトの
 # 検知器。ここを黙って読み飛ばすと、書式が変わった日に一覧が静かに空になる。
@@ -536,10 +674,20 @@ insec && /^<!-- session-head-end/ { flush(); insec = 0; next }
   if (c_id == "") next            # 項目に属さない字下げ行(節の導入文など)は無視
   match($0, /^[ \t]*/); ind = RLENGTH
   t = ltrim($0)
+  # --- ここから3行は layout(書き側へ渡す位置情報)用 ---
+  # 空行はこの規則へ来ない(上で next している)ので、ここに来た行は必ず非空 = 項目の一部。
+  c_end = NR
+  if (ind < c_mind) c_mind = ind
+  # 末尾に積まれた `> **… 更新:**` 引用ブロックの**手前**の行を覚える。--done の証拠行は
+  # そこへ入れる —— 引用ブロックは段落を切るので、その後ろに6桁字下げの「→」行を置くと
+  # markdown 側でインデントコードブロックとして描画される(list item の内容カラムが2桁なので
+  # 6桁は相対4桁)。引用が末尾に無ければ、最後の非空行がそのまま挿入位置になる。
+  if (t !~ /^>/) c_para = NR
   if (t ~ /移行(:|：)( |　)*証拠なし/) c_ex = 1
   if (t ~ /^→/) {
     sub(/^→/, "", t); t = ltrim(t)
     c_aind = ind                  # 折り返し判定の基準になる字下げ幅
+    if (ind < c_amin) c_amin = ind   # 証拠行を足すときに揃える字下げ(最小の「→」に合わせる)
     # 「→ 完了条件:」は**これから何をすれば閉じられるか**、それ以外の「→」は
     # **何を確認したか(証拠)**。完了項目が着手時の完了条件行を残していても、
     # それを証拠として数えてはいけないので、ここで明確に分ける。
@@ -547,6 +695,11 @@ insec && /^<!-- session-head-end/ { flush(); insec = 0; next }
       sub(/^完了条件(:|：)/, "", t); t = trim(t)
       c_done = (c_done == "" ? t : c_done VT t); c_last = "d"
     } else {
+      # 最初の証拠ブロックの先頭に YYYY-MM-DD があれば控える。--archive が付ける
+      # 「✅ 日付」に使う —— 今日を無条件に使うと、3日前に閉じた項目が今日閉じたことに
+      # なって記録が嘘になる。**この抽出も書き側には持たせない**(書式の解釈は1箇所)。
+      if (c_evi == "" && t != "" && match(t, /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/))
+        c_edate = substr(t, 1, 10)
       c_evi = (c_evi == "" ? t : c_evi VT t); c_last = "e"
     }
   } else if (c_last != "" && ind > c_aind) {
@@ -565,6 +718,33 @@ insec && /^<!-- session-head-end/ { flush(); insec = 0; next }
 
 END {
   flush()
+  # --- layout: 構造を1回だけ吐く ---------------------------------------------
+  # **ここから下の診断より先に出す。**エディタは L/T/A しか読まないので順序に意味は無いが、
+  # 目で見るときに構造が頭に来る方が読める。
+  if (layout) {
+    # 節の終わりは「次の `## ` / 行頭マーカー / EOF」。EOF まで続いたときは NR+1 を渡す
+    # (エディタ側の `se` は**その行は節の外**という排他境界なので、+1 で辻褄が合う)。
+    lay("SS", secline + 0)
+    lay("SE", (insec ? NR + 1 : (secend ? secend : NR + 1)))
+    lay("AT", at + 0); lay("ATP", atprose + 0)
+    lay("DS", ds + 0); lay("DE", (ds > 0 ? (de ? de : NR + 1) : 0))
+    lay("DAT", dat + 0); lay("DHAS", dhas + 0)
+    lay("MK", mk + 0)
+    lay("NL", NR)
+    # 採番の接頭辞は**最も多く使われているもの**(タイは先に出た方)。1本も無ければ ""。
+    lbest = ""; lbestc = 0
+    for (li = 1; li <= pn; li++)
+      if (pcount[porder[li]] > lbestc) { lbestc = pcount[porder[li]]; lbest = porder[li] }
+    lay("PFX", lbest)
+    lay("MAX", (lbest == "" ? 0 : maxnum[lbest] + 0))
+  }
+  # 2つ目以降の `## 着手順` に項目行があった = **一覧にも出ず --done でも閉じられない項目**。
+  # 読み側を「最初の1節だけ」に直した副作用として生まれる沈黙をここで塞ぐ。
+  # ⚠️ 見出しがあるだけでは鳴らさない —— 実物のカタログ部には `## 着手順の詳細` のような
+  #    見出しが在り、そこに項目行は無い。**落とすものがあるときだけ**鳴らすのが要点で、
+  #    見出しの存在で鳴らすと「鳴りっぱなしで無視される」側の死に方をする。
+  if (shitems > 0)
+    emit_err("orphan-items", shline, "V", "`## 着手順` が2つ以上ある —— 読むのは**最初の1つ**(" secline " 行目)だけなので、" shline " 行目の節にある項目行 " shitems " 本は**一覧にも出ず `--done` でも閉じられない**(最初の " shfirst " 行目付近)。頭の `## 着手順` へ移すか、見出しの名前を変えること(`## 着手順の詳細` のように項目行を持たない見出しは鳴らさない)")
   # 0件の理由を2つに割る。**この区別が検知の要**:
   #   未移行(no-section / not-migrated)= まだチェックリストにしていない。既知の状態で異常ではない
   #   ドリフト(empty-section)          = 項目行のつもりの行は在るのに1件も読めない。
@@ -745,12 +925,16 @@ EOF
   EDITOR="$tmp/edit.awk"
   cat > "$EDITOR" <<'AWK'
 # --- 小道具 -----------------------------------------------------------------
-function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
-# 行頭の空白を落とす。全角スペースは日本語の字下げで実際に混ざるので一緒に落とす。
-# ⚠️ 多バイト文字を [ ] の中に書かないこと — この awk はブラケット式をバイト単位で
-#    解釈するので、全角スペースが「3バイトの選択肢」に分解されて誤爆する(読み側と同じ注意)。
-function ltrim(s) { sub(/^[ \t]+/, "", s); sub(/^(　)+/, "", s); sub(/^[ \t]+/, "", s); return s }
-function ind_of(s) { match(s, /^[ \t]*/); return RLENGTH }
+# ⚠️ **このエディタは書式を解釈しない。**「どの行が何であるか」(節の範囲・項目の ID と
+#    行範囲・字下げ・証拠の有無・採番の材料)は**すべてパーサ(parser.awk)が決め**、
+#    ここへは layout ファイル経由で**行番号として**渡ってくる。
+#    したがってこのプログラムに `^## 着手順` / `^- \[` / バッククォート囲みの ID /
+#    `→` / `>` といった**書式の正規表現は1本も無い**。触ってよい行を行番号で受け取り、
+#    その周りに行を足す・状態文字を1文字書き換える・行を消す —— それだけをする。
+#    (2026-08-08 / H-19。それまでは同じ書式規則がここにも実装されていて、実際に
+#     読み側と答えが割れていた。経緯はパーサ側「layout モード」のコメントが正。)
+# 残っているのはこれだけ —— **空行かどうか**は書式の解釈ではなく、行を平行移動するときの
+# 素の判定(字下げの計算はパーサが出す imind に寄せたので ind_of() は要らなくなった)。
 function blank(s) { return (s ~ /^[ \t]*$/) }
 function sp(k,   s) { s = ""; while (length(s) < k) s = s " "; return s }
 function say(sev, msg) { print sev "\t" msg >> report }
@@ -758,93 +942,62 @@ function say(sev, msg) { print sev "\t" msg >> report }
 function die(msg) { say("E", msg); exit 3 }
 # 「i 行目の直後に足す行」を積む。削除(del)と併せて、出力は emit() が1回で組み立てる ——
 # 行番号を動かしながら書き換えると、後続の位置がずれて**別の項目を壊す**。
-function add_ins(at, text) { insn[at]++; ins[at, insn[at]] = text }
+# 引数名は pos。**at にしない** —— layout から受け取るグローバルの `at`(--add の挿入位置)と
+# 同名になり、awk では仮引数が黙って外側を隠す。動作は変わらないが読み手が二度見る。
+function add_ins(pos, text) { insn[pos]++; ins[pos, insn[pos]] = text }
 
-# --- 節の特定 ---------------------------------------------------------------
-# 書き換えてよいのは「着手順」と「完了記録」だけ。現在地・カタログ部・マーカー行の
-# 位置はここで確定させ、以降その外側の行番号には触れない。
-function locate_sections(   i) {
-  ss = 0
-  for (i = 1; i <= n; i++) if (L[i] ~ /^## 着手順/) { ss = i; break }
+# --- 構造の受け取り(パーサの layout 出力) ------------------------------------
+# **ここが locate_sections() + collect_items() + scan_all_ids() + dominant_prefix() の
+# 代わり。**それら4つは書式の正規表現を持っており、読み側の同じ規則の**2つ目の実装**
+# だった。実際に割れていた(マーカーより下の2つ目の `## 着手順` を、読み側は読み、
+# 書き側は読まない)。いまは1行も解釈せず、パーサが出した行番号を配列へ移すだけ。
+#
+# 受け取る値(詳細はパーサ側「layout モード」のコメント):
+#   ss / se        「着手順」節の見出し行 / 終端(**その行は節の外**という排他境界)
+#   at / atprose    節の中の最後の非空行 / それが散文か(--add の前に空行が要るか)
+#   ds / de         「完了記録」節の見出し行 / 終端(0 = 節が無い)
+#   dat / dhas      完了記録の追記位置 / 既存エントリ(`- `)があるか
+#   mk              session-head-end マーカー行(0 = 無い)
+#   pfx / maxn      採番の接頭辞 / ファイル全体でのその接頭辞の最大番号
+#   istart[] iend[] iid[] istat[] isum[] imind[] iaind[] ihas_evi[] ipara[] iedate[]
+#   arch[id]        完了記録に降ろし済みの ID
+function read_layout(   line, f, k, nrec) {
+  nrec = 0
+  # getline < file は失敗時に -1 を返す(> 0 のときだけループが回る)。
+  # 読めなかったのか空だったのかを区別する必要は無い —— どちらも「構造が取れていない」で、
+  # **何も書かずに落ちる**のが正しい(fail-closed)。
+  while ((getline line < layoutfile) > 0) {
+    nrec++
+    split(line, f, US)
+    if (f[1] == "L") lv[f[2]] = f[3]
+    else if (f[1] == "A") arch[f[2]] = 1
+    else if (f[1] == "T") {
+      k = f[2] + 0; if (k > ni) ni = k
+      iid[k] = f[3]; istat[k] = f[4]; istart[k] = f[5] + 0; iend[k] = f[6] + 0
+      imind[k] = f[7] + 0; iaind[k] = f[8] + 0; ihas_evi[k] = f[9] + 0
+      ipara[k] = f[10] + 0; iedate[k] = f[11]; isum[k] = f[12]
+    }
+  }
+  close(layoutfile)
+  if (nrec == 0)
+    die("内部エラー: 構造レコードが1本も読めなかった(" layoutfile ")。**何も書いていない。**")
+  ss = lv["SS"] + 0; se = lv["SE"] + 0
+  at = lv["AT"] + 0; atprose = lv["ATP"] + 0
+  ds = lv["DS"] + 0; de = lv["DE"] + 0
+  dat = lv["DAT"] + 0; dhas = lv["DHAS"] + 0
+  mk = lv["MK"] + 0
+  pfx = lv["PFX"]; maxn = lv["MAX"] + 0
+  # **パーサとエディタは同じファイルを別々に読む。**同じ内容を見たことをここで確かめる ——
+  # 行数が違うなら、その間にファイルが書き換わったか、どちらかの読み込みが壊れている。
+  # 行番号だけを頼りに書く以上、ここがずれたら**別の行を壊す**ので絶対に進めない。
+  if (lv["NL"] + 0 != n)
+    die("内部エラー: 構造の解析(" (lv["NL"] + 0) " 行)と本文(" n " 行)の行数が食い違う —— 実行中にファイルが書き換わった可能性がある。**何も書いていない。** もう一度実行すること。")
   if (ss == 0)
     die("`## 着手順` 節が無い —— 書き込む場所が決められないので**何も書いていない**。旧書式のままなら `## 着手順(次にやること)` 見出しを作り、`- [ ] `ID-1` 概要` 形式へ移行すること(/harness:doctor が配る雛形が正)。")
-  # 節の終わりは読み側のパーサと同じ規則(次の `## ` か行頭 `<!-- session-head-end` か EOF)。
-  # ここが読み書きでずれると、書いた行が一覧に出ない/出ない行を書き換える、が起きる。
-  se = n + 1
-  for (i = ss + 1; i <= n; i++)
-    if (L[i] ~ /^## / || L[i] ~ /^<!-- session-head-end/) { se = i; break }
-  ds = 0
-  for (i = 1; i <= n; i++) if (L[i] ~ /^## 完了記録/) { ds = i; break }
-  if (ds > 0) {
-    de = n + 1
-    for (i = ds + 1; i <= n; i++) if (L[i] ~ /^## /) { de = i; break }
-  }
-  mk = 0
-  for (i = 1; i <= n; i++) if (L[i] ~ /^<!-- session-head-end/) { mk = i; break }
 }
 
-# --- 項目の切り出し ---------------------------------------------------------
-# 項目行の正規表現は**読み側のパーサと1文字も違えない**。ここが緩いと「書けるのに読めない」
-# 項目を正典へ入れてしまい、一覧から静かに消える(この repo が最も嫌う壊れ方)。
-function collect_items(   i, j, k, r, p, t, last, mind, aind, nstart) {
-  ni = 0
-  for (i = ss + 1; i < se; i++) {
-    if (L[i] !~ /^- \[[ x]\] `[A-Za-z]+-[0-9]+` /) continue
-    ni++
-    istart[ni] = i
-    istat[ni] = substr(L[i], 4, 1)      # "- [x] " の 4 文字目が状態
-    r = substr(L[i], 7)
-    p = index(substr(r, 2), "`")
-    iid[ni] = substr(r, 2, p - 1)
-    isum[ni] = trim(substr(r, p + 2))
-  }
-  for (k = 1; k <= ni; k++) {
-    # 項目の範囲 = 次の「字下げ無しの非空行」の手前まで。空行は継続を切らない
-    # (補足が段落に分かれて書かれることがある。読み側のパーサと同じ規則)。
-    last = istart[k]
-    for (j = istart[k] + 1; j < se; j++) {
-      if (blank(L[j])) continue
-      if (L[j] !~ /^[ \t]/) break
-      last = j
-    }
-    iend[k] = last
-
-    mind = 999; aind = 999; ihas_evi[k] = 0; ifirst_evi[k] = 0
-    for (j = istart[k] + 1; j <= iend[k]; j++) {
-      if (blank(L[j])) continue
-      if (ind_of(L[j]) < mind) mind = ind_of(L[j])
-      t = ltrim(L[j])
-      if (t !~ /^→/) continue
-      if (ind_of(L[j]) < aind) aind = ind_of(L[j])
-      # 「→ 完了条件:」は**これから何をすれば閉じられるか**、それ以外の「→」は
-      # **何を確認したか(証拠)**。--archive の可否はこの区別だけで決まるので、
-      # 読み側と同じ判定を使う(完了条件行を証拠として数えたら不変条件が崩れる)。
-      sub(/^→/, "", t); t = ltrim(t)
-      if (t ~ /^完了条件(:|：)/) continue
-      ihas_evi[k] = 1
-      if (ifirst_evi[k] == 0) ifirst_evi[k] = j
-    }
-    imind[k] = (mind == 999 ? 0 : mind)
-    iaind[k] = (aind == 999 ? 0 : aind)
-
-    # 末尾に積まれた「> …」引用ブロック(= --note が書いた更新行)の開始位置。
-    # **証拠行はその手前に入れる。** 引用ブロックは段落を切るので、その後ろに
-    # 6 桁字下げの「→」行を置くと markdown 側でインデントコードブロックとして描画される
-    # (list item の内容カラムが 2 桁なので、6 桁は相対 4 桁 = コードブロック)。
-    nstart = 0
-    for (j = iend[k]; j > istart[k]; j--) {
-      if (blank(L[j])) continue
-      if (ltrim(L[j]) ~ /^>/) nstart = j; else break
-    }
-    if (nstart == 0) ipara[k] = iend[k]
-    else {
-      p = istart[k]
-      for (j = istart[k] + 1; j < nstart; j++) if (!blank(L[j])) p = j
-      ipara[k] = p
-    }
-  }
-}
-
+# 項目を ID で引く。**ここは「照合」ではなく「表の引き当て」。**行から ID を切り出す
+# 仕事はパーサ側にあり、この配列にはもう切り出し済みの ID が入っている。
 function find_item(qid,   k) {
   for (k = 1; k <= ni; k++) if (iid[k] == qid) return k
   return 0
@@ -852,69 +1005,35 @@ function find_item(qid,   k) {
 
 # 未知の ID。「そんな ID は無い」で終わらせず、**次の一手**を出す ——
 # 完了記録に在るなら打ち間違いではないし、在る ID を並べれば探す手間が消える。
-function unknown_id(   i, k, list) {
-  for (i = 1; i <= n; i++)
-    if (substr(L[i], 1, 4) == "- ~~" && index(L[i], "`" id "`") == 5)
-      die("`" id "` は「着手順」に無い —— 「完了記録」に在る(既に --archive 済み)。**何も書いていない。** 閉じ直す必要は無い。")
+# 「完了記録に在るか」はパーサが出した A レコード(arch[])で判る。
+# ⚠️ 旧実装はここで `substr(L[i],1,4) == "- ~~"` と本文を舐めていた —— **完了記録の
+#    書式の3つ目の実装**だった。書式を知っているのはパーサだけ、という線をここでも守る。
+function unknown_id(   k, list) {
+  if (id in arch)
+    die("`" id "` は「着手順」に無い —— 「完了記録」に在る(既に --archive 済み)。**何も書いていない。** 閉じ直す必要は無い。")
   list = ""
   for (k = 1; k <= ni; k++) list = list (list == "" ? "" : ", ") "`" iid[k] "`"
   die("`" id "` という ID の項目が「着手順」に無い。**何も書いていない。** いま在るのは: " (list == "" ? "(0件)" : list))
 }
 
-# --- 採番 -------------------------------------------------------------------
-# **ファイル全体**(着手順 + 完了記録 + カタログ部 + 散文中の参照)を走査して最大値を採る。
-# 着手順だけを見ると、--archive で完了記録へ降ろした ID を再利用してしまい、
-# log.md やコミットメッセージからの参照(「`H-1` の件」)が**別物を指す**ようになる。
-# 削除された ID を埋め直す「詰め直し」もしない —— 欠番は安全だが再利用は嘘を作る。
-function scan_all_ids(   i, t, tok, q, pfx, num) {
-  for (i = 1; i <= n; i++) {
-    t = L[i]
-    while (match(t, /`[A-Za-z]+-[0-9]+`/)) {
-      tok = substr(t, RSTART + 1, RLENGTH - 2)
-      q = length(tok); while (substr(tok, q, 1) != "-") q--
-      pfx = substr(tok, 1, q - 1); num = substr(tok, q + 1) + 0
-      if (num > maxnum[pfx]) maxnum[pfx] = num
-      t = substr(t, RSTART + RLENGTH)
-    }
-  }
-}
-
-# 接頭辞は**項目位置に現れたもの**からしか採らない(着手順の `- [ ] `X-1`` と
-# 完了記録の `- ~~`X-1``)。散文やコードブロックには `iteration-4` のような
-# 「ID に見えるだけの文字列」が実在するので、そこから接頭辞を拾うと別系列を作ってしまう。
-# 複数あれば**最も多く使われているもの**を採る(タイは先に出た方)。
-function dominant_prefix(   i, s, tok, q, p, pn, best, bestc) {
-  pn = 0; best = ""; bestc = 0
-  for (i = 1; i <= n; i++) {
-    s = L[i]
-    if (s !~ /^- \[[ x]\] `[A-Za-z]+-[0-9]+`/ && s !~ /^- ~~`[A-Za-z]+-[0-9]+`/) continue
-    match(s, /`[A-Za-z]+-[0-9]+`/)
-    tok = substr(s, RSTART + 1, RLENGTH - 2)
-    q = length(tok); while (substr(tok, q, 1) != "-") q--
-    p = substr(tok, 1, q - 1)
-    if (!(p in pcount)) porder[++pn] = p
-    pcount[p]++
-  }
-  for (i = 1; i <= pn; i++) if (pcount[porder[i]] > bestc) { bestc = pcount[porder[i]]; best = porder[i] }
-  return best
-}
-
 # --- 操作: --add ------------------------------------------------------------
-function do_add(   pfx, nid, at, i) {
-  pfx = dominant_prefix()
+# 採番(接頭辞 pfx と最大番号 maxn)はパーサが**ファイル全体**(着手順 + 完了記録 +
+# カタログ部 + 散文中の参照)を走査して出したもの。着手順だけを見ると、--archive で
+# 完了記録へ降ろした ID を再利用してしまい、log.md やコミットメッセージからの参照
+# (「`H-1` の件」)が**別物を指す**ようになる。欠番は安全だが再利用は嘘を作る。
+function do_add(   nid) {
   if (pfx == "")
     die("採番の接頭辞が決められない —— 「着手順」にも「完了記録」にも `H-1` 形式の項目が1本も無い。**何も書いていない。** 最初の1件だけは手で書いて接頭辞を決めること(プロジェクトの略号にする。例: caldav なら `CD-1`)。")
-  nid = pfx "-" (maxnum[pfx] + 1)
-  # 挿入位置 = 節の中の最後の非空行の直後。項目があればその末尾、無ければ導入散文の直後。
+  nid = pfx "-" (maxn + 1)
+  # 挿入位置 = 節の中の最後の非空行(at)の直後。項目があればその末尾、無ければ導入散文の直後。
   # 「末尾へ足す」のは着手順が**優先順ではなく追加順**だから(順序を変えたいときは人が動かす)。
-  at = 0
-  for (i = ss + 1; i < se; i++) if (!blank(L[i])) at = i
+  # atprose = その行が散文(箇条書きでも継続行でもない)かどうか。**この判定もパーサ側**。
   if (at == 0) { at = ss; add_ins(at, "") }
-  else if (L[at] !~ /^- / && L[at] !~ /^[ \t]/) add_ins(at, "")   # 直上が散文なら空行を1本
+  else if (atprose) add_ins(at, "")               # 直上が散文なら空行を1本
   add_ins(at, "- [ ] `" nid "` " ENVIRON["ND_SUMMARY"])
   add_ins(at, sp(6) "→ 完了条件: " ENVIRON["ND_CRITERIA"])
   say("N", nid)
-  say("I", "採番 `" nid "` = 接頭辞 " pfx " の最大値 " maxnum[pfx] " + 1(**ファイル全体**を走査した。着手順だけを見るとアーカイブ済み ID を再利用する)")
+  say("I", "採番 `" nid "` = 接頭辞 " pfx " の最大値 " maxn " + 1(**ファイル全体**を走査した。着手順だけを見るとアーカイブ済み ID を再利用する)")
   changed = 1
 }
 
@@ -968,17 +1087,13 @@ function do_note(   k, ln, j, nind) {
 }
 
 # --- 操作: --archive --------------------------------------------------------
-# ✅ の日付は証拠行の先頭にある YYYY-MM-DD を使う。無ければ今日。
+# ✅ の日付は証拠行の先頭にある YYYY-MM-DD(パーサが出す iedate)を使う。無ければ今日。
 # 「今日」を無条件に使うと、3日前に閉じた項目が今日閉じたことになって記録が嘘になる。
-function evi_date(k,   t) {
-  if (ifirst_evi[k] == 0) return today
-  t = ltrim(L[ifirst_evi[k]])
-  sub(/^→/, "", t); t = ltrim(t)
-  if (match(t, /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/)) return substr(t, 1, 10)
-  return today
-}
+# ⚠️ 旧実装はここで証拠行を自前で ltrim → `→` 剥がし → 日付マッチしていた。
+#    **証拠行の書式の2つ目の実装**なので、抽出ごとパーサへ移した(H-19)。
+function evi_date(k) { return (iedate[k] != "" ? iedate[k] : today) }
 
-function move_item(k, dst,   i, mind, sh, ln, dt, s) {
+function move_item(k, dst,   i, sh, ln, dt, s) {
   dt = evi_date(k)
   # 完了記録の書式は既存の実物に合わせる: `- ~~`ID` 概要~~ ✅ YYYY-MM-DD`。
   # チェックボックス形式のまま降ろすのはボツ —— 完了記録は「## 着手順」の外なので
@@ -998,10 +1113,8 @@ function move_item(k, dst,   i, mind, sh, ln, dt, s) {
   # 一律に 2 桁へ潰すのはボツ: 「→」行とその折り返しの深さの差が消え、
   # 読み側の折り返し判定と食い違う形になる(完了記録は読まれないが、
   # 人が着手順へ戻したくなったときに壊れた形が残るのは避ける)。
-  mind = 999
-  for (i = istart[k] + 1; i <= iend[k]; i++)
-    if (!blank(L[i]) && ind_of(L[i]) < mind) mind = ind_of(L[i])
-  sh = (mind == 999 ? 0 : mind - 2)
+  # 最小字下げもパーサが出した値(imind)を使う。0 = 継続行が1本も無い(下のループも回らない)。
+  sh = (imind[k] == 0 ? 0 : imind[k] - 2)
   for (i = istart[k] + 1; i <= iend[k]; i++) {
     if (blank(L[i])) { add_ins(dst, ""); continue }
     ln = L[i]
@@ -1053,12 +1166,9 @@ function do_archive(   k, i, nm, dst, has_entry) {
     # 既存の節へは**末尾に追記**する。先頭へ挿すのはボツ —— 追記なら git 差分が
     # 「+N -M(着手順から消えた分)」で読め、既存行の位置が動かない(log.md の
     # append-only と同じ理屈。索引だけが新しい順で、本文は時系列)。
-    has_entry = 0; dst = ds
-    for (i = ds + 1; i < de; i++) {
-      if (blank(L[i])) continue
-      dst = i
-      if (L[i] ~ /^- /) has_entry = 1
-    }
+    # 追記位置(dat = 節の中の最後の非空行)と既存エントリの有無(dhas)は**パーサが出す** ——
+    # ここで `/^- /` を書くと、それが「箇条書きとは何か」の N 個目の実装になる。
+    dst = dat; has_entry = dhas
     # 既存エントリがあれば詰めて並べる(実物の完了記録は項目間に空行が無い)。
     # 導入散文しか無い節にいきなりぶら下げると段落と箇条書きが繋がるので、そのときだけ空行。
     if (!has_entry) add_ins(dst, "")
@@ -1086,13 +1196,17 @@ function emit(   i, j) {
   }
 }
 
+BEGIN { US = sprintf("%c", 31) }   # パーサの layout 出力と同じ区切り(本文に出ない制御文字)
+
 { L[NR] = $0; n = NR }
 
 END {
   if (n == 0) die("ファイルが空 —— 書き込み対象として不正。**何も書いていない。**")
-  scan_all_ids()
-  locate_sections()
-  collect_items()
+  # **書式の解釈はここには無い。**構造はパーサ(layout モード)が出したものを読むだけ。
+  # ⚠️ read_layout() は BEGIN ではなく END で呼ぶこと —— die() は exit 3 で落ちるが、
+  #    awk は **BEGIN の exit でも END を実行する**ので、BEGIN で落とすと END の操作が
+  #    そのまま走ってしまう(何も書いていないつもりで書く、という最悪の壊れ方)。
+  read_layout()
   if      (op == "add")     do_add()
   else if (op == "done")    do_done()
   else if (op == "note")    do_note()
@@ -1152,9 +1266,24 @@ AWK
     fi
   }
 
+  # --- 構造の解析は**読み側のパーサに任せる**(H-19) ---------------------------
+  # エディタを呼ぶ前に、同じ parser.awk を layout モードで1回回して「どの行が何であるか」を
+  # 出させる。**書式を解釈するプログラムはこの1本だけ**で、エディタはその行番号を使う。
+  # ここを分けずにエディタへ書式を持たせていた頃は、同じファイルに対して読み側と書き側の
+  # 答えが割れていた(一覧に出ているのに `--done` が「そんな ID は無い」と言う)。
+  #
+  # ⚠️ repo / comp / file は layout モードでは使われない(診断を出さないので)。
+  #    それでも空で渡さないのは、awk の未定義変数を増やさないため。
+  LAYOUT="$tmp/layout"
+  if ! awk -v layout=1 -v repo="" -v comp="" -v file="$TARGET" \
+           -f "$PARSER" "$TARGET" > "$LAYOUT"; then
+    echo "✗ 内部エラー: 構造の解析(parser.awk)に失敗した。**何も書いていない。**" >&2
+    exit 3
+  fi
+
   rc=0
   ND_SUMMARY="$OP_SUMMARY" ND_CRITERIA="$OP_CRITERIA" ND_EVIDENCE="$OP_EVIDENCE" ND_NOTE="$OP_NOTE" \
-    awk -v op="$OP" -v id="$OP_ID" -v today="$TODAY" -v report="$REPORT" \
+    awk -v op="$OP" -v id="$OP_ID" -v today="$TODAY" -v report="$REPORT" -v layoutfile="$LAYOUT" \
         -f "$EDITOR" "$TARGET" > "$NEW" || rc=$?
 
   case "$rc" in
