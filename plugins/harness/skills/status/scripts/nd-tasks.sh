@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.18.0 (配布元: gigun-dev/claude-code plugins/harness)
+# harness-template v0.19.0 (配布元: gigun-dev/claude-code plugins/harness)
 #   — next-directions.md の「着手順」節を読んで一覧化し(読み取り専用)、
 #     ID 指定で「着手順」節と「完了記録」節**だけ**を書き換える(--add / --done / --note / --archive)。
 #
@@ -1001,18 +1001,71 @@ scan_file() {
   else
     # #70460 / #84021: SessionStart の stdout は **10,000 文字**超で無言に切り詰められ、
     # 2KB のプレビューだけが注入される。バイトでも行でもなく**文字**で効く制限。
-    if [ "$head_chars" -gt "$HEAD_HARD_CHARS" ]; then
-      emit_rec E "$repo" "$comp" "$f" head-truncated 0 W \
-        "頭が ${head_chars}字(> ${HEAD_HARD_CHARS}字)—— SessionStart の stdout は 10,000字超で**無言に切り詰められ 2KB のプレビューだけが注入される**(anthropics/claude-code#70460・#84021)。いま実際に切れている。棚卸しして頭を縮めること"
-    elif [ "$head_chars" -gt "$HEAD_WARN_CHARS" ]; then
-      emit_rec E "$repo" "$comp" "$f" head-large 0 W \
-        "頭が ${head_chars}字(目安 ${HEAD_WARN_CHARS}字)—— 10,000字を超えると SessionStart の stdout が無言に切り詰められる(#70460)。余裕が ${HEAD_HARD_CHARS}字まで"
+    #
+    # ⚠️ **2026-08-08 追加。この3件の警告は元々「頭は毎セッション SessionStart の stdout を
+    #    通って注入される」ことを暗黙の前提にしていたが、その前提は**頭注入型のフックに
+    #    しか成り立たない**。pointer 型(このリポジトリ自身がそう。docs/harness/
+    #    next-directions.md の「doctor の指摘のうち却下するもの」に同じ却下記録がある)では
+    #    フックが出すのは「=== harness を開発するなら: 現在地は … ===」という**1行の
+    #    ポインタだけ**で、頭そのものは stdout を通らない。したがって:
+    #      - head-truncated / head-large が名指しする「10,000字で無言に切り詰められる」壁は、
+    #        stdout を通らない頭には**そもそも適用されない** —— 存在しない機構を根拠に
+    #        警告を出すと、鳴った側のリポジトリで確かめても再現せず「この検知器は当たらない」
+    #        という不信を生み、他の正しい警告まで無視される方向に倒れる(このリポジトリが
+    #        「検知器が黙って死ぬ」と同じくらい嫌う壊れ方)。
+    #      - head-costly の「毎セッション注入されるのでコストになる」も同じ理由で偽。
+    #        ただし**頭が肥大していること自体は pointer 型でも事実として残る**
+    #        (ポインタを辿って読みに行けば、そこで文字/トークンぶんのコストを払う)。
+    #        だから head-costly は消さず、理由の文面だけを実態に合わせる(重大度は W のまま)。
+    #    判定は新しい検出機構を足さず、上の has_marker=0 の分岐で既に使っている $inject
+    #    (= head_injection_mode() の結果)をそのまま再利用する(docs/principles.md 規則6
+    #    「新機構を足す前に、既存機構で届くか見る」)。
+    #
+    #    **$inject=1(頭注入型)のときは以下、1文字も変えていない** —— 既存の配布先
+    #    (実際に頭注入型で運用されているリポジトリ)へ与える文面は変えない。
+    if [ "$inject" -eq 1 ]; then
+      if [ "$head_chars" -gt "$HEAD_HARD_CHARS" ]; then
+        emit_rec E "$repo" "$comp" "$f" head-truncated 0 W \
+          "頭が ${head_chars}字(> ${HEAD_HARD_CHARS}字)—— SessionStart の stdout は 10,000字超で**無言に切り詰められ 2KB のプレビューだけが注入される**(anthropics/claude-code#70460・#84021)。いま実際に切れている。棚卸しして頭を縮めること"
+      elif [ "$head_chars" -gt "$HEAD_WARN_CHARS" ]; then
+        emit_rec E "$repo" "$comp" "$f" head-large 0 W \
+          "頭が ${head_chars}字(目安 ${HEAD_WARN_CHARS}字)—— 10,000字を超えると SessionStart の stdout が無言に切り詰められる(#70460)。余裕が ${HEAD_HARD_CHARS}字まで"
+      fi
     fi
-    # トークンは切り詰めとは別の機構(毎セッションの実費)。切り詰めに余裕があっても
-    # ここが太れば全セッションで払い続けるので、独立した予算として別に鳴らす。
+    # トークンは切り詰めとは別の機構。$inject の値にかかわらず「頭が大きい」という事実
+    # そのものは変わらないので、head-costly は頭注入型・pointer 型のどちらでも出す
+    # (⚠️ 消えるのは文面の理由だけで、鳴る/鳴らないの判定は変えない —— この変更で
+    # 警告の**件数**を減らすと、budgets.sh の「⚠️ 閾値を上げて警告を消すのは禁止」に反する
+    # 「棚卸し前に検査側を緩めて警告を消した」ことになってしまう)。
     if [ "$head_tokens" -gt "$HEAD_WARN_TOKENS" ]; then
-      emit_rec E "$repo" "$comp" "$f" head-costly 0 W \
-        "頭が ≒${head_tokens} tok(予算 ${HEAD_WARN_TOKENS} tok)—— 切り詰めには余裕があるが、**毎セッション注入されるので全セッションのコストになる**。棚卸しか --archive で降ろすこと"
+      if [ "$inject" -eq 1 ]; then
+        # 頭注入型: 既存文面のまま(毎セッションの実費として鳴らす)。1文字も変えていない。
+        emit_rec E "$repo" "$comp" "$f" head-costly 0 W \
+          "頭が ≒${head_tokens} tok(予算 ${HEAD_WARN_TOKENS} tok)—— 切り詰めには余裕があるが、**毎セッション注入されるので全セッションのコストになる**。棚卸しか --archive で降ろすこと"
+      else
+        # pointer 型 / ハーネス未導入: 「毎セッション payer」ではなく「ポインタを辿って
+        # 読みに行ったときに1回払う」コストとして書き直す。頭が大きいこと自体は消えて
+        # いない問題として残すので、重大度は同じ W のまま(V へ格上げしない)。
+        #
+        # ⚠️ **この字数/トークンの予算自体、pointer 方式では裏付ける機構が無い。**
+        #    切り詰め(10,000字)も毎セッション注入もここでは起きないので、"予算 ${HEAD_WARN_TOKENS} tok"
+        #    という数字は「守るべき壁」ではなく単なる目安に格下げされている。pointer 型で
+        #    本来守りたいのは「(ポインタを辿って)再開するエージェントが読み通せるか」で、
+        #    それは stdout を通らない文書(カタログ部・log.md。budgets.sh 参照)と同じ性質
+        #    —— **本来の単位は行のはず。** ただし今この場で行の予算へ切り替えると、
+        #    「棚卸し(H-5: docs/harness/next-directions.md)より前に検査側を緩めて
+        #    警告を静かに消す」ことになりかねない(budgets.sh の「⚠️ 閾値を上げて警告を
+        #    消すのは禁止」の精神に反する)。だから**今は文字/トークンのまま出し続け**、
+        #    行へ移す判断は H-5 の棚卸しが終わってから現況に合わせて下げ直す
+        #    (docs/harness/next-directions.md の「H-22 と同型の判断」を参照)。
+        # ⚠️ 上の判断を**警告文には書かない。**初版は「本来の単位は行のはずだが、棚卸し前に
+        #    切り替えると警告を消すことになるので H-5 の後に決める」まで警告へ入れて **278字**
+        #    になっていた(従来は約100字)。それは**将来の設計判断の説明**であって、いま警告を
+        #    読んだ人の行動は変えない —— 規則2b「その一文はエージェントの行動を変えるか」。
+        #    判断はこのコメントに置き、警告は「何をすればよいか」だけに絞る。
+        emit_rec E "$repo" "$comp" "$f" head-costly 0 W \
+          "頭が ≒${head_tokens} tok(目安 ${HEAD_WARN_TOKENS} tok)—— このフックは pointer 型なので**毎セッション注入されるわけではない**が、ポインタを辿って読むたびに払う。棚卸しか --archive で降ろすこと"
+      fi
     fi
   fi
 
