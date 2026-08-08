@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.16.0 (配布元: gigun-dev/claude-code plugins/harness)
+# harness-template v0.17.0 (配布元: gigun-dev/claude-code plugins/harness)
 #   — next-directions.md の「着手順」節を読んで一覧化し(読み取り専用)、
 #     ID 指定で「着手順」節と「完了記録」節**だけ**を書き換える(--add / --done / --note / --archive)。
 #
@@ -27,6 +27,69 @@
 #
 #   **書き込みは一時ファイル + mv。** 同一ファイルシステム内の mv は atomic なので、
 #   途中で落ちても正典が半分だけ書き潰された状態にはならない(log-index.sh と同じ流儀)。
+#
+# 排他ロックの設計意図(2026-08-08 追加。敵対的検証で発覚した lost update の修正):
+#   **実測で再現した実害。** 5プロセスが同時に `--add` を叩くと、5件中4件が消えた
+#   (`grep -oE '`P-[0-9]+`' next-directions.md | sort | uniq -c` で確認)。原因は
+#   「ファイル全体を読む → 新しい全文を作る → mv で置換」という read-modify-write の
+#   **read から write までの間が atomic ではない**こと。mv 自体は atomic でも、
+#   複数プロセスが**同じ古い内容を読んで**それぞれ「+1件」した全文を作り、最後に mv した
+#   1プロセスだけが勝つ(classic lost update)。この repo は subagent を並列に走らせる運用が
+#   実在するので、机上の空論ではない。
+#
+#   **read-modify-write 全体を排他ロックで包む。** 対象は書き込み操作
+#   (--add / --done / --note / --archive)だけ —— 一覧 / --lint / --format json のような
+#   読み取り経路には一切入らない(下で acquire_lock を呼ぶのは書き込みブロックの中だけ)。
+#   読み取りは `/harness:status` や `!` 記法で毎回無条件に走るので、そこがロック待ちで
+#   詰まると体験そのものが壊れる。書き込みは滅多に起きず、待っても実害が薄い。
+#
+#   **なぜ flock ではないか。** flock(1) は macOS 標準に入っていない(このリポジトリの
+#   主戦場は darwin)。配布先の環境に依存する機構を正典の唯一の書き手が使うのは
+#   原則4(黙って消える依存を作らない)に反する。
+#
+#   **なぜ mkdir か。** `mkdir` はどんなファイルシステムでも「ディレクトリが存在しなければ
+#   作って0、存在すれば失敗して非0」が1回のシステムコールでアトミックに決まる
+#   (POSIX が保証する数少ない「TOCTOU の隙が無い」操作の1つ)。追加のツールを配布に
+#   同梱する必要も無い(mkdir はどの POSIX 環境にも必ずある)。
+#
+#   **ロックの置き場は正典と同じディレクトリ、名前は正典のファイル名にひも付ける。**
+#   `<dirname TARGET>/.<basename TARGET>.lock`。同一ファイルシステム内に置くのは、
+#   mv と同じ理由(別ファイルシステムをまたぐ操作はアトミック性の前提が崩れる)。
+#   ファイル名にひも付けるのは、将来 nds_of_repo() が1ディレクトリに複数の正典を
+#   返すようになっても(現状は1本だけ)ロックが競合しないようにするため。
+#   ⚠️ **git 管理下を汚さないかの判断。** このロックは「取得直後に owner を書き、
+#   使い終わったら必ず rm -rf する」設計なので、**正常系では git status に一度も
+#   現れない**(mkdir → 使用 → rm-rf が1コマンドの中で閉じる。エージェントが
+#   `git status` を見るタイミングでロックが存在する窓は無い)。kill -9 で異常終了した
+#   ときだけ残るが、それも次回の書き込み操作が stale と判定して自分で掃除する
+#   (下の acquire_lock 参照)ので、**.gitignore を足す必要は無いと判断した**。
+#   ただし「本当に一度も見えないか」は長期運用で再確認が要る観測ポイントとして残す。
+#
+#   **古いロックの扱い(stale 検出)。** 持ち主が kill -9 されるとロックが永久に残り、
+#   以後すべての書き込みが待ち続けて fail-closed する —— これを放置すると
+#   ハーネスの書き込み機能そのものが恒久的に死ぬ。そこでロック取得時に
+#   `owner` ファイルへ PID と取得時刻を書いておき、待っている側は
+#   「①記録された PID が `kill -0` で見えない(=プロセスが実在しない)」
+#   **かつ**「②取得から一定秒数(LOCK_STALE_SECONDS)以上経っている」の**両方**を
+#   満たしたときだけ奪う。①だけで奪うと PID の再利用(稀だが起こる)で誤爆しうるし、
+#   ②だけで奪うと「ただ遅いだけの生きたプロセス」を蹴落として**新たな lost update を
+#   自分で作ってしまう**(奪う実装そのものが競合の発生源になりうるので、両方が
+#   一致したときだけに絞って慎重側に倒した)。owner ファイルがまだ書かれていない
+#   (mkdir 直後の一瞬の窓)ときは stale と判定しない — 誤って直後の正当な取得を
+#   蹴落とさないため。
+#
+#   **待ち方。** 取れなければ即失敗ではなく、短い間隔(LOCK_POLL_INTERVAL)で
+#   `mkdir` を再試行し、合計 LOCK_WAIT_TOTAL 秒まで待つ。それでも取れなければ
+#   **fail-closed**(何も書かずに非0で終了する。既存の「状態不整合」系と同じ exit 3)。
+#
+#   **解放は必ず行う。** `trap` を EXIT に加えて INT / TERM / PIPE にも張る
+#   (cleanup() を参照)。⚠️ このリポジトリには「読み取り専用スクリプトへ
+#   `trap '' PIPE` を足して SIGPIPE を無視する」という直近の修正(skills/doctor/scripts/
+#   check.sh・survey.sh。`| head` 等で早期に読み手が抜けたときの対策)があるが、
+#   **それをそのまま真似て PIPE を握りつぶすと、ロックを持ったまま SIGPIPE で
+#   落ちたときに解放が走らない経路が生まれかねない。** ここでは逆に、PIPE も
+#   INT / TERM と同じ「cleanup してから exit する」対象として明示的に trap する
+#   (握りつぶす=無視するのではなく、握りつぶす前に後始末する)。
 #
 # 読み取り側の設計意図(2026-08-06):
 #   **正典は next-directions.md のまま。** tasks.yaml のような構造化ファイルは作らない —
@@ -217,6 +280,12 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
     `<!-- session-head-end` マーカー行には1バイトも触らない。
   - `## 完了記録` が無ければ session-head-end マーカーの直後に作る。
   - 一時ファイル + mv(atomic)。途中で落ちても正典が半分だけ書き潰されることはない。
+  - **read-modify-write 全体を排他ロックで包む**(mkdir 方式。flock は macOS に無いので不使用)。
+    同時に複数の書き込みが走っても lost update(後勝ちで他の変更が消える)は起きない。
+    ロックは正典と同じディレクトリの `.<ファイル名>.lock`。取れなければ最大15秒待ち、
+    それでも取れなければ fail-closed(exit 3)。読み取り(一覧 / --lint / --format json)は
+    ロックを取らないので待たされない。持ち主が異常終了して残ったロックは、
+    次の書き込みが「PID が実在しない」かつ「10秒以上前」の両方を確認してから自動で奪う。
   - fail-closed。未知の ID / 「着手順」節が無い / 接頭辞が決められない —— **何も書かずに落ちる。**
   - 書き込み後に「頭」の文字数と概算トークン数を出す(予算 8,000字 / 3,000 tok)。超えたら警告する。
   - --all / --lint / --format json とは併用できない(読み取りと書き込みを混ぜない)。
@@ -274,7 +343,8 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
      --done に --evidence が無い
   3  書き込み操作の対象の状態が合わない —— **何も書いていない**。
      未知の ID / 「## 着手順」節が無い / 採番の接頭辞が決められない /
-     「## 完了記録」を作る位置(session-head-end マーカー)が無い
+     「## 完了記録」を作る位置(session-head-end マーカー)が無い /
+     排他ロックが規定秒数(既定15秒)以内に取れなかった(他の書き込みと競合中)
 EOF
 }
 
@@ -464,7 +534,107 @@ fi
 #    誤認して構文エラーになる**(実際に踏んだ。bash 5 では通るので気づきにくい)。
 #    このパーサは ID をバッククォート囲みで扱う都合上、本文にバッククォートが必ず出る。
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/nd-tasks.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
+
+# --- 排他ロック(書き込み操作だけが使う。読み取り経路は一切呼ばない) -----------
+# 設計の背景・不変条件はファイル冒頭「排他ロックの設計意図」を参照。ここは実装のみ。
+#
+# LOCKDIR は書き込み操作の中で TARGET(正典のパス)が決まってから設定する
+# (`"$(dirname "$TARGET")/.$(basename "$TARGET").lock"`)。読み取り経路では
+# 一度も代入されず空文字のままなので、release_lock は常に no-op になる
+# —— これが不変条件1(読み取り経路はロックを取らない・待たない・失敗しない)を
+# コードレベルで保証している(呼ばれなければ何も起きない、という一番弱い依存にしてある)。
+LOCKDIR=""
+LOCK_HELD=0
+LOCK_WAIT_TOTAL=15      # 秒。これだけ待って取れなければ fail-closed(exit 3)。
+LOCK_POLL_INTERVAL=0.2  # 秒。mkdir の再試行間隔。
+LOCK_STALE_SECONDS=10   # 秒。これより古く、かつ持ち主 PID が実在しないロックだけを奪う。
+
+# mkdir に成功したプロセスだけがロックを持てる(mkdir はディレクトリの存在確認と
+# 作成が1回のシステムコールでアトミックに決まる数少ない POSIX 操作)。
+# owner ファイルへ PID と取得時刻を書くのは、待っている他プロセスが
+# 「持ち主が死んでいないか」を判定するための材料 —— ロックの意味そのものには不要だが、
+# これが無いと stale ロックを永久に判定できず、kill -9 一発で書き込み機能が死ぬ。
+acquire_lock() {
+  local start now elapsed owner_pid owner_ts age
+  start=$(date +%s)
+  while :; do
+    if mkdir "$LOCKDIR" 2>/dev/null; then
+      # owner の書き込みが失敗しても致命的ではない(無ければ他プロセスは
+      # 「まだ判定できない」として単に待ち続けるだけ = 安全側に倒れる)。
+      { printf '%s\n' "$$"; date +%s; } > "$LOCKDIR/owner" 2>/dev/null || true
+      LOCK_HELD=1
+      return 0
+    fi
+    # 取れなかった。stale(持ち主が死んでいる)なら奪う。両条件を満たすときだけ:
+    #   ① owner に記録された PID が kill -0 で見えない(実在しない)
+    #   ② 取得時刻から LOCK_STALE_SECONDS 秒以上経っている
+    # 片方だけで奪うと、①のみ→PID 再利用で誤爆・②のみ→ただ遅いだけの生きたプロセスを
+    # 蹴落として新たな lost update を自分で作る、のどちらかを踏む。両方を要求して縛る。
+    if [ -f "$LOCKDIR/owner" ]; then
+      owner_pid=$(awk 'NR==1' "$LOCKDIR/owner" 2>/dev/null || true)
+      owner_ts=$(awk 'NR==2' "$LOCKDIR/owner" 2>/dev/null || true)
+      case "$owner_pid" in ''|*[!0-9]*) owner_pid="" ;; esac
+      case "$owner_ts"  in ''|*[!0-9]*) owner_ts=""  ;; esac
+      # owner_ts が読めない(mkdir 直後、owner の書き込み途中の一瞬の窓)ときは
+      # stale と判定しない —— 生まれたばかりの正当なロックを誤って奪わないため。
+      if [ -n "$owner_ts" ]; then
+        now=$(date +%s)
+        age=$(( now - owner_ts ))
+        if [ "$age" -gt "$LOCK_STALE_SECONDS" ] && { [ -z "$owner_pid" ] || ! kill -0 "$owner_pid" 2>/dev/null; }; then
+          # rm -rf は「既に他プロセスが先に奪って消した後」でも失敗しない(-f)。
+          # 奪った直後にまた mkdir で取り直す(下のループ先頭)ので、複数プロセスが
+          # 同時に「stale だ」と判定しても、実際に取れるのは mkdir に勝った1プロセスだけ
+          # —— 奪う判断自体が競合しても、取得の atomicity はここでも効いている。
+          rm -rf "$LOCKDIR" 2>/dev/null || true
+          continue
+        fi
+      fi
+    fi
+    now=$(date +%s)
+    elapsed=$(( now - start ))
+    [ "$elapsed" -lt "$LOCK_WAIT_TOTAL" ] || return 1
+    sleep "$LOCK_POLL_INTERVAL"
+  done
+}
+
+release_lock() {
+  [ "$LOCK_HELD" -eq 1 ] || return 0
+  rm -rf "$LOCKDIR" 2>/dev/null || true
+  LOCK_HELD=0
+}
+
+# **後始末はここへ一本化する。** 以前は「$tmp を消す EXIT trap」を書き込み直前で
+# 「$tmp と wtmp を消す EXIT trap」に張り替えていた(bash の EXIT trap は1本しか
+# 持てず、後から張った方が前を上書きする)。ロック解放をここへただ3個目として
+# 同じやり方で足すと同じ上書きの罠を踏むので、**cleanup 関数1本にまとめて
+# EXIT / INT / TERM / PIPE すべてへ同じ関数を張る**形に直した。
+#   - $tmp の削除は常に行う(読み取り・書き込み共通)。
+#   - wtmp(atomic mv 直前の一時ファイル)は書き込み操作でだけ値が入る。
+#     読み取り経路では最後まで空文字のままなので `rm -f ""` にはならないよう
+#     `${wtmp:-}` で守り、空なら触らない。
+#   - release_lock() は上で述べたとおり LOCK_HELD が立っているときだけ働く。
+# rm -rf / rm -f はどちらも「対象が既に無い」ときに失敗しないので、cleanup が
+# 複数回呼ばれても(EXIT と INT のように trap が二重に発火しても)実害は無い。
+wtmp=""
+cleanup() {
+  rm -rf "$tmp" 2>/dev/null || true
+  [ -z "${wtmp:-}" ] || rm -f "$wtmp" 2>/dev/null || true
+  release_lock
+}
+trap cleanup EXIT
+# INT / TERM は「ロックを持ったまま殺される」を実測でも塞ぐための明示的な trap
+# (完了条件6「kill -TERM で中断させた後もロックが消えている」はここが担保する)。
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
+# PIPE ⚠️ 兄弟スクリプト(skills/doctor/scripts/check.sh・survey.sh)は読み取り専用なので
+# `trap '' PIPE` で SIGPIPE をただ無視している(`| head` 等で読み手が早期に抜けても
+# 出力し続けて構わないため)。**このスクリプトは書き込みを行うので、同じ発想で
+# PIPE を握りつぶす(無視する)だけにはできない** —— ロックを持ったまま SIGPIPE を
+# 受けて何もせず終わる経路を作ると、ロックが残ったまま次の書き込みが永久に
+# fail-closed する。ここでは無視ではなく、INT / TERM と同じ「cleanup してから
+# 抜ける」対象として明示的に trap する(rc=141 は SIGPIPE 未 trap 時の慣例値に揃えた)。
+trap 'cleanup; exit 141' PIPE
+
 PARSER="$tmp/parser.awk"
 cat > "$PARSER" <<'AWK'
 function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
@@ -907,6 +1077,22 @@ EOF
   fi
   TARGET="$(cd "$(dirname "$TARGET")" && pwd)/$(basename "$TARGET")"
 
+  # --- 排他ロックを取る(ここから read-modify-write の終わりまでを包む) --------
+  # **対象ファイルが1本に決まった直後、構造を読む(layout parse)より前**に取る。
+  # 「読む → 全文を組み立てる → mv」全体を1つの排他区間にしないと、複数プロセスが
+  # 同じ古い内容を読んで別々の +1 を作り、後勝ちの mv だけが残る(実測した lost update)。
+  # 解放は EXIT/INT/TERM/PIPE の cleanup trap に任せる —— ここでは待つだけでよい
+  # (このブロックの以降のあらゆる exit 経路は、その trap を必ず経由して抜ける)。
+  LOCKDIR="$(dirname "$TARGET")/.$(basename "$TARGET").lock"
+  if ! acquire_lock; then
+    echo "✗ ロックが取れない($LOCKDIR)。${LOCK_WAIT_TOTAL}秒待っても他プロセスが解放しなかった。" >&2
+    echo "  **何も書いていない。**別の書き込み操作(--add / --done / --note / --archive)が" >&2
+    echo "  同時に走っている可能性がある。しばらく待ってから再実行すること。" >&2
+    echo "  それでも解消しないなら、持ち主が異常終了した可能性がある —— $LOCKDIR/owner の" >&2
+    echo "  PID が実在するか確認し、実在しなければ手動で rm -rf しても安全(fail-closed の後始末)。" >&2
+    exit 3
+  fi
+
   # --- エディタ(awk) ---------------------------------------------------------
   # ⚠️ 読み取り側のパーサと同じ理由で、プログラムは一時ファイルへ書いて `awk -f` で渡す。
   #    `PROG=$(cat <<'AWK' …)` の形にすると、**bash 3.2(macOS 標準)が $( ) の中で
@@ -1332,10 +1518,14 @@ AWK
   wtmp="$TARGET.nd-tasks.tmp.$$"
   # cp が途中で失敗(ディスク満杯など)したときに、正典の隣に残骸を置き去りにしない。
   # docs/ 配下のゴミは次のセッションで「これは何だ」を生むし、探索グロブに引っかかりうる。
-  trap 'rm -rf "$tmp"; [ -z "${wtmp:-}" ] || rm -f "$wtmp"' EXIT
+  # ⚠️ 以前はここで `trap 'rm -rf "$tmp"; [ -z "${wtmp:-}" ] || rm -f "$wtmp"' EXIT` と
+  #    改めて張り直していたが、いまは冒頭で張った cleanup(EXIT/INT/TERM/PIPE 共通)が
+  #    wtmp の中身(`${wtmp:-}`)を見て掃除してくれるので、ここで trap を張り直す必要はない
+  #    —— 張り直すと「ロックを解放する」処理がこの trap には入っていないので、
+  #    このコマンド以降にロックの解放が効かなくなる(cleanup の一本化がここでも効いている)。
   cp "$NEW" "$wtmp"
   mv "$wtmp" "$TARGET"
-  wtmp=""   # mv 済み。trap が消しにいかないようにする
+  wtmp=""   # mv 済み。cleanup が消しにいかないようにする
 
   [ "$OP" = "archive" ] || emit_report
   case "$OP" in
