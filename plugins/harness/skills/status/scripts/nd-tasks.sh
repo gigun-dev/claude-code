@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.17.0 (配布元: gigun-dev/claude-code plugins/harness)
+# harness-template v0.18.0 (配布元: gigun-dev/claude-code plugins/harness)
 #   — next-directions.md の「着手順」節を読んで一覧化し(読み取り専用)、
 #     ID 指定で「着手順」節と「完了記録」節**だけ**を書き換える(--add / --done / --note / --archive)。
 #
@@ -202,7 +202,7 @@ BUDGETS="$(cd "$(dirname "$0")/../../.." && pwd)/budgets.sh"
 # Why not 標準入力から読む2関数にしないのか: 同じ入力を2回読む必要があり、
 # パイプは1回しか読めない。呼び側が毎回一時ファイルを作る羽目になるので、
 # **文字列を引数で受けて2つまとめて返す1関数**にした(呼び出し箇所は常に頭だけ = 数KB)。
-TOK_ASCII_PCT=${HARNESS_TOK_ASCII_PCT:-33}
+TOK_ASCII_PCT=${HARNESS_TOK_ASCII_PCT:-35}
 TOK_WIDE_PCT=${HARNESS_TOK_WIDE_PCT:-140}
 TOKENIZER_LABEL=${HARNESS_TOKENIZER_LABEL:-Claude 4.7+}
 measure() {

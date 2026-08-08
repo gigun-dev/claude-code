@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.10.0 — 導入判断に必要な事実を集める(読み取り専用)。
+# harness-template v0.11.0 — 導入判断に必要な事実を集める(読み取り専用)。
 #
 # 設計意図(2026-08-05):
 #   SKILL.md の `!` 記法から、スキル読み込み時に**無条件で**実行される。したがって:
@@ -99,7 +99,7 @@ skip() { printf '  ⏭ %s\n' "$*"; skips=$((skips+1)); }
 # 出口を1関数に集約する理由は check.sh / tidy.sh と同じ(マーカーの出し忘れ防止)。
 finish() {
   say ""
-  say "=== 調査完了: skip ${skips} 件(survey.sh v0.10.0) ==="
+  say "=== 調査完了: skip ${skips} 件(survey.sh v0.11.0) ==="
   exit 0
 }
 
@@ -187,7 +187,7 @@ if [ -n "$nd" ]; then
     _h=$(sed -n "1,$((_m - 1))p" docs/next-directions.md)
     _c=$(printf '%s' "$_h" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' ')
     _a=$(printf '%s' "$_h" | LC_ALL=C tr -cd '\000-\177' | wc -c | tr -d ' ')
-    say "  next-directions.md: あり(マーカーあり・頭 ${_c} 字 / ≒$(( (_a * ${HARNESS_TOK_ASCII_PCT:-33} + (_c - _a) * ${HARNESS_TOK_WIDE_PCT:-140}) / 100 )) tok(${HARNESS_TOKENIZER_LABEL:-Claude 4.7+} 換算) / 全 $(wc -l < docs/next-directions.md | tr -d ' ') 行)"
+    say "  next-directions.md: あり(マーカーあり・頭 ${_c} 字 / ≒$(( (_a * ${HARNESS_TOK_ASCII_PCT:-35} + (_c - _a) * ${HARNESS_TOK_WIDE_PCT:-140}) / 100 )) tok(${HARNESS_TOKENIZER_LABEL:-Claude 4.7+} 換算) / 全 $(wc -l < docs/next-directions.md | tr -d ' ') 行)"
     unset _m _h _c _a
   else
     say "  ⚠️ next-directions.md: あるがマーカー無し(旧様式 — 上書きせずマイグレーションが要る)"

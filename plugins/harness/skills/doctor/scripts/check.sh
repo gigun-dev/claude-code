@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.14.0 — ベストプラクティス遵守を機械的に検査する(読み取り専用)。
+# harness-template v0.15.0 — ベストプラクティス遵守を機械的に検査する(読み取り専用)。
 #
 # 設計意図(2026-08-05):
 #   機械判定できる項目だけを確定的に検査する。スキルやハーネスを作った直後に
@@ -212,7 +212,7 @@ SECTION_MAX=30                # CLAUDE.md 内の1節がこれを超えたら ski
 #    (Codex アダプタを同梱)だが、トークナイザはベンダー固有 —— 文字はテキストそのものの
 #    属性、トークンは「テキスト × トークナイザ」の属性。定数として埋めると他クライアントで
 #    黙って嘘になるので env で差し替えられるようにし、出力にラベルを出す。
-TOK_ASCII_PCT=${HARNESS_TOK_ASCII_PCT:-33}
+TOK_ASCII_PCT=${HARNESS_TOK_ASCII_PCT:-35}
 TOK_WIDE_PCT=${HARNESS_TOK_WIDE_PCT:-140}
 TOKENIZER_LABEL=${HARNESS_TOKENIZER_LABEL:-Claude 4.7+}
 measure_file() {
@@ -244,7 +244,7 @@ finish() {
   else
     echo "指摘 ${findings} 件。各指摘の意味と直し方はこの skill の本文を参照。"
   fi
-  echo "=== 検査完了: ${findings} 件(check.sh v0.14.0) ==="
+  echo "=== 検査完了: ${findings} 件(check.sh v0.15.0) ==="
   exit 0
 }
 
