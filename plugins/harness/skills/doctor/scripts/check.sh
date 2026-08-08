@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.13.0 — ベストプラクティス遵守を機械的に検査する(読み取り専用)。
+# harness-template v0.14.0 — ベストプラクティス遵守を機械的に検査する(読み取り専用)。
 #
 # 設計意図(2026-08-05):
 #   機械判定できる項目だけを確定的に検査する。スキルやハーネスを作った直後に
@@ -73,6 +73,25 @@
 #   契約(rc=0)には影響しない。`!` 記法の通常実行(出力を打ち切らずフルに読む)では
 #   パイプが閉じないのでこの副作用は発生しない —— 発生するのはユーザーが手動で
 #   `check.sh | head` のように意図的に打ち切った場合だけなので、許容する。
+#
+# 追記(2026-08-08・敵対的検証の残指摘2件を修正・v0.14.0):
+#   指摘A(深刻): rules の `paths:` を読む処理が `grep -oE '"[^"]+"'` でダブルクオート
+#   囲みの glob しか拾えず、`- src/**`(引用符なし)や `- 'src/**'`(シングルクオート)は
+#   YAML として正当な書式なのに glob を1つも抽出できず、結果として「どのファイルにも
+#   マッチしない = ✗」という**誤報**を出していた(harness.md / ios-skills.md の
+#   実際の paths リストで再現確認済み)。これは単なる誤検知ではない —— SKILL.md の
+#   Operating Posture が挙げる2つの失敗モードのうち重い方「偽陽性に従って正しい設定を
+#   壊す」を招く: この ✗ を真に受けたエージェントが「壊れている」と誤解して動いている
+#   glob を書き換えれば、rule は本当に死ぬ。直し方は該当箇所(rules 節)のコメント参照。
+#   併せて、`paths:` はあるのに glob が1つも抽出できなかったケース(インラインの
+#   フロー配列 `paths: [...]` など、対応していない書式)を、「マッチしない」(✗)ではなく
+#   「抽出できなかった」(⏭)として区別するようにした —— この2つを混同したのが今回の
+#   誤報の本体であり、原則4「検査できなかった、と不合格は別」に従う。
+#   指摘B: CLAUDE.md の長い節を検出する処理が、awk の出力を一旦
+#   `/tmp/.doctor_sections` という**固定パス**へ書いてから cat していた。「読み取り専用」
+#   契約に反するうえ、固定パスは他ユーザー/他プロセスが先にシンボリックリンクとして
+#   仕込んでおくと書き込み先を乗っ取られる経路になる。mktemp で「安全な一時ファイル」に
+#   差し替えるのではなく、一時ファイルという経路自体を無くしてシェル変数へ直接受ける形にした。
 set -uo pipefail
 # ⚠️ 「常に exit 0」の契約を守るための最後のピース。上の追記コメントを参照。
 #    このスクリプトは stdout/stderr への出力しか行わない(読み取り専用)ので、
@@ -225,7 +244,7 @@ finish() {
   else
     echo "指摘 ${findings} 件。各指摘の意味と直し方はこの skill の本文を参照。"
   fi
-  echo "=== 検査完了: ${findings} 件(check.sh v0.13.0) ==="
+  echo "=== 検査完了: ${findings} 件(check.sh v0.14.0) ==="
   exit 0
 }
 
@@ -303,12 +322,23 @@ else
     grep -nE "$prohibit_re" CLAUDE.md | grep -vE "$capability_re" | head -3 | sed 's/^/       /'
   fi
   # 長い手順が埋まっていないか(節ごとの行数)。
-  awk '/^## /{if(name && n>'"$SECTION_MAX"') print "       " name " (" n " 行)"; name=$0; n=0; next} {n++} END{if(name && n>'"$SECTION_MAX"') print "       " name " (" n " 行)"}' CLAUDE.md > /tmp/.doctor_sections 2>/dev/null
-  if [ -s /tmp/.doctor_sections ]; then
+  #
+  # 追記(2026-08-08・敵対的検証の指摘B対応): 旧実装は awk の出力を一旦
+  # `/tmp/.doctor_sections` という**固定パス**へ書き、それを cat してから rm していた。
+  # これは2重に問題があった。(1) このスクリプトは「読み取り専用」を冒頭コメントで
+  # 契約として掲げているのに、実際にはファイルへ書き込んでいた —— 契約違反そのもの。
+  # (2) 固定パスなので、同じマシンの別ユーザーや別プロセスが先にそのパスを
+  # シンボリックリンクとして仕込んでおくと、リンク先へ書き込んでしまう経路になる
+  # (TOCTOU 的な弱点。/tmp は誰でも書けるディレクトリなので現実的な脅威)。
+  # 出力はどうせ数行なので、`mktemp` に差し替えて「安全な一時ファイル」にする
+  # (ボツ案)のではなく、**一時ファイルという経路そのものを無くす**のが正しい直し方
+  # —— 危険な経路はゲートで守るのではなく無くす、という方針に合わせた。awk の出力は
+  # シェル変数へ直接受ければ足りる(空かどうかは変数の中身で判定できる)。
+  long_sections=$(awk '/^## /{if(name && n>'"$SECTION_MAX"') print "       " name " (" n " 行)"; name=$0; n=0; next} {n++} END{if(name && n>'"$SECTION_MAX"') print "       " name " (" n " 行)"}' CLAUDE.md 2>/dev/null)
+  if [ -n "$long_sections" ]; then
     warn "CLAUDE.md に長い節がある(${SECTION_MAX} 行超)。手順なら skill へ移すと常時コストが消える:"
-    cat /tmp/.doctor_sections
+    printf '%s\n' "$long_sections"
   fi
-  rm -f /tmp/.doctor_sections
 fi
 
 # --- rules -------------------------------------------------------------------
@@ -337,16 +367,71 @@ else
     # ⚠️ 最重要: glob が1つも実ファイルにマッチしないと silent に無効化される
     #    (swift-mcp-app で 2026-07-22 に実際に起きた。CLAUDE.md は「自動ロード」と
     #     書いてあったのに、TypeScript 用の src/** を Swift リポへ持ち込んで死んでいた)。
-    globs=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---/{exit} f' "$f" | awk '/^paths:/{p=1;next} p&&/^[a-zA-Z]/{exit} p' | grep -oE '"[^"]+"' | tr -d '"')
-    matched=0
-    for g in $globs; do
-      # ** を含む glob は git ls-files のパターンで概ね評価できる
-      if git ls-files -- "$g" 2>/dev/null | head -1 | grep -q .; then matched=1; break; fi
-    done
-    if [ "$matched" -eq 1 ]; then
-      ok "$(basename "$f"): paths 有効(マッチするファイルあり)"
+    #
+    # 追記(2026-08-08・敵対的検証の指摘A対応): 旧実装は `grep -oE '"[^"]+"'` で
+    # **ダブルクオート囲みの glob しか拾えなかった**。YAML では `paths:` のリスト項目の
+    # 引用符は任意なので、`- src/**`(引用符なし)や `- 'src/**'`(シングルクオート)は
+    # 実際には正しい書式なのに glob が1つも抽出できず globs="" になり、下の分岐が
+    # 「どのファイルにもマッチしない = ✗」を誤って出していた。**これは単なる誤検知ではない**
+    # —— doctor/SKILL.md の Operating Posture が挙げる2つの失敗モードのうち重い方
+    # 「偽陽性に従って正しい設定を壊す」を招く。この ✗ を真に受けたエージェントが
+    # 動いている glob を(壊れていると思い込んで)書き換えれば、rule は本当に死ぬ。
+    # 直し方: `- item` / `- "item"` / `- 'item'` の3形すべてに対応する専用の awk を書いた。
+    # 行末コメント(`- src/** # なぜこの glob か`。実際に harness.md / ios-skills.md の
+    # paths: リスト中にコメント専用行があり、それを glob と誤読しないことも要件)を
+    # 落としてから値を取り出す。
+    #
+    # Why not 単一引用符をそのまま awk ソースへ書かない: この awk プログラム全体が
+    # 呼び出し側のシェルで単一引用符（'...'）に囲まれているため、ソース中にリテラルの
+    # ' を書くとそこでシェルの引用が終わってしまう（`'"'"'` トリックは読みにくく事故りやすい）。
+    # 代わりに `sprintf("%c", 39)` で実行時に単一引用符の文字を作り、比較に使う。
+    globs=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---/{exit} f' "$f" \
+            | awk '/^paths:/{p=1;next} p&&/^[a-zA-Z]/{exit} p' \
+            | awk '
+                BEGIN { SQ = sprintf("%c", 39) }
+                {
+                  line = $0
+                  sub(/^[ \t]*/, "", line)              # 先頭の字下げを落とす
+                  if (substr(line, 1, 1) != "-") next    # `- ` で始まらない行(コメント専用行
+                                                          # `  # なぜこの glob か` など)は無視
+                  sub(/^-[ \t]*/, "", line)               # 先頭の "- " を落とす
+                  c = substr(line, 1, 1)
+                  if (c == "\"") {                        # ダブルクオート囲み: 対応する閉じ " まで
+                    rest = substr(line, 2)
+                    i = index(rest, "\"")
+                    if (i > 0) { val = substr(rest, 1, i - 1) } else { next }
+                  } else if (c == SQ) {                   # シングルクオート囲み: 同様
+                    rest = substr(line, 2)
+                    i = index(rest, SQ)
+                    if (i > 0) { val = substr(rest, 1, i - 1) } else { next }
+                  } else {                                # 引用符なし: 行末コメントを落として trim
+                    val = line
+                    sub(/[ \t]+#.*$/, "", val)
+                    sub(/[ \t]+$/, "", val)
+                  }
+                  if (val != "") print val
+                }
+              ')
+    if [ -z "$globs" ]; then
+      # paths: キー自体はあるのに1件も glob を抽出できなかったケース。主な原因は
+      # インラインのフロー配列(`paths: ["a/**", "b/**"]`)—— YAML としては正当だが、
+      # このスクリプトはブロックスタイル(`- item` の並び)しか解釈しない(要件で明示的に
+      # 対応対象外)。ここを「マッチしない」(bad)と混同すると、指摘Aで起きた誤報と
+      # 同じ壊れ方(正しい設定を「壊れている」と誤診断する)を再生産する。
+      # 「検査できなかった」と「不合格」は別物 —— 原則4「検知器は黙って死ぬ前提で
+      # 検知器を検証する」に従い、findings に数えつつ ✗ ではなく ⏭ で区別して報告する。
+      skip "$(basename "$f"): paths: はあるが glob を1件も抽出できなかった(インラインのフロー配列 paths: [...] 形式には対応していない。- item / - \"item\" / - 'item' のブロック形式に書き換えること)"
     else
-      bad "$(basename "$f"): paths がどのファイルにもマッチしない = 一度もロードされない。glob をこのリポジトリの構成に合わせること: $(echo "$globs" | tr '\n' ' ')"
+      matched=0
+      for g in $globs; do
+        # ** を含む glob は git ls-files のパターンで概ね評価できる
+        if git ls-files -- "$g" 2>/dev/null | head -1 | grep -q .; then matched=1; break; fi
+      done
+      if [ "$matched" -eq 1 ]; then
+        ok "$(basename "$f"): paths 有効(マッチするファイルあり)"
+      else
+        bad "$(basename "$f"): paths がどのファイルにもマッチしない = 一度もロードされない。glob をこのリポジトリの構成に合わせること: $(echo "$globs" | tr '\n' ' ')"
+      fi
     fi
   done
 fi
