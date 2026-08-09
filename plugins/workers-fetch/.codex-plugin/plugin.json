@@ -1,0 +1,32 @@
+{
+  "name": "workers-fetch",
+  "version": "1.0.0",
+  "description": "Test Cloudflare Workers apps via workers-fetch CLI",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
+  "homepage": "https://github.com/gigun-dev/claude-code/tree/main/plugins/workers-fetch",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "testing"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Workers Fetch",
+    "shortDescription": "Test Cloudflare Workers apps",
+    "longDescription": "Test deployed and local Cloudflare Workers with workers-fetch.",
+    "developerName": "gigun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/gigun-dev/claude-code/tree/main/plugins/workers-fetch",
+    "defaultPrompt": [
+      "Test this Cloudflare Worker with workers-fetch."
+    ]
+  }
+}

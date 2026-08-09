@@ -1,0 +1,32 @@
+{
+  "name": "figmate-mcp",
+  "version": "1.0.0",
+  "description": "Figmate MCP server (agent2figma design)",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
+  "homepage": "https://github.com/gigun-dev/claude-code/tree/main/plugins/figmate-mcp",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "keywords": [
+    "figma",
+    "design",
+    "mcp"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Figmate MCP",
+    "shortDescription": "Agent-to-Figma design tools",
+    "longDescription": "Connect Codex to Figmate for agent-driven Figma design.",
+    "developerName": "gigun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/gigun-dev/claude-code/tree/main/plugins/figmate-mcp",
+    "defaultPrompt": [
+      "Use Figmate for this Figma design task."
+    ]
+  }
+}

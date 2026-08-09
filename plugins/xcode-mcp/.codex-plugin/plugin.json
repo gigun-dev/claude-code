@@ -1,0 +1,32 @@
+{
+  "name": "xcode-mcp",
+  "version": "1.0.0",
+  "description": "Xcode MCP server (xcrun mcpbridge)",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
+  "homepage": "https://github.com/gigun-dev/claude-code/tree/main/plugins/xcode-mcp",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "keywords": [
+    "xcode",
+    "ios",
+    "mcp"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Xcode MCP",
+    "shortDescription": "Xcode and iOS development tools",
+    "longDescription": "Connect Codex to Xcode through xcrun mcpbridge.",
+    "developerName": "gigun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/gigun-dev/claude-code/tree/main/plugins/xcode-mcp",
+    "defaultPrompt": [
+      "Use Xcode tools to inspect this iOS project."
+    ]
+  }
+}

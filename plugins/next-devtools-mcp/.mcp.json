@@ -1,0 +1,1 @@
+{"mcpServers":{"next-devtools":{"type":"stdio","command":"bunx","args":["-y","next-devtools-mcp@latest"]}}}

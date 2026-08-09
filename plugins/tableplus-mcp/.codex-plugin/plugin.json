@@ -1,0 +1,32 @@
+{
+  "name": "tableplus-mcp",
+  "version": "1.0.0",
+  "description": "TablePlus MCP server (database GUI integration)",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
+  "homepage": "https://github.com/gigun-dev/claude-code/tree/main/plugins/tableplus-mcp",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "keywords": [
+    "database",
+    "tableplus",
+    "mcp"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "TablePlus MCP",
+    "shortDescription": "TablePlus database GUI integration",
+    "longDescription": "Connect Codex to TablePlus MCP for database work.",
+    "developerName": "gigun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/gigun-dev/claude-code/tree/main/plugins/tableplus-mcp",
+    "defaultPrompt": [
+      "Use TablePlus to inspect this database."
+    ]
+  }
+}

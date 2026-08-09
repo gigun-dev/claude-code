@@ -1,0 +1,31 @@
+{
+  "name": "deepwiki-mcp",
+  "version": "1.0.0",
+  "description": "DeepWiki MCP server (GitHub repo docs Q&A)",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
+  "homepage": "https://github.com/gigun-dev/claude-code/tree/main/plugins/deepwiki-mcp",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "keywords": [
+    "github",
+    "documentation",
+    "mcp"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "DeepWiki MCP",
+    "shortDescription": "GitHub repository documentation Q&A",
+    "longDescription": "Connect Codex to DeepWiki for repository documentation questions.",
+    "developerName": "gigun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read"
+    ],
+    "websiteURL": "https://github.com/gigun-dev/claude-code/tree/main/plugins/deepwiki-mcp",
+    "defaultPrompt": [
+      "Use DeepWiki to explain this repository."
+    ]
+  }
+}

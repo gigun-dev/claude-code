@@ -1,0 +1,32 @@
+{
+  "name": "chrome-devtools-mcp",
+  "version": "1.0.0",
+  "description": "Chrome DevTools MCP server",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
+  "homepage": "https://github.com/gigun-dev/claude-code/tree/main/plugins/chrome-devtools-mcp",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "keywords": [
+    "chrome",
+    "browser",
+    "mcp"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Chrome DevTools MCP",
+    "shortDescription": "Chrome browser development tools",
+    "longDescription": "Connect Codex to Chrome DevTools MCP.",
+    "developerName": "gigun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/gigun-dev/claude-code/tree/main/plugins/chrome-devtools-mcp",
+    "defaultPrompt": [
+      "Inspect this site with Chrome DevTools."
+    ]
+  }
+}
