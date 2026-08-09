@@ -231,6 +231,17 @@ Claude Code 作者も「半年ごとに CLAUDE.md も skills も hooks も全部
 一次証言が正面から対立している:
 
 > ゲートが無いから死ぬ —— "no gate → writing one is volunteer work. That's why they die."
+逆向きの故障もある —— **黙る代わりに、それらしい数字を出し続ける。**
+Langfuse 連携は「ツール失敗 ERROR 489件」を報告し続けたが、本物の失敗は1件も記録されて
+いなかった(`PostToolUseFailure` 未購読。489件は成功したツールの出力に `"rror"` が含まれる
+だけの誤検知)。同期間の実失敗は cclens 実測で Edit 5件 —— **64倍の嘘**。独立した第二の計測と
+同じ期間で突き合わせたときだけ割れた。**「0件を疑え」では捕まらない —— 数字が出ているから。**
+
+だから検証は2段:**発火したか**(0件検査・実物に対するテスト = `H-2`)と、**中身が正しいか**
+(独立した第二の計測との突き合わせ。`calibrate.sh` が概算トークン係数を実トークナイザで較正
+するのがこの形)。**突き合わせを一度も通っていない数字は「未検証」として扱い、断定の根拠に
+しない。** 経緯は `log.md` 2026-08-08。突き合わせ自体のスクリプト化は見送った(`R-29`)。
+
 > **ゲートがあるから死ぬ** —— "if the document has to be approved, then people
 > **quietly make decisions without recording it anywhere**."
 
