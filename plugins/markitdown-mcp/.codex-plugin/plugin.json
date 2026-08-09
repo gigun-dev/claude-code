@@ -1,0 +1,32 @@
+{
+  "name": "markitdown-mcp",
+  "version": "1.0.0",
+  "description": "MarkItDown MCP server (file to markdown conversion)",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
+  "homepage": "https://github.com/gigun-dev/claude-code/tree/main/plugins/markitdown-mcp",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "keywords": [
+    "markdown",
+    "conversion",
+    "mcp"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "MarkItDown MCP",
+    "shortDescription": "Convert files to Markdown",
+    "longDescription": "Connect Codex to MarkItDown for file-to-Markdown conversion.",
+    "developerName": "gigun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/gigun-dev/claude-code/tree/main/plugins/markitdown-mcp",
+    "defaultPrompt": [
+      "Convert this file to Markdown."
+    ]
+  }
+}

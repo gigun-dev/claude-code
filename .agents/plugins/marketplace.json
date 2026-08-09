@@ -1,0 +1,18 @@
+{
+  "name": "gigun",
+  "interface": { "displayName": "gigun" },
+  "plugins": [
+    { "name": "xcode-mcp", "source": { "source": "local", "path": "./plugins/xcode-mcp" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "next-devtools-mcp", "source": { "source": "local", "path": "./plugins/next-devtools-mcp" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "chrome-devtools-mcp", "source": { "source": "local", "path": "./plugins/chrome-devtools-mcp" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "deepwiki-mcp", "source": { "source": "local", "path": "./plugins/deepwiki-mcp" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "dart-mcp", "source": { "source": "local", "path": "./plugins/dart-mcp" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "tableplus-mcp", "source": { "source": "local", "path": "./plugins/tableplus-mcp" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "figmate-mcp", "source": { "source": "local", "path": "./plugins/figmate-mcp" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "markitdown-mcp", "source": { "source": "local", "path": "./plugins/markitdown-mcp" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "ios-skills", "source": { "source": "local", "path": "./plugins/ios-skills" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "workers-fetch", "source": { "source": "local", "path": "./plugins/workers-fetch" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "harness", "source": { "source": "local", "path": "./plugins/harness" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "telemetry", "source": { "source": "local", "path": "./plugins/telemetry" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Productivity" }
+  ]
+}

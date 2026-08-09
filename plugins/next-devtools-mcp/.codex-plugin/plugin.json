@@ -1,0 +1,32 @@
+{
+  "name": "next-devtools-mcp",
+  "version": "1.0.0",
+  "description": "Next.js DevTools MCP server",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
+  "homepage": "https://github.com/gigun-dev/claude-code/tree/main/plugins/next-devtools-mcp",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "keywords": [
+    "nextjs",
+    "mcp",
+    "web"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Next DevTools MCP",
+    "shortDescription": "Next.js development tools",
+    "longDescription": "Connect Codex to Next.js DevTools MCP.",
+    "developerName": "gigun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/gigun-dev/claude-code/tree/main/plugins/next-devtools-mcp",
+    "defaultPrompt": [
+      "Inspect this Next.js app with DevTools."
+    ]
+  }
+}

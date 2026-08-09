@@ -1,0 +1,32 @@
+{
+  "name": "dart-mcp",
+  "version": "1.0.0",
+  "description": "Dart/Flutter MCP server",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
+  "homepage": "https://github.com/gigun-dev/claude-code/tree/main/plugins/dart-mcp",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "keywords": [
+    "dart",
+    "flutter",
+    "mcp"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Dart MCP",
+    "shortDescription": "Dart and Flutter development tools",
+    "longDescription": "Connect Codex to the Dart and Flutter MCP server.",
+    "developerName": "gigun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/gigun-dev/claude-code/tree/main/plugins/dart-mcp",
+    "defaultPrompt": [
+      "Inspect this Dart or Flutter project."
+    ]
+  }
+}
