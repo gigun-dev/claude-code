@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.15.0 — ハーネス導入の機械的な部分をすべて実行する。
+# harness-template v0.16.0 — ハーネス導入の機械的な部分をすべて実行する。
 #
 # 設計意図(2026-08-05):
 #   SKILL.md の散文手順を LLM に解釈させると、実行のたびに揺れる(手順の読み飛ばし・
@@ -246,6 +246,24 @@ src, dst, cmd = sys.argv[1], sys.argv[2], sys.argv[3]
 open(dst, "w").write(open(src).read().replace("{{CHECK_COMMAND}}", cmd))
 PY
     chmod +x .githooks/pre-push
+
+    # --- 4b. pre-commit フック(H-28) -----------------------------------------
+    # pre-push と違って CHECK_CMD の検出は不要 —— 非ブロッキングなリマインダで
+    # 検証コマンドを実行しないため({{CHECK_COMMAND}} のようなプレースホルダ展開も無く、
+    # assets/pre-commit をそのまま cp するだけで済む)。にもかかわらずこの
+    # `else`(= CHECK_CMD が見つかり pre-push を実際に配線するとき)の内側に置くのは、
+    # pre-commit も pre-push と同じ .githooks / core.hooksPath の配線に相乗りするから
+    # —— 別に mkdir・hooksPath 3分岐(下記)を複製すると、2つの配線ロジックが
+    # ドリフトする種になる(原則7)。
+    # ⚠️ **これにより --skip-prepush は pre-commit も道連れで未導入にする。**
+    # 意味的には非対称(pre-commit は非ブロッキングで --skip-prepush の理由=
+    # 「ブロッキングな検証を入れたくない」に本来当てはまらない)だが、
+    # 3分岐ロジックの複製よりこの結合を選んだ —— pre-commit だけ独立させたく
+    # なったら(例: 「pre-push は要らないが pre-commit のリマインダは欲しい」という
+    # 要望が実際に出たら)そのとき --skip-precommit を切り出す。
+    cp "$ASSETS/pre-commit" .githooks/pre-commit
+    chmod +x .githooks/pre-commit
+    DID+=(".githooks/pre-commit: 配置(非ブロッキング。CLAUDECODE/AI_AGENT が居ないと無出力)")
 
     # core.hooksPath は無条件に書き換えない(H-1: 既に別の値が設定されているリポジトリで
     # 黙って上書きすると、既存のフック一式が丸ごと無効化される。これは騒がしく失敗する

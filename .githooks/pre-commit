@@ -1,0 +1,325 @@
+#!/bin/sh
+# harness-template v0.1.0 (配布元: gigun-dev/claude-code plugins/harness。配布先の世代確認はこの行を grep)
+# =============================================================================
+# pre-commit フック — agent の commit に限って、触った規約の読み直しと
+# 正典(next-directions.md)の更新忘れを stderr でリマインドする(非ブロッキング)
+# =============================================================================
+# 【なぜ非ブロッキングか / なぜ絶対に exit 0 で終えるか】
+#   原則5「強制は最小、検知は最大。落とすのは CI 相当の検証だけ」
+#   (.claude/rules/harness.md 参照)。push と違って commit は共有されない —— agent
+#   (Claude Code 等)は人間より遥かに高頻度に commit を刻む。ここをゲート化すると
+#   「黙って決めて記録しない」に転ぶ危険の方が、リマインダを1つ逃す害より大きい。
+#   pre-commit のブロッキング化は 2026-08-10 に `R-33` として却下済み
+#   (docs/harness/log.md 同日 —— 再訪条件: なし。原則5が変わらない限り)。
+#
+#   **だからこのスクリプトは、内部の解析ロジックが何を踏んでも非ゼロで終了しない。**
+#   「リマインダ機構のバグで commit そのものを止める」のは原則5違反そのもの
+#   —— git・grep・awk のどれが想定外の壊れ方をしても、最後に必ず `exit 0` する
+#   （途中に `exit` を書かない設計にして、抜け道を1箇所に集約している)。
+#   エラーは黙って握り潰さず stderr へ出す(有音で fail-open)。
+#
+# 【なぜ lefthook ではなく素の sh(POSIX)か】
+#   2026-08-10 に `R-31` として lefthook への全面移行を却下済み(同ログ参照)。
+#   (1) 到達が「(何かを)書いた後にしか効かない」1系統に一本化され、rules(paths)
+#       が持つ「ファイルを読んだ瞬間に効く」到達経路が失われる —— この2つは
+#       別のタイミングで同じ規約を届ける補完関係にある方が強い(下記参照)。
+#   (2) glob の空振りは rules の paths 空振りと同型の問題で、乗り換えても直らない。
+#   (3) バイナリ依存を配布先 N リポジトリへ乗算することになり、「依存ゼロで動く」
+#       という配布物の美点が消える。素の sh なら git さえあれば動く。
+#
+# 【なぜ glob を .claude/rules/*.md の frontmatter から読むか(自前で持たない)】
+#   「このパスはどの規約に属するか」というスコープ定義の正典を増やしたくない
+#   (原則7「距離が近いほど効く。ただし距離を詰めるために複製すれば必ずドリフトする」)。
+#   同じ glob を「ファイルを読んだ時(rules の自動注入)」と「commit する時(このフック)」
+#   の2つのタイミングに届けることで補完させる設計 —— rules だけだと、そのセッションで
+#   一度も該当ファイルを Read せずに staged してしまうケースを拾えない。
+#   ⚠️ gitattributes に glob を持たせる案は却下した —— glob の定義が2箇所になり、
+#   今度は「2つの glob が一致しているか」を見張るドリフト検知器がもう1個必要になる
+#   (原則7の裏返し)。
+#   **将来 rules 機構そのものを廃止する日が来たら、そちらへ乗り換えること。**
+#   パース処理(下の extract_rule_paths 関数1つ)を差し替えるだけで移行できるよう、
+#   frontmatter の解釈をこの1関数に閉じ込めてある。
+#
+# 【agent 検出は CLAUDECODE / AI_AGENT の2変数のみ】
+#   人間が手で打つ commit には一切干渉しない —— 人が学習目的で叩く commit に
+#   リマインダはノイズでしかない。CLAUDECODE は Claude Code CLI が実行時に自動設定する。
+#   AI_AGENT は他エージェント一般が慣習的に設定することがある値。
+#   ⚠️ **他エージェント(Codex 等)を使い始めたら、その env を実測してから足すこと**
+#   —— 確認していない前提を投機で埋め込まない。
+#
+# 【有効化】.git/hooks は git 管理外なので、core.hooksPath でこのディレクトリ
+#   (.githooks)を指す必要がある(pre-push と同じ):
+#       git config core.hooksPath .githooks
+#   **clone するたびに1回必要**(.git/config は git 管理されないため)。
+# =============================================================================
+
+# --- 0. agent 検出。人間の commit には一切干渉しない(無出力・exit 0) ---------
+if [ -z "$CLAUDECODE" ] && [ -z "$AI_AGENT" ]; then
+	exit 0
+fi
+
+# --- frontmatter パーサ: .claude/rules/*.md の `paths:` 配下から glob を抜く ---
+# 対の "---" の内側、`paths:` のすぐ下にある `  - "..."` 行の引用符の中身だけを拾う。
+# `#` から始まる行(コメント)は読み飛ばす —— 実物の .claude/rules/harness.md が
+# コメント入りの paths: を持つため、これで実測して確かめてある。
+extract_rule_paths() {
+	awk '
+		BEGIN { fm = 0; inpaths = 0 }
+		/^---[ \t]*$/ {
+			fm++
+			if (fm == 2) exit
+			next
+		}
+		fm == 1 && /^paths:[ \t]*$/ { inpaths = 1; next }
+		fm == 1 && inpaths {
+			if ($0 ~ /^[ \t]*#/) { next }
+			if ($0 ~ /^[ \t]*-[ \t]*"/) {
+				line = $0
+				sub(/^[ \t]*-[ \t]*"/, "", line)
+				sub(/".*$/, "", line)
+				print line
+				next
+			}
+			inpaths = 0
+		}
+	' "$1"
+}
+
+# rule ファイルの先頭見出し(`# ...` 行)を1行だけ抜く。本文の転記はしない
+# (複製=ドリフトの種になるので、「どの規約か」が分かる最小限だけ持ち出す)。
+# ⚠️ frontmatter の**中**(2本の "---" の間)は必ず読み飛ばす —— 実物の
+# assets/comments-rule.md はコメント行が字下げなしの `# harness-template v0.2.0 …` で
+# 始まる(harness.md の `paths:` 内コメントは字下げありなので事情が違う)。単純に
+# `grep -m1 '^# '` すると、この frontmatter 内コメントを見出しと誤認して拾ってしまう
+# (実測で発見: comments.md で見出しが「harness-template v0.2.0 (配布元: …)」になった)。
+rule_heading() {
+	awk '
+		BEGIN { fm = 0 }
+		/^---[ \t]*$/ { fm++; next }
+		fm == 1 { next }
+		/^#[ \t]/ { sub(/^#[ \t]*/, ""); print; exit }
+	' "$1" 2>/dev/null
+}
+
+# ND(next-directions.md)の「頭」(先頭 〜 `<!-- session-head-end` 直前)の文字数を数える。
+# staged 側(git の index)の内容を見る —— working tree と食い違っている(git add -p の
+# 部分ステージ等)場合、実際に commit される中身を測らないと意味が無いため。
+# 文字数の数え方は plugins/harness/skills/status/scripts/nd-tasks.sh の measure() と同じ
+# トリック: UTF-8 の継続バイト(0x80-0xBF)を tr -d で削れば、残りのバイト数が文字数に一致する
+# (`wc -m` は macOS の既定ロケールだとバイト数を返すことがあり、あてにできない)。
+nd_head_chars() {
+	content=$(git show ":$1" 2>/dev/null) || { echo 0; return 1; }
+	printf '%s\n' "$content" \
+		| awk '/^<!-- session-head-end/ { exit } { print }' \
+		| LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' '
+}
+
+# --- 絶対条件: 以降のロジックが何を踏んでも非ゼロで終了しない -----------------
+# 本体を1関数に閉じ込め、途中の `return` はあってもスクリプト全体の `exit` は
+# 使わない。関数を抜けたら無条件に `exit 0`(このファイル内で `exit` を書くのは
+# 冒頭の agent 検出とここの2箇所だけ、という構成にして「非ゼロで終わる経路が
+# 無いこと」を目で追えるようにしている。
+main() {
+	staged=$(git diff --cached --name-only 2>/dev/null)
+	[ -n "$staged" ] || return 0
+
+	rules_dir=".claude/rules"
+	# rules 未導入のリポジトリでも無害に配布できる(3つのゼロの1つ・無音が正)。
+	[ -d "$rules_dir" ] || return 0
+
+	# HEAD の有無は検査Cで複数回参照するので、ここで1回だけ判定して使い回す
+	# (初回 commit=HEAD 無し のリポジトリでは検査Cをまるごとスキップする)。
+	has_head=1
+	git rev-parse HEAD >/dev/null 2>&1 || has_head=0
+
+	# 検査B(粒度警告)用に、実際にスコープへ触れた rule の短い名前を集める。
+	matched_names=""
+	# 検査A のヘッダ/フッタは「1件以上マッチしたら1回だけ」出すのでフラグで管理する。
+	any_matched=0
+	# 検査Cの行は、検査A/Bの出力(このループ内)がすべて出終わってから、まとめて
+	# 最後に出す(ループ内でそのつど出すと「rule1 の A → rule1 の C → rule2 の A …」
+	# のように A/B/C が入り乱れ、指定の出力例(A の塊 → B → C)と順序がズレるため)。
+	checkc_lines=""
+
+	for rule_file in "$rules_dir"/*.md; do
+		[ -f "$rule_file" ] || continue
+
+		patterns=$(extract_rule_paths "$rule_file")
+
+		if [ -z "$patterns" ]; then
+			# paths: というキー自体は(本文どこであれ)存在するのに抽出0件なら、
+			# 「規約が無い」のではなく「パーサが壊れている」証拠(原則4:
+			# 検知器は黙って死ぬ前提で検証する。0件は『無い』ではなく『壊れた』)。
+			# 単に paths: を持たない rule (frontmatter 自体が無い等)なら無音のままでよい。
+			if grep -q '^paths:' "$rule_file" 2>/dev/null; then
+				echo "⚠️ harness pre-commit: $rule_file に paths: があるのにパターン抽出が0件 —— frontmatter パーサ破損の疑い(.githooks/pre-commit の extract_rule_paths を確認)" >&2
+			fi
+			continue
+		fi
+
+		# --- 全パターンを安全 / 評価不能(brace 展開)へ分ける -----------------
+		# git pathspec の :(glob) は brace 展開({ts,tsx} 等)を解さない
+		# (Claude 側の rules は解する ⚠️ 仕様差)。ここを素通りさせると
+		# 黙って0件になり「スコープに触れていない」と誤って報告してしまうので、
+		# `{` を含むパターンは git に渡さず「評価不能につき常にマッチ扱い」にする
+		# —— 非ブロッキングのリマインダでは過剰通知の方が黙る空振りより安全
+		# (fail-open だが有音)。
+		set --
+		unsafe_list=""
+		while IFS= read -r p; do
+			[ -n "$p" ] || continue
+			case "$p" in
+				*'{'*) unsafe_list="${unsafe_list}${p}
+" ;;
+				*) set -- "$@" ":(glob)$p" ;;
+			esac
+		done <<-EOF
+			$patterns
+		EOF
+
+		matched=""
+		if [ "$#" -gt 0 ]; then
+			# 自作 glob マッチャは持たない —— git 自身に照合させる。
+			matched=$(git diff --cached --name-only -- "$@" 2>/dev/null)
+		fi
+
+		matched_count=0
+		[ -n "$matched" ] && matched_count=$(printf '%s\n' "$matched" | grep -c . )
+
+		forced=0
+		[ -n "$unsafe_list" ] && forced=1
+
+		# このルールのスコープに staged が触れていない(かつ評価不能パターンも
+		# 無い)なら無音 —— 3つのゼロのうち最頻ケース。
+		if [ "$matched_count" -eq 0 ] && [ "$forced" -eq 0 ]; then
+			continue
+		fi
+
+		comp_name=$(basename "$rule_file" .md)
+		heading=$(rule_heading "$rule_file")
+
+		if [ "$any_matched" -eq 0 ]; then
+			echo "harness pre-commit: staged がルールのスコープに触れている" >&2
+			any_matched=1
+		fi
+
+		if [ "$matched_count" -gt 0 ]; then
+			first_file=$(printf '%s\n' "$matched" | head -1)
+			if [ "$matched_count" -gt 1 ]; then
+				echo "  $rule_file — ${matched_count}件 ($first_file ほか)" >&2
+			else
+				echo "  $rule_file — ${matched_count}件 ($first_file)" >&2
+			fi
+		fi
+		if [ "$forced" -eq 1 ]; then
+			# 複数あり得るので改行区切りのまま列挙する(通常は1〜2個)。
+			printf '%s\n' "$unsafe_list" | while IFS= read -r up; do
+				[ -n "$up" ] || continue
+				echo "  $rule_file — 評価不能パターンにつき常にマッチ扱い: \"$up\"(git pathspec は brace 展開を解さない)" >&2
+			done
+		fi
+		# ⚠️ `$heading」` のように変数展開の直後へ非ASCII文字を裸で続けると、
+		#    macOS 既定の /bin/sh(bash 3.2 由来)が変数名の終端を誤認して展開結果を
+		#    破壊する(実測で確認 —— `v=abc; echo "「$v」"` が `「<0x80><0x8D>` に化ける。
+		#    `${v}」` と波括弧で区切れば起きない)。この1箇所だけでなく、以降このスクリプトに
+		#    行を足すときは変数展開の直後に全角文字を裸で置かないこと(`${var}` で区切る)。
+		echo "    「${heading}」" >&2
+
+		matched_names="${matched_names}${comp_name}
+"
+
+		# --- 検査C: 正典未更新カウント(→ tidy 促し) -------------------------
+		# ⚠️ 最重要仕様: コンポーネント別判定。matched(このルールの glob に staged が
+		# 実際にマッチしたファイル一覧)から docs/ 配下を除いたものが「このルールの
+		# コードを触ったか」の判定材料になる。**forced(評価不能パターン)だけを根拠に
+		# コード判定はしない** —— brace パターンで無条件マッチにした rule の未評価ぶんを
+		# 使って「コンポーネントを触った」と決め付けると、別コンポーネント(例:
+		# ios-skills)しか触っていない commit で harness の正典未更新を nag するような
+		# 誤爆が起きうる。それは「触っていない ND への nag → 機構ごと死ぬ」という
+		# tidy 失敗モード1・H-24 の doctor 側誤検知と同型の壊れ方になるので、
+		# ここは real な matched ファイルだけを根拠にする(fail-closed)。
+		# 一方で検査A/B は「読み直しを促すだけ」の非ブロッキングな注意で見逃しの方が
+		# 実害が大きいため fail-open にしている —— 同じチェックの中でも、何を
+		# 誤ると何が起きるかで安全側の倒し方を変えている。
+		code_touched=""
+		[ -n "$matched" ] && code_touched=$(printf '%s\n' "$matched" | grep -v '^docs/')
+
+		if [ -n "$code_touched" ] && [ "$has_head" -eq 1 ]; then
+			nd_path="docs/${comp_name}/next-directions.md"
+			if [ -f "$nd_path" ]; then
+				# ND 自体が今回の commit で staged 済み(=まさに今それを更新している)
+				# なら「未更新のまま」は事実に反するので nag しない。
+				nd_being_updated=0
+				printf '%s\n' "$staged" | grep -qxF "$nd_path" && nd_being_updated=1
+
+				if [ "$nd_being_updated" -eq 0 ]; then
+					nd_last_commit=$(git log -1 --format=%H -- "$nd_path" 2>/dev/null)
+					# ND がまだ一度も commit されていない(黙ってスキップ)。
+					if [ -n "$nd_last_commit" ]; then
+						# コード側の glob だけを使う(docs/ を指すポインタ用パターンは除く)。
+						# ND 自身の編集コミットまで「コンポーネントを触った」に数えると
+						# 二重計上になるため。brace パターンは git log 側でも同じ理由で除く
+						# (git log でも brace は黙って0件になり過小カウントするだけなので
+						# 安全側だが、二重の意味不明な数字を出さないため素直に除外する)。
+						set --
+						while IFS= read -r p; do
+							[ -n "$p" ] || continue
+							case "$p" in
+								docs/*) continue ;;
+								*'{'*) continue ;;
+								*) set -- "$@" ":(glob)$p" ;;
+							esac
+						done <<-EOF
+							$patterns
+						EOF
+						if [ "$#" -gt 0 ]; then
+							past_count=$(git log --oneline "$nd_last_commit"..HEAD -- "$@" 2>/dev/null | grep -c .)
+							total=$((past_count + 1))
+							checkc_lines="${checkc_lines}pre-commit: $nd_path 未更新のまま ${total} コミット目(区切りなら /harness:tidy)
+"
+						fi
+					fi
+				fi
+			fi
+		fi
+	done
+
+	if [ "$any_matched" -eq 1 ]; then
+		echo "  → この rule を今セッションで読んでいないなら、commit 前に読み直して staged を見直すこと" >&2
+	fi
+
+	# --- 検査B: 粒度警告(2つ以上の rule スコープに跨っている) ------------------
+	uniq_names=$(printf '%s' "$matched_names" | grep -c . )
+	if [ "$uniq_names" -ge 2 ]; then
+		joined=$(printf '%s' "$matched_names" | grep . | paste -sd '、' -)
+		echo "harness pre-commit: この commit は ${joined} に跨っている。分割を検討すること" >&2
+	fi
+
+	# --- 検査C の出力(ループ中に checkc_lines へ積んでおいたもの) ----------------
+	if [ -n "$checkc_lines" ]; then
+		printf '%s' "$checkc_lines" | while IFS= read -r line; do
+			[ -n "$line" ] || continue
+			echo "$line" >&2
+		done
+	fi
+
+	# --- head-costly: ND が staged に含まれる commit でだけ頭サイズを見る -------
+	# 毎 commit 出すと狼少年化するので、ND を書き換えている commit にだけ相乗りさせる。
+	# 正確なトークン概算・切り詰め検知は /harness:status --lint の仕事(そちらは毎
+	# commit 走らないので厚くしてよい) —— pre-commit は毎 commit 走るので軽さ優先、
+	# 文字数だけを見る。閾値 8000 は plugins/harness/budgets.sh の HEAD_WARN_CHARS と
+	# 同じ値(このフックは session-start.sh と違って install 時に展開されないテンプレ
+	# なので、ここだけ手で追随させる必要がある。ズレたら budgets.sh 側を正として直すこと)。
+	printf '%s\n' "$staged" | grep -E '^docs/[^/]+/next-directions\.md$' | while IFS= read -r nd; do
+		[ -n "$nd" ] || continue
+		chars=$(nd_head_chars "$nd")
+		if [ -n "$chars" ] && [ "$chars" -gt 8000 ] 2>/dev/null; then
+			echo "pre-commit: $nd の頭(先頭 〜 session-head-end)が ${chars}字(目安 8000字) —— 正確な計測・切り詰め判定は /harness:status --lint" >&2
+		fi
+	done
+
+	return 0
+}
+
+main
+exit 0
