@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.14.0 — ハーネス導入の機械的な部分をすべて実行する。
+# harness-template v0.15.0 — ハーネス導入の機械的な部分をすべて実行する。
 #
 # 設計意図(2026-08-05):
 #   SKILL.md の散文手順を LLM に解釈させると、実行のたびに揺れる(手順の読み飛ばし・
@@ -120,11 +120,35 @@ chmod +x .claude/hooks/session-start.sh
 DID+=(".claude/hooks/session-start.sh: 配置(既存があれば最新版へ更新)")
 
 # settings.json への SessionStart 登録。既存の設定を壊さないよう Python で厳密にマージし、
-# 同じコマンドのエントリが既にあれば追加しない(冪等)。
-python3 - "$PWD/.claude/settings.json" <<'PY'
+# 同じコマンドのエントリが既にあれば「追加」はしない(冪等)。
+#
+# ⚠️ matcher 文字列は「追加しない」だけでは冪外(冪等ではあるが古いままになる)。H-7
+#   (docs/harness/next-directions.md): 公式に確認できたのは startup|resume|clear の3つ、
+#   compact は実測で発火。--resume/--continue では「resume が matcher に無いと頭注入が
+#   一度も走らない」ことが分かっている(assets/codex-hooks.json には既に resume が入って
+#   おり、Claude 側だけの取りこぼしだった)。**fork は有効性が未確認なので足さない**
+#   (投機で足すと、確認できていない前提を配布物に埋め込むことになる)。
+#
+#   旧実装は「同じコマンドのエントリがあれば何もしない」だったため、matcher の定数だけ
+#   直しても**既に導入済みのリポジトリには新版が届かない**(install.sh は「冪等だから
+#   新版の配布にも同じコマンドを使う」設計 — README・harness.md 参照)。これは
+#   session-start.sh 本体を毎回上書きしているのと非対称で、放置すると settings.json だけ
+#   世代が固定されたまま取り残される。そこで今回、同一コマンドのエントリを見つけたら
+#   matcher が期待値と一致しているかも見て、違っていれば書き換える形にした。
+#
+#   「ユーザーが意図的に別の matcher にしている可能性」は認識している(例: fork を
+#   独自に足している等)。それでも上書きする判断にしたのは、(a) install.sh は
+#   SessionStart フックのように毎セッション自動実行されるものではなく、人(エージェント)
+#   が明示的に叩く破壊的スクリプトであり実行前に内容を読める、(b) 書き換えたことを
+#   DID に必ず出す(黙って上書きしない)、の2点で担保できると判断したため。
+#   代替案として「一致しなければ TODO で警告するだけに留める」も検討したが、
+#   それだと matcher 直し忘れが `paths:` 不一致と同じ「サイレント無効化」のまま
+#   配布先に残り続ける — 今回直したい本題そのものなので採らなかった。
+SS_STATUS=$(python3 - "$PWD/.claude/settings.json" <<'PY'
 import json, os, sys
 path = sys.argv[1]
 cmd = 'bash "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/session-start.sh"'
+matcher = "startup|resume|clear|compact"   # H-7。fork は有効性未確認のため含めない
 data = {}
 if os.path.exists(path):
     with open(path) as f:
@@ -135,14 +159,46 @@ if os.path.exists(path):
             sys.exit(1)
 data.setdefault("$schema", "https://json.schemastore.org/claude-code-settings.json")
 hooks = data.setdefault("hooks", {}).setdefault("SessionStart", [])
-if not any(h.get("command") == cmd for entry in hooks for h in entry.get("hooks", [])):
-    hooks.append({"matcher": "startup|clear|compact",
-                  "hooks": [{"type": "command", "command": cmd}]})
+
+# 同じコマンドを持つ既存エントリを探す(無ければ target は None のまま = 新規追加)。
+target = None
+for entry in hooks:
+    if any(h.get("command") == cmd for h in entry.get("hooks", [])):
+        target = entry
+        break
+
+if target is None:
+    hooks.append({"matcher": matcher, "hooks": [{"type": "command", "command": cmd}]})
+    status = "ADDED"
+elif target.get("matcher") != matcher:
+    old = target.get("matcher")
+    target["matcher"] = matcher
+    status = f"UPDATED\t{old}\t{matcher}"
+else:
+    status = "UNCHANGED"
+
 with open(path, "w") as f:
     json.dump(data, f, ensure_ascii=False, indent=2)
     f.write("\n")
+
+# bash 側が DID の文言を作れるよう、タブ区切りの1行だけを標準出力へ返す。
+print(status)
 PY
-DID+=(".claude/settings.json: SessionStart を冪等マージ")
+)
+case "$SS_STATUS" in
+  ADDED)
+    DID+=(".claude/settings.json: SessionStart を追加(matcher=startup|resume|clear|compact)") ;;
+  UPDATED$'\t'*)
+    # "UPDATED\t旧matcher\t新matcher" を分解して、DID に旧→新を明示する(黙って
+    # 書き換えない —— このリポジトリは「何をしたか」を必ず報告する規約のため)。
+    IFS=$'\t' read -r _ ss_old ss_new <<<"$SS_STATUS"
+    DID+=(".claude/settings.json: SessionStart の matcher を更新した($ss_old → $ss_new)") ;;
+  UNCHANGED)
+    DID+=(".claude/settings.json: SessionStart は既存 — matcher 一致のため変更なし") ;;
+  *)
+    echo "✗ .claude/settings.json の SessionStart マージで想定外の応答: $SS_STATUS" >&2
+    exit 1 ;;
+esac
 
 # --- 3. コメント方針 rules ----------------------------------------------------
 mkdir -p .claude/rules
