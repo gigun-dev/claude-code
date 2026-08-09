@@ -104,20 +104,14 @@
 - [ ] `H-26` [bug] 「却下は書き残せ」と「CLAUDE.md を太らせるな」が衝突する — 記録先の推奨順が逆
       → 完了条件: SKILL.md の失敗モード1が、却下記録の第一候補を**注入されない領域**(正典のカタログ部 = session-head-end より下)にしていること。CLAUDE.md は『規則のすぐ隣に理由が要るとき』の例外に格下げし、その場合もポインタ1行に留めるよう書かれていること
   > **2026-08-09 更新:** 実測: 指示どおり CLAUDE.md へ却下理由を書いた配布先で 2,828→3,144 tok に増え、**増分がまるごと却下の記録**だった(次の実行で『大きすぎる』を再指摘される = 従うほど怒られる)。却下記録の役目は『次のセッションが同じ議論を蒸し返さない』ことで**毎セッション注入される必要は無い**。全文をカタログ部へ移しポインタ1行だけ残したら 3,144→2,499 tok になり、記録は1文字も失っていない。H-22(コメント内の誤検知)と根が同じ —— どちらも『理由を書き残すほど損をする』形になっている
-- [ ] `H-27` [bug] pre-push が複合 check-cmd で素通りする(関門が機能しない)。`assets/pre-push:46` が `if ! {{CHECK_COMMAND}}; then` のため `a && b` が `(! a) && b` になる。**詳細・再現・修正案は issue #2**(2026-08-05 起票、v0.15.0 の現物でも未修正を実測)
-      → 完了条件: assets/pre-push が {{CHECK_COMMAND}} をグループ化しており、前半が失敗する複合コマンド(例 `--check-cmd 'false && true'`)を入れた使い捨てリポジトリで push が実際に中止されることを実測すること
-- [x] `H-28` pre-commit を素の sh で新設(非ブロッキング)。CLAUDECODE/AI_AGENT で agent 検出、staged files を .claude/rules/*.md の paths glob と突き合わせて読み直しを促す。スコープ横断(2 rule 以上)で粒度警告。正典未更新のコード commit 検知で tidy を促す(2026-08-10 に真陽性3件の実測あり)
-      → 完了条件: 使い捨てリポジトリで、rules スコープに触れる staged で注意が出て、agent 環境変数なしでは無音で、内部エラー時も exit 0 であることを実測すること
-      → 2026-08-10 / ff34b7e / 使い捨てリポジトリで9シナリオ(コンポーネント別判定・brace fail-open・パーサ破損警告・非agent無音を含む)+実リポジトリで検査Aと head-costly の実発火を確認。実行時間 90–140ms
 - [ ] `H-29` SessionStart 配線検知 — session-start.sh に core.hooksPath の指す先が現作業ツリーに実在するかの検査を足し、未配線なら警告1行(自己修復はしない)。依存: H-7(matcher 穴の相続を防ぐ)
       → 完了条件: hooksPath 未設定 / .githooks 未チェックアウトの worktree の両方で警告が出て、健全時は無出力であることを実測すること
-- [ ] `H-30` pre-push ゲート自己テスト — doctor が HARNESS_PREPUSH_SELFTEST 経由で must-fail(false && true)と must-pass を注入して関門の生死を検査。依存: H-27(修正の回帰テストを兼ねる)
-      → 完了条件: H-27 修正後の pre-push に対し must-fail が exit 1 / must-pass が exit 0 になることを doctor 実行で実測すること
 - [ ] `H-31` 配布元に CLAUDE.md(実体)+AGENTS.md(symlink)を導入し、作業リズム(1コミット=1論理変更 / 短命ブランチ=1着手順項目 / 依存を跨がせない / 並行は worktree / push 前に tidy)と gitops 語彙を置く。却下記録の実体は入れない(H-26)。CLAUDE.md 不在却下の再検討条件「横断の常時ルールが実際に要るまで」が 2026-08-10 に成立した再裁定
       → 完了条件: CLAUDE.md が ≒2,000 tok 以内で、doctor の「CLAUDE.md が無い」指摘が消え、AGENTS.md 経由で同内容が読めることを確認すること
 - [ ] `H-32` 着手順ボードの生成器を status skill に恒久化する。テンプレ+生成スクリプト1本(--format html 相当)を正典に置き、出口を3つ共有: (a) post-commit hook が gitignored なローカル HTML を再生成(トークンゼロ、PC 用) (b) tidy の締めで Artifact 再公開(スマホ用、file_path 渡しなので中身はコンテキストを通らない) (c) status/tidy からの明示呼び出し。行には git クエリ由来のブランチバッジ(git log --all --grep <ID>。対応表は持たない — R-却下済みの方針どおり保存でなく到達性)、現在地の折りたたみ埋め込み、カタログ節目次も足す。エージェントに毎回 HTML を書かせない(原則3)。依存: H-28(post-commit は同じ hook 配置パターンに乗る)
       → 完了条件: post-commit 後にローカル HTML が自動更新されること、ボードにブランチバッジと現在地が出ること、生成にモデルが関与しないこと(スクリプト単独で完結)を実測すること
   > **2026-08-10 更新:** focus ビュー(依存辺の近傍描画。依存: H-15)と MCP Apps+Tasks の第4出口候補を設計に追加。全文は log.md 2026-08-10「H-32 の設計メモ」— 頭の予算超過(10,006字)を検知したため詳細をそちらへ降ろした
+  > **2026-08-10 更新:** 2026-08-10: 生成器 render-board.sh v0.1.0 が 8d06859 で main へ(worktree 並行の初実践)。項目本文の git log --all --grep --format='%D' は実測で両方向に壊れており(無関係ブランチ誤付着+2コミット手前で無検出)、実装は main..<branch> 未マージ差分方式に訂正済み。残: post-commit 配線と status SKILL.md の到達性(fable 3.5 と同時)
 
 <!-- session-head-end: ここから下は詳細カタログ。着手する節をそのとき読む -->
 
@@ -166,6 +160,15 @@
       → transcript の usage(Anthropic 側の実トークナイズ結果)669観測から最小二乗で較正し、大きい6本を calibrate.sh --manual へ通した(0b751f4)。ASCII は全標本 0.345 / calibrate 0.37 でどちらも既定 0.33 超 = 過小評価だったので 0.35 へ。非ASCII は 125 が出たが据え置き —— 日本語率 40〜47% でも 1.18〜1.60 に散らばり分解できておらず、採ると ios-skills の警告が文書を変えずに消えるため。context-mechanics.md の未較正 ⚠️ を実測結果へ置換
   > **2026-08-08 更新:** 2026-08-08: calibrate.sh を追加(doctor 配下・明示起動専用。--gpt はローカル tiktoken、--claude は count_tokens API で無料)。**GPT/o200k は実測済み: ASCII 25 / 非ASCII 102、日本語率 1%/25%/44% の3本で最大残差 0.8%** —— 線形モデルは成立する。**残るのは Claude 側**(API キーが無く未測定。既定 33/140 は文献値)。
   > **2026-08-08 更新:** 2026-08-08: ANTHROPIC_API_KEY 未設定・/context はエージェントから実行できないため、この項目はユーザーの手が要る。/context の出力を calibrate.sh --manual へ渡せば即座に閉じられる。GPT 側(o200k)は測定済み
+- ~~`H-27` [bug] pre-push が複合 check-cmd で素通りする(関門が機能しない)。`assets/pre-push:46` が `if ! {{CHECK_COMMAND}}; then` のため `a && b` が `(! a) && b` になる。**詳細・再現・修正案は issue #2**(2026-08-05 起票、v0.15.0 の現物でも未修正を実測)~~ ✅ 2026-08-10
+  → 完了条件: assets/pre-push が {{CHECK_COMMAND}} をグループ化しており、前半が失敗する複合コマンド(例 `--check-cmd 'false && true'`)を入れた使い捨てリポジトリで push が実際に中止されることを実測すること
+  → 2026-08-10 / 34cde17 / 使い捨てリポジトリでバグ再現(true && false で push 通過)→修正後に中止を実測。注意: 正典の例示 'false && true' は判別力ゼロ(バグ版でも偶然中止する)と判明し 'false && false' へ訂正
+- ~~`H-28` pre-commit を素の sh で新設(非ブロッキング)。CLAUDECODE/AI_AGENT で agent 検出、staged files を .claude/rules/*.md の paths glob と突き合わせて読み直しを促す。スコープ横断(2 rule 以上)で粒度警告。正典未更新のコード commit 検知で tidy を促す(2026-08-10 に真陽性3件の実測あり)~~ ✅ 2026-08-10
+  → 完了条件: 使い捨てリポジトリで、rules スコープに触れる staged で注意が出て、agent 環境変数なしでは無音で、内部エラー時も exit 0 であることを実測すること
+  → 2026-08-10 / ff34b7e / 使い捨てリポジトリで9シナリオ(コンポーネント別判定・brace fail-open・パーサ破損警告・非agent無音を含む)+実リポジトリで検査Aと head-costly の実発火を確認。実行時間 90–140ms
+- ~~`H-30` pre-push ゲート自己テスト — doctor が HARNESS_PREPUSH_SELFTEST 経由で must-fail(false && true)と must-pass を注入して関門の生死を検査。依存: H-27(修正の回帰テストを兼ねる)~~ ✅ 2026-08-10
+  → 完了条件: H-27 修正後の pre-push に対し must-fail が exit 1 / must-pass が exit 0 になることを doctor 実行で実測すること
+  → 2026-08-10 / 34cde17 / must-fail(false && false)が rc=1・must-pass(true)が rc=0 を配布元実弾で確認。H-27 を意図的に再導入した pre-push で must-fail が素通りを検出することも実測(検知器の検証)
 
 ## 盆栽の7原則(2026-08-07 確定)
 
