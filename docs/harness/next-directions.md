@@ -225,12 +225,6 @@ Claude Code 作者も「半年ごとに CLAUDE.md も skills も hooks も全部
 (`nd-tasks.sh` は「タスクが無いと解釈してはいけない」と出して落ちる)。
 そして **規約を書いた本人が守れているかを機械が見る。**
 
-### 5. 強制は最小、検知は最大
-
-「a rule is only hard if a hook blocks it」は正しい。だがゲートを増やすと逆効果になる、という
-一次証言が正面から対立している:
-
-> ゲートが無いから死ぬ —— "no gate → writing one is volunteer work. That's why they die."
 逆向きの故障もある —— **黙る代わりに、それらしい数字を出し続ける。**
 Langfuse 連携は「ツール失敗 ERROR 489件」を報告し続けたが、本物の失敗は1件も記録されて
 いなかった(`PostToolUseFailure` 未購読。489件は成功したツールの出力に `"rror"` が含まれる
@@ -251,6 +245,12 @@ changesets 公式も「changeset が無いことでブロックすることは**
 **使い方**: 落とすのは **CI 相当の検証(pre-push の型・テスト)だけ**。記録・文書系は
 **警告 + 明示的な逃げ道**(`- (記録不要: 定型作業のみ)` がそれ)。
 
+### 5. 強制は最小、検知は最大
+
+「a rule is only hard if a hook blocks it」は正しい。だがゲートを増やすと逆効果になる、という
+一次証言が正面から対立している:
+
+> ゲートが無いから死ぬ —— "no gate → writing one is volunteer work. That's why they die."
 ### 6. 新機構を足す前に、既存機構で「届くか」を見る
 
 ADR の件が典型だった。診断はこう:
