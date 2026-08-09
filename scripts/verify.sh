@@ -2,13 +2,13 @@
 # =============================================================================
 # scripts/verify.sh — このリポジトリの「CI 相当の検証」を1本にまとめたもの
 # =============================================================================
-# 【なぜこの4つだけか】
+# 【なぜこの5つだけか】
 #   harness の原則5「強制は最小、検知は最大。落とすのは CI 相当の検証だけ」
 #   (docs/principles.md 判断規則 / .claude/rules/harness.md 参照)に従い、
 #   pre-push で落とす検査は意図的に最小限へ絞っている。
 #   このリポジトリの中身はほぼ Markdown・シェル・JSON で、コンパイルも
 #   ユニットテストも存在しない。「壊れたものを事故で main へ push する」を
-#   防ぐために必要十分な最小集合は次の4つになる:
+#   防ぐために必要十分な最小集合は次の5つになる:
 #
 #     1. シェル構文 — plugins/*/scripts/*.sh はそのまま配布物として
 #        各リポジトリへコピーされる。構文エラーのまま push すると
@@ -26,17 +26,32 @@
 #        直しても、次に version を上げる誰か(モデルでも人でも)が
 #        もう一方を上げ忘れる経路は塞がっていない。「揃える」だけでは
 #        同じ壊れ方が再発するので、再発防止を機械へ足す。
+#     5. marketplace.json のプラグイン一覧整合性(.claude-plugin ⇔ .agents) —
+#        .claude-plugin/marketplace.json(Claude 向け)と
+#        .agents/plugins/marketplace.json(Codex 向け)は、スキーマこそ
+#        違う(source が文字列 vs policy/category 付きオブジェクト)が、
+#        「配布するプラグインの集合」という同じ事実を二重管理している点で
+#        4番目の .claude-plugin ⇔ .codex-plugin と同じ構造的リスクを持つ。
+#        4番目で実際にズレた実例が出た以上、同種の二重管理を持つ組を
+#        1つ発見してから初めて検査対象にする、が再発防止の一貫した基準。
+#        現状は2ファイルとも12件で一致しているが、"ある方にだけプラグインを
+#        1つ足して他方を更新し忘れる" 操作を JSON 妥当性チェック(2番目)は
+#        検知できない(両方とも文法として正しい JSON のままになるため)。
+#        比較できるのはスキーマ差のせいで名前の集合のみ(値の中身は比較不可)。
 #
 #   これ以上テストやリンタを増やす方向へ育てないこと。
 #   （原則2b: 散文とコードは別の物差しで採点する。コードは「散文を何行
 #   消しているか」で採点する — ここに検査を足すなら、それが代替する
 #   散文の説明がどこにあるかを先に説明できること。行数の多寡や
 #   「あると安心」という理由だけでは足さない。上の4番目は「あると安心」
-#   ではなく「実際にズレた事実がある」ことを根拠に足した唯一の例外
+#   ではなく「実際にズレた事実がある」ことを根拠に足した例外
 #   —— 起きてもいない不整合を投機で先回りして検査に足すことは、
 #   この4番目を足した後も引き続き禁止(docs/principles.md 規則2)。
-#   新しいマニフェストの組(例: 将来別のアダプタが増える)が実際に
-#   ズレるまでは、それ用の検査を先回りで足さないこと）。
+#   5番目は 4番目と**全く同じ形の二重管理**(同じプラグイン集合を指す
+#   2つのマニフェストが、揃える手段を機械に持たず人手だけに依存している)
+#   への横展開であり、新種の不整合を先回りしているわけではない —— この
+#   2つを除き、新しいマニフェストの組(例: 将来別のアダプタが増える)が
+#   実際にズレるまでは、それ用の検査を先回りで足さないこと）。
 #
 # 【対象の列挙に git ls-files を使う理由】
 #   find 等でファイルシステムを直接漁ると、未追跡の作業ファイルや
@@ -72,7 +87,7 @@ overall_failed=0
 # -----------------------------------------------------------------------
 # (1) シェル構文チェック — 追跡対象の *.sh すべてに bash -n
 # -----------------------------------------------------------------------
-echo "=== [1/4] シェル構文チェック (bash -n) ==="
+echo "=== [1/5] シェル構文チェック (bash -n) ==="
 sh_failed=0
 sh_files=$(git ls-files '*.sh')
 if [ -z "$sh_files" ]; then
@@ -103,7 +118,7 @@ fi
 # (2) JSON 妥当性チェック — 追跡対象の *.json すべてをパース
 # -----------------------------------------------------------------------
 echo ""
-echo "=== [2/4] JSON 妥当性チェック ==="
+echo "=== [2/5] JSON 妥当性チェック ==="
 json_failed=0
 if ! command -v python3 >/dev/null 2>&1; then
 	# python3 が無い環境で「JSON チェックを黙ってスキップし、結果として
@@ -152,7 +167,7 @@ fi
 # (3) 正典の書式チェック — docs/*/next-directions.md の「着手順」節
 # -----------------------------------------------------------------------
 echo ""
-echo "=== [3/4] 正典の書式チェック (nd-tasks.sh --lint) ==="
+echo "=== [3/5] 正典の書式チェック (nd-tasks.sh --lint) ==="
 lint_script="plugins/harness/skills/status/scripts/nd-tasks.sh"
 lint_failed=0
 if [ ! -f "$lint_script" ]; then
@@ -210,7 +225,7 @@ fi
 #   git ls-files で追跡有無を判定し、未追跡なら「対象外(片方しか無い)」と同じ扱いで
 #   黙って飛ばす。
 echo ""
-echo "=== [4/4] plugin.json 版数整合性チェック (.claude-plugin ⇔ .codex-plugin) ==="
+echo "=== [4/5] plugin.json 版数整合性チェック (.claude-plugin ⇔ .codex-plugin) ==="
 ver_failed=0
 if ! command -v python3 >/dev/null 2>&1; then
 	# (2) の JSON 妥当性チェックと同じ理由(原則4「検知器は黙って死ぬ前提で検証する」)。
@@ -273,6 +288,117 @@ if [ "$ver_failed" -eq 0 ]; then
 	echo "✓ plugin.json 版数整合性: 問題なし"
 fi
 [ "$ver_failed" -ne 0 ] && overall_failed=1
+
+# -----------------------------------------------------------------------
+# (5) marketplace.json プラグイン一覧整合性チェック — .claude-plugin ⇔ .agents
+# -----------------------------------------------------------------------
+# 【何を・なぜ比較するか】
+#   このリポジトリは同じ「配布するプラグインの集合」を2箇所に持つ:
+#     - .claude-plugin/marketplace.json (Claude 向け。plugins[].source は文字列)
+#     - .agents/plugins/marketplace.json (Codex 向け。plugins[].source は
+#       policy/category を持つオブジェクト)
+#   スキーマが違う(上の (4) の .claude-plugin/.codex-plugin と同じ二重管理の形)ので、
+#   比較できるのは plugins[].name の集合のみ —— source や policy の値までは
+#   構造が違いすぎて機械的に突き合わせられない。名前の集合さえ揃っていれば
+#   「両方のマーケットプレイスが同じプラグイン一覧を配布している」という
+#   最低限の事実は保証できる。
+#
+#   JSON 妥当性チェック((2))はパースできるかしか見ていないので、片方の
+#   marketplace.json にだけプラグインを1件足して他方を更新し忘れても、
+#   両方とも文法的に正しい JSON のままなので (2) はすり抜ける。この検査が
+#   埋めているのはその隙間。
+#
+# 【この検査を足す根拠 —— なぜ「起きてもいない不整合の先回り」ではないか】
+#   このスクリプト冒頭のコメントに書いたとおり、投機的な検査追加は原則2bで
+#   禁止している。この (5) が例外として許されるのは、(4) で実際にズレた
+#   plugins/harness の version 不一致という実例が既に出ており、それが
+#   「同じプラグイン集合を指す複数マニフェストを人手だけで同期している」
+#   という構造そのものに起因していたため。marketplace.json の2ファイルは
+#   その構造をそのまま持つ既知の危険域であり、新種の不整合を先回りしている
+#   わけではない(詳細はスクリプト冒頭のコメント参照)。
+#
+# 【両ファイルが git 追跡されていて初めて比較する。片方が無ければ「対象外」
+#   ではなく「収集が壊れた疑い」として失敗させる理由】
+#   (4) の .codex-plugin は「Codex 未対応のプラグインが持たない」のが正常系
+#   なので、片方しか無いプラグインは黙って対象外にしている。だがこの2ファイルは
+#   事情が違う —— どちらもリポジトリ全体で1つしか無いはずのマーケットプレイス
+#   定義そのものであり、「一方だけ存在しない」が起きてよい正常系が無い。
+#   もし片方が消えていたら、それはファイル移動・リネーム等でこのスクリプトの
+#   パス指定が追随し損ねた可能性の方が高い。「対象が無いから比較しない」を
+#   「合格」として扱うと、パス指定のミスをそのまま見逃す最悪の壊れ方になる
+#   ((1)(2)(4) の 0件時の扱いと同じ規律 —— 原則4「検知器は黙って死ぬ前提で検証する」)。
+echo ""
+echo "=== [5/5] marketplace.json プラグイン一覧整合性チェック (.claude-plugin ⇔ .agents) ==="
+mp_failed=0
+claude_mp=".claude-plugin/marketplace.json"
+codex_mp=".agents/plugins/marketplace.json"
+if ! command -v python3 >/dev/null 2>&1; then
+	# (2)(4) と同じ理由(原則4)。python3 が無ければ「検査していない」を
+	# 「合格」に握りつぶさず、明示的に失敗させる。
+	echo "✗ python3 が見つからない — marketplace.json のプラグイン一覧整合性を検査できない(未検査を合格扱いにしない)"
+	mp_failed=1
+else
+	claude_tracked=1
+	git ls-files --error-unmatch -- "$claude_mp" >/dev/null 2>&1 || claude_tracked=0
+	codex_tracked=1
+	git ls-files --error-unmatch -- "$codex_mp" >/dev/null 2>&1 || codex_tracked=0
+	if [ "$claude_tracked" -eq 0 ] || [ "$codex_tracked" -eq 0 ]; then
+		[ "$claude_tracked" -eq 0 ] && echo "✗ $claude_mp が git 追跡されていない(収集が壊れている可能性)"
+		[ "$codex_tracked" -eq 0 ] && echo "✗ $codex_mp が git 追跡されていない(収集が壊れている可能性)"
+		mp_failed=1
+	else
+		# python3 側は「読み取り自体の失敗(JSON 破損・plugins/name 欠如)」と
+		# 「読み取れた上での差分」を区別する。前者は exit code を非0にして
+		# 例外メッセージをそのまま流し、後者は TSV 1行を標準出力へ積んで
+		# bash 側で判定する((4) の version 比較と同じ役割分担)。
+		diff_out=$(python3 -c '
+import json, sys
+
+def names(path):
+    with open(path, encoding="utf-8") as fp:
+        data = json.load(fp)
+    return set(p["name"] for p in data["plugins"])
+
+claude_names = names(sys.argv[1])
+codex_names = names(sys.argv[2])
+
+# プラグイン名が0件は「一致しているから合格」ではなく、収集そのものが
+# 壊れている疑いとして扱う((4) の npairs -eq 0 と同じパターン)。
+if not claude_names or not codex_names:
+    print(f"EMPTY\t{len(claude_names)}\t{len(codex_names)}")
+else:
+    only_claude = ",".join(sorted(claude_names - codex_names))
+    only_codex = ",".join(sorted(codex_names - claude_names))
+    if only_claude or only_codex:
+        print(f"DIFF\t{only_claude}\t{only_codex}")
+' "$claude_mp" "$codex_mp" 2>&1)
+		rc=$?
+		if [ "$rc" -ne 0 ]; then
+			echo "✗ [mp]   marketplace.json の読み取りに失敗した"
+			echo "$diff_out" | sed 's/^/    /'
+			mp_failed=1
+		elif [ -n "$diff_out" ]; then
+			kind=$(printf '%s' "$diff_out" | cut -f1)
+			if [ "$kind" = "EMPTY" ]; then
+				claude_count=$(printf '%s' "$diff_out" | cut -f2)
+				codex_count=$(printf '%s' "$diff_out" | cut -f3)
+				echo "✗ [mp]   プラグイン名が0件($claude_mp=${claude_count}件 / $codex_mp=${codex_count}件) — 収集が壊れている可能性"
+				mp_failed=1
+			else
+				only_claude=$(printf '%s' "$diff_out" | cut -f2)
+				only_codex=$(printf '%s' "$diff_out" | cut -f3)
+				echo "✗ [mp]   $claude_mp と $codex_mp のプラグイン名の集合が不一致"
+				[ -n "$only_claude" ] && echo "    $claude_mp にしか無い: $only_claude"
+				[ -n "$only_codex" ] && echo "    $codex_mp にしか無い: $only_codex"
+				mp_failed=1
+			fi
+		fi
+	fi
+fi
+if [ "$mp_failed" -eq 0 ]; then
+	echo "✓ marketplace.json プラグイン一覧整合性: 問題なし"
+fi
+[ "$mp_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
 # まとめ

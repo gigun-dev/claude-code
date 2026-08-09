@@ -1,0 +1,67 @@
+# =============================================================================
+# .github/workflows/verify.yml — scripts/verify.sh を「配線不要な第二の計測」として走らせる
+# =============================================================================
+# 【なぜ pre-push と全く同じコマンドを呼ぶだけなのか】
+#   plugins/harness/skills/doctor/references/installing.md がチェックコマンドの選び方として
+#   "Make it the same as CI — a gate that passes locally and fails in CI is not a gate."
+#   と明言している。ローカルの pre-push（.githooks/pre-push）が呼んでいるのは
+#   `bash scripts/verify.sh` そのものなので、CI 側もそれ以外を呼ばない。
+#   もし CI 側が独自に検査項目を持つと、「ローカルは通ったのに CI だけ落ちる」
+#   「CI は通ったのにローカルの pre-push だけ落ちる」という2つの正典が生まれ、
+#   どちらを信じればいいか分からなくなる。ゲートは1つの実体（scripts/verify.sh）に
+#   一本化し、pre-push と CI はそれぞれ違うタイミングで同じ実体を叩くだけにする。
+#
+# 【なぜ全ブランチ + PR で走らせるのか(pre-push は main 限定なのに)】
+#   .githooks/pre-push のヘッダコメントに「feature ブランチの push は CI に任せ、
+#   手元は軽く保つ」と書いてある。つまり pre-push と CI は責務を分担している設計:
+#     - pre-push: main への push だけを検査する「最後の関門」（ローカルで即座に止める）
+#     - CI:       全ブランチの push と PR を検査する「取りこぼしを拾う網」
+#   pre-push は main 限定のままでいい（feature ブランチへの push を毎回重くしたくない）。
+#   その代わり feature ブランチの検証を実際に引き受ける主体が要る —— それがこの CI。
+#   ここが無いと、上のコメントは「CI に任せ」と書いてあるだけで実体が無い嘘になる
+#   （このワークフローを作った直接の動機はまさにその嘘の解消）。
+#
+# 【なぜ CI が「ゼロ配線層」として重要なのか(docs/principles.md・
+#   docs/harness/next-directions.md 原則4「検知器は黙って死ぬ前提で検証する」)】
+#   .githooks/pre-push は git 管理外の .git/hooks を経由しないと発火しない ——
+#   `git config core.hooksPath .githooks` を **clone するたびに手動で1回** 設定しない限り、
+#   pre-push は存在しないのと同じ（黙って発火しない）。加えて `git push --no-verify` で
+#   意図的にスキップできるし、pre-push 自体のスクリプトが判定ロジックを間違えていても
+#   ローカルでは気づきにくい（何と突き合わせて壊れたことに気づくのか、という比較対象が無い）。
+#   CI はリポジトリに push された瞬間に GitHub 側で必ず走る。ローカルの配線状態にも
+#   `--no-verify` の有無にも依存しない。つまり CI は「pre-push が本当に機能しているか」を
+#   検証する **独立した第二の計測** になる —— pre-push が壊れて何もかも通してしまっていても、
+#   CI は別経路で同じ scripts/verify.sh を実行するので、そこで初めて捕まる。
+#
+# 【setup ステップをあえて足さない理由】
+#   scripts/verify.sh の依存は bash と python3 のみ（スクリプト冒頭のコメント参照）。
+#   GitHub の ubuntu-latest runner にはどちらも標準で入っている
+#   （actions/setup-python 等を挟むと、無くても動くものにネットワーク越しの
+#   セットアップ時間と失敗経路を追加するだけになる）。「あると安心」ではなく
+#   「実際に足りない依存がある」ことが分かってから setup を足す
+#   （docs/harness/next-directions.md 原則2b・原則6「新機構を足す前に既存機構で届くか見る」
+#   と同じ判断規律 —— 起きてもいない不足を投機で先回りしない）。
+#
+# 【checkout の shallow clone で git ls-files が壊れないことについて】
+#   scripts/verify.sh は対象ファイルの列挙に `git ls-files` を使う（「push されるもの =
+#   git が追跡しているもの」という定義。scripts/verify.sh 冒頭のコメント参照）。
+#   `git ls-files` は working tree の **インデックス** を見るだけで、コミット履歴の深さには
+#   依存しない。actions/checkout@v4 の既定（fetch-depth: 1 の shallow clone）でも
+#   チェックアウトした時点のインデックスは完全なので、`git ls-files` は shallow でも
+#   通常の clone と同じ結果を返す（履歴を辿る `git log` 系のコマンドとは事情が違う）。
+#   このことは実装時に実際にローカルで shallow clone を作って
+#   `bash scripts/verify.sh` を通し、rc=0 になることを確認済み。
+# =============================================================================
+
+name: verify
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/verify.sh
