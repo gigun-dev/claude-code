@@ -1,7 +1,26 @@
 #!/bin/sh
-# harness-template v0.3.0 (配布元: gigun-dev/claude-code plugins/harness)
+# harness-template v0.4.0 (配布元: gigun-dev/claude-code plugins/harness)
 # =============================================================================
 # pre-push フック — main への push 時だけ、CI と同一の検証をローカルで実行する
+# =============================================================================
+#
+# 追記(2026-08-10・H-27 修正・issue #2):
+#   旧実装は `if ! bash scripts/verify.sh; then` だった。この行自体は
+#   単一コマンドなので実害はなかったが、配布元テンプレート
+#   (skills/doctor/assets/pre-push)側で `--check-cmd 'a && b'` が
+#   `! a && b` と誤解釈され関門が素通りするバグ(issue #2)が見つかった。
+#   このリポジトリはテンプレート由来の配布物なので、乖離を残さないため
+#   同じグループ化(`{ ...; }`)を適用する。
+#
+# 追記(2026-08-10・H-30 ゲート自己テスト):
+#   HARNESS_PREPUSH_SELFTEST が非空のとき、check コマンドの代わりに
+#   その中身を実行する口を用意した(doctor が関門の生死を検査するための
+#   ものであり、通常の push では未設定なので既定動作に影響しない)。
+#   差し替えは「実行するコマンド文字列」だけに留め、下の
+#   `if ! { eval "$check_cmd"; }; then` という if 構造自体は自己テスト時も
+#   共有する —— ここを分岐で迂回すると、まさに検査したい「グループ化が
+#   壊れていないか」を自己テストがすり抜けてしまい、H-27 のような
+#   壊れ方(本体だけ壊れて自己テストは無関係に通る)を検出できなくなる。
 # =============================================================================
 # 【なぜ pre-push か / 何を守るか】
 #   守りたいのは「悪意」ではなく「壊れたコードを事故で main に push すること」。
@@ -43,7 +62,19 @@ done
 [ "$run_check" -eq 0 ] && exit 0
 
 echo "pre-push: main へ push するため検証を実行します…"
-if ! bash scripts/verify.sh; then
+
+# 自己テスト口: doctor が関門の生死を検査するときだけ使う(H-30)。
+# 本来の check コマンドと同じ位置・同じ if 構造を通すことが目的なので、
+# eval で差し替える(グループ化の外で分岐すると、まさに検査したい構造を迂回してしまう)
+if [ -n "${HARNESS_PREPUSH_SELFTEST:-}" ]; then
+	check_cmd="$HARNESS_PREPUSH_SELFTEST"
+else
+	check_cmd='bash scripts/verify.sh'
+fi
+
+# check_cmd が `a && b` のような複合コマンドでも、`{ ...; }` でグループ化
+# してから `!` を掛ける(H-27 修正)。
+if ! { eval "$check_cmd"; }; then
 	echo ""
 	echo "✗ 検証に失敗しました。main への push を中止します。"
 	echo "  どうしても push する場合のみ: git push --no-verify"

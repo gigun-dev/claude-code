@@ -1,6 +1,6 @@
 {
   "name": "harness",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "description": "Project harness, three commands: check the Claude Code setup against best practices and install or repair the session-handoff wiring (doctor), list what to work on next from next-directions.md across repos (status), and tidy up before closing a session (tidy).",
   "author": {
     "name": "gigun",

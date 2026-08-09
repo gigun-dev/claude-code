@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.15.0 — ベストプラクティス遵守を機械的に検査する(読み取り専用)。
+# harness-template v0.16.0 — ベストプラクティス遵守を機械的に検査する(読み取り専用)。
 #
 # 設計意図(2026-08-05):
 #   機械判定できる項目だけを確定的に検査する。スキルやハーネスを作った直後に
@@ -92,6 +92,15 @@
 #   契約に反するうえ、固定パスは他ユーザー/他プロセスが先にシンボリックリンクとして
 #   仕込んでおくと書き込み先を乗っ取られる経路になる。mktemp で「安全な一時ファイル」に
 #   差し替えるのではなく、一時ファイルという経路自体を無くしてシェル変数へ直接受ける形にした。
+#
+# 追記(2026-08-10・H-30 pre-push ゲート自己テスト・v0.16.0):
+#   H-27(`if ! {{CHECK_COMMAND}}; then` が複合コマンドで素通りする実在バグ。issue #2)
+#   の修正に合わせ、pre-push が「配線されているか」だけでなく「実際に関門として
+#   機能しているか」を検査する節を追加した(該当箇所のコメント「pre-push ゲート
+#   自己テスト」参照)。HARNESS_PREPUSH_SELFTEST という環境変数経由で pre-push 自身を
+#   起動する ── 「読み取り専用・必ず exit 0」の契約とどう両立するかは、その箇所の
+#   コメントに理由を明記してある(push は発生させず、check コマンドを true/false に
+#   丸ごと差し替えるだけなので副作用が無い、という理屈)。
 set -uo pipefail
 # ⚠️ 「常に exit 0」の契約を守るための最後のピース。上の追記コメントを参照。
 #    このスクリプトは stdout/stderr への出力しか行わない(読み取り専用)ので、
@@ -244,7 +253,7 @@ finish() {
   else
     echo "指摘 ${findings} 件。各指摘の意味と直し方はこの skill の本文を参照。"
   fi
-  echo "=== 検査完了: ${findings} 件(check.sh v0.15.0) ==="
+  echo "=== 検査完了: ${findings} 件(check.sh v0.16.0) ==="
   exit 0
 }
 
@@ -599,6 +608,75 @@ elif [ -x "$active_pp" ]; then
   fi
 else
   warn "pre-push が無い(壊れたコードが main へ push されうる)"
+fi
+
+# --- pre-push ゲート自己テスト(H-30・2026-08-10) -----------------------------
+# 目的: H-27(`if ! {{CHECK_COMMAND}}; then` が複合 check コマンドで素通りする。
+# issue #2)の回帰テストを兼ね、doctor が「関門が実際に機能しているか」を
+# 能動的に検査できるようにする。原則4「検知器は黙って死ぬ前提で検知器を検証する」
+# の実例 —— 上のブロックは pre-push が「配線されているか」「harness-template 製か」
+# までしか見ておらず、H-27 のように配線済みなのに壊れているケースを見逃していた。
+#
+# ⚠️ 「読み取り専用」契約との整合性:
+#   この check.sh は SKILL.md の `!` 記法で無条件に自動実行されるため「必ず成功する
+#   読み取り専用スクリプト」という境界を持つ(冒頭の追記コメント参照)。ここでは
+#   実際に pre-push の実行ファイルを起動しており、一見この境界に反するように見えるが、
+#   副作用は無い:
+#     - push 自体は一切発生しない(git push を呼ばない。stdin に ref 情報を渡して
+#       pre-push を単体で起動するだけ)。
+#     - 本来の(npm test 等、任意の副作用を持ちうる)check コマンドは
+#       HARNESS_PREPUSH_SELFTEST で `true` / `false && false` に**丸ごと置き換えて**
+#       実行するため、実際の検証コマンドは一度も走らない。実行されるのは pre-push
+#       自身のシェル制御構造(if / グループ化)だけで、ファイルやリポジトリの状態を
+#       変える経路が無い。
+#   ただしこの安全性は「pre-push が HARNESS_PREPUSH_SELFTEST を解釈する
+#   harness-template 製である」ことに依存する。他人の(harness 製ではない)pre-push に
+#   この環境変数を渡しても単に無視されるだけで、実際の check コマンドがそのまま
+#   走ってしまい「副作用が無い」という前提が崩れる。だから自己テストは
+#   harness-template の刻印がある pre-push だけを対象にする
+#   (「pre-push が配線済み」の判定は上のブロックで既に済んでいる active_pp を使う)。
+#
+# pre-push が未配線・不在・harness 製ではない場合は、上のブロックが既に
+# bad/warn/note のいずれかで指摘済みなので、ここでは重ねて指摘しない(二重指摘しない)。
+if [ -x "$active_pp" ] && grep -qs 'harness-template v' "$active_pp"; then
+  echo
+  echo "## pre-push ゲート自己テスト(H-30)"
+  head_sha=$(git rev-parse HEAD 2>/dev/null || true)
+  if [ -z "$head_sha" ]; then
+    skip "pre-push 自己テスト: HEAD が解決できない(コミットが無い等)ため実行できなかった"
+  else
+    # pre-push の stdin 形式: "<local ref> <local sha> <remote ref> <remote sha>"。
+    # main → 現在の HEAD 同士を渡し、「main への push」判定を確実に通す。
+    selftest_input="refs/heads/main ${head_sha} refs/heads/main ${head_sha}"
+
+    # must-fail: check コマンドが失敗する状況を注入する。pre-push が非0で
+    # 止まれば正常。0(通ってしまう)なら H-27 型 —— 複合コマンドが
+    # グループ化されずに素通りしている。
+    #
+    # ⚠️ Why not `false && true`(H-30 の初期案・issue の再現手順で使われていた文字列):
+    #   `if ! a && b; then` は `(! a) && b` と解釈される(H-27 の本体)。a が失敗すると
+    #   `!a` は成功するので **b が実行され**、b の結果がそのまま if の条件になる。
+    #   b=true だと `(!false) && true` = 成功 → then に入り正しく reject される ——
+    #   グループ化の有無に関わらず結果が同じになり、**このバグを検出できない**
+    #   (実測: `sh -c 'if ! false && true; then echo REJECT; else echo ALLOW; fi'` は
+    #   グループ化あり/なし双方で REJECT を返す。原則4「それらしい数字は0件より危険」
+    #   と同型の罠 —— 一見それらしいテスト入力が実は判定力を持たない)。
+    #   b=false(`false && false`)なら `(!false) && false` = 失敗 → else で ALLOW
+    #   されてしまう(グループ化ありは正しく REJECT)ため、これは確実に判別できる。
+    #   だから must-fail の注入コマンドは `false && false` にした。
+    if printf '%s\n' "$selftest_input" | HARNESS_PREPUSH_SELFTEST='false && false' "$active_pp" >/dev/null 2>&1; then
+      bad "pre-push 自己テスト(must-fail): 失敗する check コマンドで push が通ってしまう(H-27 型。{{CHECK_COMMAND}} を \`{ ...; }\` でグループ化しているか確認すること)"
+    else
+      ok "pre-push 自己テスト(must-fail): 失敗する check コマンドで正しく push が止まる"
+    fi
+
+    # must-pass: check コマンドが成功する状況で正しく通すか(常に閉じていないか)。
+    if printf '%s\n' "$selftest_input" | HARNESS_PREPUSH_SELFTEST='true' "$active_pp" >/dev/null 2>&1; then
+      ok "pre-push 自己テスト(must-pass): 成功する check コマンドでは push が通る"
+    else
+      bad "pre-push 自己テスト(must-pass): 成功する check コマンドでも push が止まる(常に閉じているゲート)"
+    fi
+  fi
 fi
 
 # --- skills ------------------------------------------------------------------
