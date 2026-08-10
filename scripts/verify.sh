@@ -87,7 +87,7 @@ overall_failed=0
 # -----------------------------------------------------------------------
 # (1) シェル構文チェック — 追跡対象の *.sh すべてに bash -n
 # -----------------------------------------------------------------------
-echo "=== [1/5] シェル構文チェック (bash -n) ==="
+echo "=== [1/6] シェル構文チェック (bash -n) ==="
 sh_failed=0
 sh_files=$(git ls-files '*.sh')
 if [ -z "$sh_files" ]; then
@@ -118,7 +118,7 @@ fi
 # (2) JSON 妥当性チェック — 追跡対象の *.json すべてをパース
 # -----------------------------------------------------------------------
 echo ""
-echo "=== [2/5] JSON 妥当性チェック ==="
+echo "=== [2/6] JSON 妥当性チェック ==="
 json_failed=0
 if ! command -v python3 >/dev/null 2>&1; then
 	# python3 が無い環境で「JSON チェックを黙ってスキップし、結果として
@@ -167,7 +167,7 @@ fi
 # (3) 正典の書式チェック — docs/*/next-directions.md の「着手順」節
 # -----------------------------------------------------------------------
 echo ""
-echo "=== [3/5] 正典の書式チェック (nd-tasks.sh --lint) ==="
+echo "=== [3/6] 正典の書式チェック (nd-tasks.sh --lint) ==="
 lint_script="plugins/harness/skills/status/scripts/nd-tasks.sh"
 lint_failed=0
 if [ ! -f "$lint_script" ]; then
@@ -225,7 +225,7 @@ fi
 #   git ls-files で追跡有無を判定し、未追跡なら「対象外(片方しか無い)」と同じ扱いで
 #   黙って飛ばす。
 echo ""
-echo "=== [4/5] plugin.json 版数整合性チェック (.claude-plugin ⇔ .codex-plugin) ==="
+echo "=== [4/6] plugin.json 版数整合性チェック (.claude-plugin ⇔ .codex-plugin) ==="
 ver_failed=0
 if ! command -v python3 >/dev/null 2>&1; then
 	# (2) の JSON 妥当性チェックと同じ理由(原則4「検知器は黙って死ぬ前提で検証する」)。
@@ -328,7 +328,7 @@ fi
 #   「合格」として扱うと、パス指定のミスをそのまま見逃す最悪の壊れ方になる
 #   ((1)(2)(4) の 0件時の扱いと同じ規律 —— 原則4「検知器は黙って死ぬ前提で検証する」)。
 echo ""
-echo "=== [5/5] marketplace.json プラグイン一覧整合性チェック (.claude-plugin ⇔ .agents) ==="
+echo "=== [5/6] marketplace.json プラグイン一覧整合性チェック (.claude-plugin ⇔ .agents) ==="
 mp_failed=0
 claude_mp=".claude-plugin/marketplace.json"
 codex_mp=".agents/plugins/marketplace.json"
@@ -399,6 +399,46 @@ if [ "$mp_failed" -eq 0 ]; then
 	echo "✓ marketplace.json プラグイン一覧整合性: 問題なし"
 fi
 [ "$mp_failed" -ne 0 ] && overall_failed=1
+
+# -----------------------------------------------------------------------
+# [6/6] agy-mcp のパース回帰テスト(agy を呼ばない部分だけ)
+# -----------------------------------------------------------------------
+# 【なぜ smoke.sh 全体ではなく、この一部だけを呼ぶのか】
+#   smoke.sh には性質の違う2種類が同居している:
+#     [1] --selftest-parse … agy を呼ばない・決定論的・1秒。**CI 相当**
+#     [2][3][4]            … 実 agy を叩く。80〜100秒・課金枠を要る・
+#                            トークン更新のタイミングで落ちる(2026-08-10 に実際に落ちた)
+#   混ざっているせいで、**決定論的で安いほうまで自動実行できていなかった**
+#   (smoke.sh はどこからも呼ばれておらず、人が思い出したときだけ走っていた)。
+#   落とすのは CI 相当の検証だけ、という線引きに照らすと [1] は入れるべきで、
+#   [2][3][4] は入れてはいけない —— ネットワークと課金枠に依存する検査を関門にすると
+#   「落ちても気にしない」に転んで、関門ごと死ぬ。
+#
+# 【なぜ uv が無いときに「スキップ」しないのか】
+#   (2)(4)(5) と同じ理由。**未検査を合格扱いにしない。**
+#   agy-mcp が存在するのに検査できないなら、それは合格ではなく「検査できていない」。
+echo ""
+echo "=== [6/6] agy-mcp パース回帰テスト (--selftest-parse) ==="
+agy_failed=0
+agy_server="plugins/agy-mcp/server.py"
+if ! git ls-files --error-unmatch -- "$agy_server" >/dev/null 2>&1; then
+	# プラグインごと存在しない配布先もあるので、追跡されていなければ検査対象なし。
+	echo "- $agy_server が無いので検査しない(このリポジトリに agy-mcp は入っていない)"
+else
+	if ! command -v uv >/dev/null 2>&1; then
+		echo "✗ uv が見つからない — agy-mcp のパース回帰テストを実行できない(未検査を合格扱いにしない)"
+		agy_failed=1
+	else
+		if agy_out=$(uv run --script "$agy_server" --selftest-parse 2>&1); then
+			echo "✓ agy-mcp パース回帰テスト: 問題なし"
+		else
+			echo "✗ agy-mcp のパース回帰テストが失敗した"
+			echo "$agy_out" | tail -20 | sed 's/^/    /'
+			agy_failed=1
+		fi
+	fi
+fi
+[ "$agy_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
 # まとめ
