@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.2.0 (配布元: gigun-dev/claude-code plugins/harness)
+# harness-template v0.3.0 (配布元: gigun-dev/claude-code plugins/harness)
 #   — 着手順ボード(2カラムの高密度 HTML)を nd-tasks.sh の JSON から**決定論的に**生成する。
 #
 # 【なぜスクリプト化するか(原則3: 予算を先に置くと規律が要らなくなる)】
@@ -119,13 +119,64 @@
 #        終点が存在しない。そこはバッジ(⇐ H-3 ✔)の担当。レール = 構造、バッジ = 名指し、
 #        で役割を分けてある(**抽出は同じ extract_edges() 1本**。二重実装ではない)。
 #
+# =============================================================================
+# 【v0.3.0 で足したもの —— --fragment(claude.ai Artifact 対応)】
+# =============================================================================
+# Artifact に publish するとき、渡した HTML は `<!doctype html><head>…</head><body>…</body></html>`
+# で**包まれる**。この出力は元から <!DOCTYPE>/<html> を持つ完結した文書なので、そのまま渡すと
+# 骨格が二重になる(入れ子の <html> をブラウザが黙って畳んでくれる場合もあるが、仕様の保証では
+# ないので依存したくない)。そこで骨格だけを外す `--fragment` を足した。
+#
+# 【なぜテンプレートを2本に分けなかったか(原則7: 複製すれば必ずドリフトする)】
+#   TEMPLATE を丸ごと複製して「骨格あり版」「骨格なし版」を別文字列にするのが最短だが、
+#   複製すれば次に CSS/JS を1行直すたびに片方だけ古くなる余地ができる。代わりに**同じ
+#   triple-quoted 文字列を3つの変数に割っただけ**にした:
+#     HEAD_SKELETON … <!DOCTYPE>/<html>/meta 3行(charset・viewport・generator)
+#     TEMPLATE_BODY … <title> 〜 最後の </script>(= フラグメントの中身そのもの)
+#     HTML_CLOSE    … </html>
+#   通常モードは `HEAD_SKELETON + TEMPLATE_BODY + HTML_CLOSE` —— 元の TEMPLATE 文字列を
+#   バイト単位で再構成するだけで、**中身は1文字も変えていない**(検証4)。--fragment は
+#   TEMPLATE_BODY をそのまま使う(= 骨格2つを足さないだけ)。CSS/JS の本体(重い方)は
+#   TEMPLATE_BODY という1箇所にしか存在しないので、次にスタイルを触る人が「どっちを
+#   直したか」を悩む余地が無い。
+#
+# 【<meta charset>/<meta viewport>/<meta generator> も一緒に落とす】
+#   これらは <html> と同じく「この文書が単体で完結する」ための骨格の一部で、Artifact 側が
+#   自前の <head> を持つ前提なら要らない(charset の二重指定は特に、ブラウザにより解釈が
+#   割れるので黙って持ち込まない方が安全)。<title> だけは骨格の外に残す —— Artifact 側が
+#   **タブ名にその中身をそのまま使う**契約になっているため(次項の根拠でも壊れないことを
+#   確認済み)。
+#
+# 【<style>/<title> が <head> の外にあっても効く根拠(仕様で確認した。「たぶん効く」ではない)】
+#   HTML Living Standard のツリー構築規則、"in body" insertion mode の項に、title / style /
+#   script などの開始タグに出会ったら「"in head" 用の規則で処理する」と明記されている ——
+#   出現位置が <body> 側でも、パーサは実質的に <head> と同じ扱いで組み込む。だから
+#   TEMPLATE_BODY 先頭の <title> と <style> は、Artifact が自前の <head></head><body> で
+#   包んだあとも壊れずに効く。
+#   ⚠️ この根拠は**Python の html.parser には当てはまらない**(html.parser はこの
+#      insertion-mode 規則を実装しない素朴なトークナイザで、タグの対応が取れているかしか
+#      見ない)。検証3の「html.parser で解析エラー0」は構文の健全性の確認であって、
+#      <title>/<style> が実際に <head> 側の効果を持つかの確認ではない —— そちらは
+#      仕様書の記述で別途裏を取った(このコメントの上段)。
+#
+# 【body{...} の CSS ルールは無改修で残した(= 属性を持つ <div> でのラップをしなかった)理由】
+#   このテンプレートは元から <body> タグを1つも書いていない(暗黙 body。ブラウザの
+#   tag soup 補完に任せている)。つまり「body に付いた class/属性」がそもそも存在しないので、
+#   それを <div> へ移す操作自体が対象を持たない。Artifact が包む先には実在の <body> タグが
+#   必ずできる(骨格を被せる、という仕様の側がそう約束している)ので、`body{background:…}` は
+#   その実在の <body> にそのまま効く —— **CSS 側は1文字も変えていない。**
+#   ⚠️ ボツ案: 将来 <body> に属性が付く可能性に備え、「属性があれば <div> でラップする」
+#      汎用機構を先回りで足す。**いま使われない分岐を持ち込むだけ**なので見送った
+#      (原則2: 投機的な汎用化はコードの重みに見合わない)。<body> に実際に属性が付く変更が
+#      入ったときに、このコメントごと見直せばよい。
+#
 # 【依存(新規に増やさない)】
 #   bash + python3 + git。python3 は verify.sh・doctor が既に必須にしているので追加負担は無い。
 #   ⚠️ python3 が無い環境では**黙って劣化させず落とす**(原則4。「検査できなかった」を
 #      「合格」にしないのと同じで、「描けなかった」を「空のボード」にしない)。
 set -euo pipefail
 
-VERSION="0.2.0"
+VERSION="0.3.0"
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 NDTASKS="$SELF_DIR/nd-tasks.sh"
 # 予算の正典は plugins/harness/budgets.sh。**ここには数値を書かない**(nd-tasks.sh と同じ理由 ——
@@ -148,6 +199,11 @@ usage() {
                 (git 呼び出しぶん遅くなる / 精度がコミットメッセージの規律に依存する)。
                 基準ブランチは origin/HEAD → main → master の順に自動判定。
                 HARNESS_BOARD_BASE=<branch> で上書きできる。
+  --fragment    <!DOCTYPE>/<html>/<meta charset 等> の骨格を出さない(v0.3.0)。
+                claude.ai の Artifact へ渡すとき用 —— Artifact は publish 時にこれらを
+                自前で被せるため、素の出力をそのまま渡すと骨格が二重になる。<style> /
+                本文(通常モードで body 直下にあるもの)/ <script> は出す。<title> は
+                Artifact 側がタブ名に使うので骨格の外でも1つだけ残す。
   -h, --help    これ。
   <path> ...    走査する ND を明示する(nd-tasks.sh へそのまま渡る。書式検証用)。
 
@@ -181,6 +237,7 @@ EOF
 # --- 引数 ---------------------------------------------------------------------
 OUT=""
 WANT_BRANCHES=0
+WANT_FRAGMENT=0
 EXPLICIT=()
 
 # 値を取るフラグの「値が無い / 値がフラグに見える」を先に潰す(nd-tasks.sh と同じ流儀)。
@@ -196,6 +253,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -o|--output) need_val -o "${2-__MISSING__}" '-o /tmp/board.html'; OUT="$2"; shift 2 ;;
     --branches)  WANT_BRANCHES=1; shift ;;
+    --fragment)  WANT_FRAGMENT=1; shift ;;
     -h|--help)   usage; exit 0 ;;
     -*)          echo "不明な引数: $1" >&2; usage >&2; exit 2 ;;
     *)           EXPLICIT+=("$1"); shift ;;
@@ -338,6 +396,10 @@ WARN_TOKENS = int(os.environ.get("BOARD_WARN_TOKENS", "3000"))
 #    シェル側が `[ -r "$BUDGETS" ]` で先に落としているので、実運用でこの既定は使われない。
 HARD_CHARS  = int(os.environ.get("BOARD_HARD_CHARS", "10000"))
 BASE_BRANCH = os.environ.get("BOARD_BASE", "")
+# --fragment(v0.3.0)。"1" のときだけ骨格(<!DOCTYPE>/<html>/meta 3行)を外す。
+# シェル側は WANT_FRAGMENT を 0/1 の数値でしか渡さないので、文字列 "1" とだけ比較すればよい
+# (真偽値の文字列表現("true"/"false")を許すと、シェルとの境界に解釈の余地が増えるだけ)。
+FRAGMENT    = os.environ.get("BOARD_FRAGMENT", "0") == "1"
 
 def warn(msg):
     """診断は必ず stderr へ。stdout はパス1行だけという契約を壊さない。"""
@@ -1020,12 +1082,25 @@ if missing:
 # ⚠️ str.format / f-string は使わない —— CSS と JS が波括弧まみれで、全部 {{ }} に
 #    エスケープする羽目になる(読めなくなるし、1個忘れると実行時に落ちる)。
 #    素朴に __TOKEN__ を replace する方が、この規模では圧倒的に安全。
-TEMPLATE = """<!DOCTYPE html>
+#
+# 【v0.3.0: 骨格(HEAD_SKELETON/HTML_CLOSE)と中身(TEMPLATE_BODY)を分けてある理由】
+#   --fragment はテンプレートを複製せず、**同じ文字列を3つの変数に切り分けただけ**にした
+#   (根拠と検討はファイル冒頭「v0.3.0 で足したもの」)。
+#     通常モード: HEAD_SKELETON + TEMPLATE_BODY + HTML_CLOSE(= 元の1本の TEMPLATE を
+#                 バイト単位で再構成するだけ。中身は1文字も変えていない)
+#     --fragment: TEMPLATE_BODY をそのまま使う(= 骨格2つを足さないだけ)
+#   CSS/JS の本体は TEMPLATE_BODY という1箇所にしか存在しない。
+HEAD_SKELETON = """<!DOCTYPE html>
 <html lang="ja">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="generator" content="render-board.sh v__VERSION__">
-<title>harness 着手順ボード</title>
+"""
+
+# TEMPLATE_BODY は <title> 〜 最後の </script> —— **この文字列がそのまま --fragment の出力**
+# になる境界で切ってある(<title> は Artifact 側がタブ名に使うので骨格の外でも残す。
+# <style> が <head> の外にあっても効く根拠はファイル冒頭のコメントに仕様書の引用がある)。
+TEMPLATE_BODY = """<title>harness 着手順ボード</title>
 <style>
 :root{
   --paper:#fafaf7; --ink:#22261f; --sub:#8a9083; --line:#dcdfd6;
@@ -1286,10 +1361,23 @@ __BOARDS__
   document.addEventListener("keydown", function(e){ if (e.key === "Escape") hide(); });
 })();
 </script>
-</html>
 """
 
-out = (TEMPLATE
+# 通常モードにだけ足す骨格の閉じ。--fragment はこれを足さない(= </html> を出さない)。
+HTML_CLOSE = "</html>\n"
+
+# 通常モード = HEAD_SKELETON + TEMPLATE_BODY + HTML_CLOSE。この連結は元の(v0.2.0 までの)
+# TEMPLATE 文字列とバイト単位で同一になる —— 3つに割った境界がちょうど元の行の継ぎ目
+# だから、足し算しても引き算しても要素が生えない。ここで文字列を1文字でも書き換えると
+# 検証4(通常出力が v0.2.0 と diff で同一)が壊れる。
+TEMPLATE = HEAD_SKELETON + TEMPLATE_BODY + HTML_CLOSE
+
+# --fragment のときは HEAD_SKELETON と HTML_CLOSE を足さない。TEMPLATE_BODY は
+# <title> から始まり最後の </script> で終わる —— これがそのまま「骨格抜き」の定義そのもの
+# なので、フラグメント側だけの追加加工(タグの除去・置換)は要らない。
+TPL = TEMPLATE_BODY if FRAGMENT else TEMPLATE
+
+out = (TPL
        .replace("__VERSION__", html.escape(VERSION))
        .replace("__SOURCES__", html.escape(srcs or "(不明)"))
        .replace("__GENERATED__", generated)
@@ -1331,4 +1419,5 @@ BOARD_WARN_CHARS="$HEAD_WARN_CHARS" \
 BOARD_WARN_TOKENS="$HEAD_WARN_TOKENS" \
 BOARD_HARD_CHARS="$HEAD_HARD_CHARS" \
 BOARD_BASE="${BASE:-}" \
+BOARD_FRAGMENT="$WANT_FRAGMENT" \
   python3 "$tmp/render.py"
