@@ -101,7 +101,8 @@ rule_heading() {
 	' "$1" 2>/dev/null
 }
 
-# ND(next-directions.md)の「頭」(先頭 〜 `<!-- session-head-end` 直前)の文字数を数える。
+# ND(next-directions.md)の「冒頭」(ファイル先頭 〜 `<!-- session-head-end` 直前 = 毎セッション
+# 読み込まれる範囲)の文字数を数える。
 # staged 側(git の index)の内容を見る —— working tree と食い違っている(git add -p の
 # 部分ステージ等)場合、実際に commit される中身を測らないと意味が無いため。
 # 文字数の数え方は plugins/harness/skills/status/scripts/nd-tasks.sh の measure() と同じ
