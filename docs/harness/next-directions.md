@@ -42,9 +42,11 @@
   **頭の中身は「開始時の方向づけ」なので compaction 後に消えてよい** —— 正典のポインタが
   CLAUDE.md 側で生き残るため。**蒸し返しになるなら外す**。`fork` の有効性は未確認(→ `H-7`)。
 - ~~Gemini MCP を Antigravity CLI(agy)の MCP に置き換えるか~~ **裁定済み(2026-08-10)**:
-  `plugins/agy-mcp/` を新設(検索・任意プロンプト・会話の追撃)。**動画/YouTube は agy に
-  経路が無く、Gemini API 直(`GEMINI_API_KEY`)しか無い —— 認証系が違うので別プラグイン。
-  建てるかは未裁定。** 実測と却下 R-41〜R-45 は log.md 2026-08-10。
+  `plugins/agy-mcp/` を新設(検索・任意プロンプト・会話の追撃)。
+  **⚠️ 同日訂正: agy は画像も動画も見られる**(`permissions.allow` に `read_file` を
+  入れるだけ。YouTube も yt-dlp で落として渡せば読める。**API キーは要らない**)。
+  「経路が無い」と一度書いたのは**自己申告を証拠にした誤り** —— 経緯は log.md の
+  「【重大な訂正】」。実測と却下 R-41〜R-46 も同日の log.md。
 - **完了主張のゲート(nylas 型 `PreToolUse [Bash]`)と `@yawlabs/ctxlint` を足すか。**
   どちらも「増やした検知器が黙って死なないか」が論点。詳細は `log.md` 2026-08-06。
 - **Agent Plugins(2026-08 発表)へ寄せるか。** skills 層は既に準拠済みなので急がない。
