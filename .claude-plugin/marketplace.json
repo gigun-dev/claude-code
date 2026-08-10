@@ -48,7 +48,7 @@
     {
       "name": "agy-mcp",
       "source": "./plugins/agy-mcp",
-      "description": "Antigravity CLI (agy) MCP server (Gemini with Google Search grounding)"
+      "description": "Antigravity CLI (agy) MCP server (Gemini: Google Search grounding, image/video understanding)"
     },
     {
       "name": "ios-skills",

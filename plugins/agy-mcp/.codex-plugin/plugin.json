@@ -1,7 +1,7 @@
 {
   "name": "agy-mcp",
-  "version": "0.2.0",
-  "description": "Antigravity CLI (agy) MCP server (Gemini with Google Search grounding)",
+  "version": "0.3.0",
+  "description": "Antigravity CLI (agy) MCP server (Gemini: Google Search grounding, image/video understanding)",
   "author": {
     "name": "gigun",
     "url": "https://github.com/gigun-dev"
@@ -11,13 +11,16 @@
   "keywords": [
     "search",
     "gemini",
-    "mcp"
+    "mcp",
+    "image",
+    "video",
+    "youtube"
   ],
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Antigravity (agy) MCP",
-    "shortDescription": "Web search and second opinions via Gemini",
-    "longDescription": "Connect Codex to the Antigravity CLI (agy) for Google Search grounded answers and second opinions from other models. NOTE: .mcp.json points at ${CLAUDE_PLUGIN_ROOT}/server.py; whether Codex expands that variable is unverified.",
+    "shortDescription": "Web search, second opinions, and image/video understanding via Gemini",
+    "longDescription": "Connect Codex to the Antigravity CLI (agy) for Google Search grounded answers, second opinions from other models, and understanding of local images/videos and YouTube clips (downloaded with yt-dlp). Media tools need agy's own settings.json to allow file reads; without it the tools fail with the exact fix to apply. NOTE: .mcp.json points at ${CLAUDE_PLUGIN_ROOT}/server.py; whether Codex expands that variable is unverified.",
     "developerName": "gigun",
     "category": "Developer Tools",
     "capabilities": [
@@ -25,7 +28,8 @@
     ],
     "websiteURL": "https://github.com/gigun-dev/claude-code/tree/main/plugins/agy-mcp",
     "defaultPrompt": [
-      "Search the web for the latest on this."
+      "Search the web for the latest on this.",
+      "Look at this screenshot and tell me what is on screen."
     ]
   }
 }
