@@ -82,7 +82,7 @@ caldav と swift-mcp-app では機能していたのに、cf-asc-dashbord のも
 | `/harness:tidy` | セッションを畳む。正典の更新・コミット・push・log への追記と索引の再生成まで片付ける |
 | `/harness:status` | 正典の「着手順」節をリポジトリ横断で一覧化。注入される頭のバイト数(10KB 超で無言に切り詰められる)も出す |
 
-**設計原則(盆栽の7原則)はここには載せない。**圧縮版が
+**設計原則(ハーネスに何かを足す/変える前に採点する「7原則」)はここには載せない。**圧縮版が
 [`.claude/rules/harness.md`](.claude/rules/harness.md)(`plugins/harness/**` を触ると自動で届く)、
 全文と根拠が [`docs/harness/next-directions.md`](docs/harness/next-directions.md) のカタログ部にある。
 3箇所目を作ると必ずドリフトする(原則7)。
