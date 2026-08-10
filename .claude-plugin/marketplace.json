@@ -46,6 +46,11 @@
       "description": "MarkItDown MCP server (file to markdown conversion)"
     },
     {
+      "name": "agy-mcp",
+      "source": "./plugins/agy-mcp",
+      "description": "Antigravity CLI (agy) MCP server (Gemini with Google Search grounding)"
+    },
+    {
       "name": "ios-skills",
       "source": "./plugins/ios-skills",
       "description": "iOS app icon authoring, Simulator control, physical-device builds, and App Store Connect uploads."
