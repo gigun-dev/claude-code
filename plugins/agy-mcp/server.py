@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["mcp>=2.0"]
+# dependencies = ["mcp>=2.0,<3"]
 # ///
 # =============================================================================
 # plugins/agy-mcp/server.py — Antigravity CLI (`agy`) を MCP サーバとして包む
@@ -37,6 +37,15 @@
 #   ことになり、いずれ同じ移行を今より情報の少ない状態でやる羽目になる。
 #   ここは現行メジャーに乗せ、下限を `>=2.0` と明示して「1.x では動かない」を
 #   依存宣言そのものに書いておく方を採った。
+#
+# 【上限 `<3` を切ってある理由 —— 「念のため」ではない】
+#   このスクリプトは MCP サーバとして**セッションのたびに `uv run --script` で
+#   起動する**。依存の上限を開けたままにすると、mcp 3.0 が公開された日に、
+#   こちらは1バイトも変えていないのに全利用者の手元で解決先が入れ替わり、黙って
+#   壊れる。しかも壊れ方が「サーバが起動しない」なので、原因が agy なのか uv なのか
+#   mcp なのかの切り分けから始まることになる —— まさに今回 1.x → 2.x で踏んだ移行が、
+#   次は予告なしに起きる形。上限を切っておけば、壊れるのは「上げると決めたとき」
+#   だけになる(移行の時期をこちらが選べる)。上げるときは上限も一緒に動かすこと。
 #
 # 【Codex 側の ${CLAUDE_PLUGIN_ROOT} は未検証】
 #   .mcp.json では server.py の位置を `${CLAUDE_PLUGIN_ROOT}/server.py` で指している。
@@ -338,11 +347,21 @@ def _run_agy(prompt: str, model: str, timeout: int | None = None) -> str:
             duration = payload.get("duration_seconds")
             if not isinstance(duration, (int, float)):
                 duration = elapsed
-            return f"{response}\n\n— agy/{model}, {duration:.1f}s"
+            # 【再試行が起きた回だけ、来歴行にそう書く】
+            #   空応答は「モデルがウェブ検索ではなくシェルを使おうとして権限拒否された」
+            #   ときに出る症状。同じモデルで繰り返し出るなら**既定モデルを見直す
+            #   判断材料**になるので、呼び出し側(エージェント)に見える場所へ出す。
+            #   ボツ案(Why not): stderr のログだけに残す案(初版はこれだった)。
+            #   stderr は MCP クライアントのログにしか流れず、呼び出し側のモデルには
+            #   見えない。結果として「気づけるのは人間がログを開いたときだけ」になり、
+            #   判断が人間待ちになる。正常時は1文字も増えないのでノイズにもならない。
+            note = " (空応答のため1回再試行)" if attempt > 1 else ""
+            return f"{response}\n\n— agy/{model}, {duration:.1f}s{note}"
 
         if attempt < attempts:
-            # 再試行することを黙って行わない。stderr(=クライアントのログ)に残す。
-            # 返り値の書式は変えない(呼び出し側が来歴行を機械的に扱えるように)。
+            # 返り値(上の note)とは別に、診断用の詳細は stderr にも残す。
+            # stderr にしか出せない情報(agy 側の stderr の中身)がここにあるため
+            # —— 来歴行はあくまで「再試行が起きた」という事実1つだけを伝える。
             _log(
                 f"response が空だったので再試行する (model={model}, "
                 f"attempt={attempt}/{attempts})。stderr(末尾): {_tail(stderr, 200)}"
