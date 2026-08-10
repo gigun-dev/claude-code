@@ -1,5 +1,5 @@
 #!/bin/sh
-# harness-template v0.1.0 (配布元: gigun-dev/claude-code plugins/harness。配布先の世代確認はこの行を grep)
+# harness-template v0.2.0 (配布元: gigun-dev/claude-code plugins/harness。配布先の世代確認はこの行を grep)
 # =============================================================================
 # pre-commit フック — agent の commit に限って、触った規約の読み直しと
 # 正典(next-directions.md)の更新忘れを stderr でリマインドする(非ブロッキング)
@@ -303,7 +303,7 @@ main() {
 		done
 	fi
 
-	# --- head-costly: ND が staged に含まれる commit でだけ頭サイズを見る -------
+	# --- head-costly: ND が staged に含まれる commit でだけ冒頭サイズを見る -----
 	# 毎 commit 出すと狼少年化するので、ND を書き換えている commit にだけ相乗りさせる。
 	# 正確なトークン概算・切り詰め検知は /harness:status --lint の仕事(そちらは毎
 	# commit 走らないので厚くしてよい) —— pre-commit は毎 commit 走るので軽さ優先、
@@ -314,7 +314,7 @@ main() {
 		[ -n "$nd" ] || continue
 		chars=$(nd_head_chars "$nd")
 		if [ -n "$chars" ] && [ "$chars" -gt 8000 ] 2>/dev/null; then
-			echo "pre-commit: $nd の頭(先頭 〜 session-head-end)が ${chars}字(目安 8000字) —— 正確な計測・切り詰め判定は /harness:status --lint" >&2
+			echo "pre-commit: $nd の冒頭(ファイル先頭 〜 session-head-end。毎セッション読み込まれる範囲)が ${chars}字(目安 8000字) —— 正確な計測・切り詰め判定は /harness:status --lint" >&2
 		fi
 	done
 
