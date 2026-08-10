@@ -1,7 +1,7 @@
 {
   "name": "agy-mcp",
-  "version": "0.2.0",
-  "description": "Antigravity CLI (agy) MCP server (Gemini with Google Search grounding)",
+  "version": "0.3.0",
+  "description": "Antigravity CLI (agy) MCP server (Gemini: Google Search grounding, image/video understanding)",
   "mcpServers": {
     "agy": {
       "type": "stdio",
