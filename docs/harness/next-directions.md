@@ -96,6 +96,8 @@
       → 完了条件: post-commit 後にローカル HTML が自動更新されること、ボードにブランチバッジと現在地が出ること、生成にモデルが関与しないこと(スクリプト単独で完結)を実測すること
   > **2026-08-10 更新:** focus ビュー(依存辺の近傍描画。依存: H-15)と MCP Apps+Tasks の第4出口候補を設計に追加。全文は log.md 2026-08-10「H-32 の設計メモ」— 冒頭の予算超過(10,006字)を検知したため詳細をそちらへ降ろした
   > **2026-08-10 更新:** 2026-08-10: 生成器 render-board.sh v0.1.0 が 8d06859 で main へ(worktree 並行の初実践)。項目本文の git log --all --grep --format='%D' は実測で両方向に壊れており(無関係ブランチ誤付着+2コミット手前で無検出)、実装は main..<branch> 未マージ差分方式に訂正済み。残: post-commit 配線と status SKILL.md の到達性(fable 3.5 と同時)
+- [ ] `H-34` tidy.sh の changed_today が docs/ 配下を丸ごと除外している(意図は「正典自身を除く」なのに広すぎる)。docs/principles.md や README だけを直した日が「変更なし」になり、log.md の記録漏れ検査ごと素通りする
+      → 完了条件: 除外対象を docs/*/next-directions.md と docs/*/log.md の2種類に絞り、docs/principles.md だけを変更した日に log.md の記録漏れ警告が出ること、正典だけを更新した日には出ないことの両方を実測する
 
 <!-- session-head-end: ここから下は詳細部。着手する節をそのとき読む -->
 

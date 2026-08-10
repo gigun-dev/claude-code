@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.16.0 — セッションを畳む前の状態検査(読み取り専用)。
+# harness-template v0.17.0 — セッションを畳む前の状態検査(読み取り専用)。
 #
 # 設計意図(2026-08-06):
 #   doctor は「設定が正しいか」を見る。こちらは「**次のセッションが再開できる状態か**」を見る。
@@ -94,7 +94,7 @@ finish() {
   fi
   # ⚠️ ここの版数は先頭の `harness-template v…` 行と**手で揃える**(いま2箇所にある)。
   #    2026-08-10 に実際にズレた —— 先頭だけ v0.16.0 に上げてこちらが v0.15.0 のまま出た。
-  echo "=== 検査完了: ${items} 件(tidy.sh v0.16.0) ==="
+  echo "=== 検査完了: ${items} 件(tidy.sh v0.17.0) ==="
   exit 0
 }
 
@@ -165,7 +165,7 @@ else
     nd_today=$(git log --since="$today 00:00" --name-only --format="" -- "$nd" 2>/dev/null | grep -c . || true)
 
     if [ "$rel_n" -eq 0 ]; then
-      note "$nd: このコンポーネントは今日触っていない"
+      note "$nd: 今日は docs/ 以外の変更が無い(正典の更新自体を作業に数えないため docs/ は除外)"
     elif [ "$nd_dirty" -gt 0 ]; then
       ok "$nd: 未コミットの更新あり(コミットを忘れないこと)"
     elif [ "$nd_today" -gt 0 ]; then

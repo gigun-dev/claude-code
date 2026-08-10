@@ -442,7 +442,7 @@ process_block() {
       echo "✗ $f: ${label}のマーカーが無い。テンプレートのマーカーを入れてから再実行すること:" >&2
       echo "    $ms" >&2
       echo "    $me" >&2
-      echo "  (位置は先頭の位置づけブロックの直後。雛形は plugins/harness/skills/init/assets/log.md)" >&2
+      echo "  (位置は先頭の位置づけブロックの直後。雛形は plugins/harness/skills/doctor/assets/log.md)" >&2
       status=1
     else
       # 自動探索 = 「索引を持つと宣言した log.md」を回るモード。未導入は既知の状態なので
