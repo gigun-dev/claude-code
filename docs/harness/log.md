@@ -9,6 +9,11 @@
 <!-- log-index start -->
 <!-- 自動生成 — 手で書かない(harness の log-index.sh が書き換える)。新しいものが上。 -->
 
+- [2026-08-10 追記: Gemini CLI の個人向け OAuth 経路は Google が閉じていた](#2026-08-10-追記-gemini-cli-の個人向け-oauth-経路は-google-が閉じていた)
+- [2026-08-10 着手順ボード v0.2.0 → v0.4.0 —— モバイルで壊れていた](#2026-08-10-着手順ボード-v020--v040--モバイルで壊れていた)
+- [2026-08-10 openai/codex-plugin-cc から借りたもの・借りなかったもの](#2026-08-10-openaicodex-plugin-cc-から借りたもの借りなかったもの)
+- [2026-08-10 agy に動画・YouTube の口は無い —— 「見たような答え」が返る危険](#2026-08-10-agy-に動画youtube-の口は無い--見たような答えが返る危険)
+- [2026-08-10 agy-mcp を新設 —— Antigravity CLI を包み、黙って死ぬ経路を3つ塞ぐ](#2026-08-10-agy-mcp-を新設--antigravity-cli-を包み黙って死ぬ経路を3つ塞ぐ)
 - [2026-08-10 H-27/H-30/H-32 完了 —— 自己テストの注入例が「それらしいが判別力ゼロ」だった](#2026-08-10-h-27h-30h-32-完了--自己テストの注入例がそれらしいが判別力ゼロだった)
 - [2026-08-10 H-28 実装完了と H-32 の設計メモ(頭から降ろした詳細)](#2026-08-10-h-28-実装完了と-h-32-の設計メモ頭から降ろした詳細)
 - [2026-08-10 gitops と skill 分類の裁定 —— fable review 2周分の却下を降ろす](#2026-08-10-gitops-と-skill-分類の裁定--fable-review-2周分の却下を降ろす)
@@ -50,6 +55,11 @@
 <!-- rejected-index start -->
 <!-- 自動生成 — 手で書かない。新しいものが上。 -->
 
+- `R-45` 却下: MCP tasks 拡張(`io.modelcontextprotocol/tasks`)を自前実装する → [2026-08-10 agy-mcp を新設 —— Antigravity CLI を包み、黙って死ぬ経路を3つ塞ぐ](#2026-08-10-agy-mcp-を新設--antigravity-cli-を包み黙って死ぬ経路を3つ塞ぐ)
+- `R-44` 保留: 動画・YouTube を agy 経由で取る → [2026-08-10 agy-mcp を新設 —— Antigravity CLI を包み、黙って死ぬ経路を3つ塞ぐ](#2026-08-10-agy-mcp-を新設--antigravity-cli-を包み黙って死ぬ経路を3つ塞ぐ)
+- `R-43` 却下: smoke.sh に出典 URL の実在確認(HTTP)を入れる → [2026-08-10 agy-mcp を新設 —— Antigravity CLI を包み、黙って死ぬ経路を3つ塞ぐ](#2026-08-10-agy-mcp-を新設--antigravity-cli-を包み黙って死ぬ経路を3つ塞ぐ)
+- `R-42` 却下: agy の `-c`(直近の会話を継続)を使う → [2026-08-10 agy-mcp を新設 —— Antigravity CLI を包み、黙って死ぬ経路を3つ塞ぐ](#2026-08-10-agy-mcp-を新設--antigravity-cli-を包み黙って死ぬ経路を3つ塞ぐ)
+- `R-41` 却下: agy に `--dangerously-skip-permissions` を与える → [2026-08-10 agy-mcp を新設 —— Antigravity CLI を包み、黙って死ぬ経路を3つ塞ぐ](#2026-08-10-agy-mcp-を新設--antigravity-cli-を包み黙って死ぬ経路を3つ塞ぐ)
 - `R-40` 却下: status と tidy の完全統合 → [2026-08-10 gitops と skill 分類の裁定 —— fable review 2周分の却下を降ろす](#2026-08-10-gitops-と-skill-分類の裁定--fable-review-2周分の却下を降ろす)
 - `R-39` 却下: Stop hook での tidy 促し → [2026-08-10 gitops と skill 分類の裁定 —— fable review 2周分の却下を降ろす](#2026-08-10-gitops-と-skill-分類の裁定--fable-review-2周分の却下を降ろす)
 - `R-38` 却下: 着手順↔ブランチの対応表 → [2026-08-10 gitops と skill 分類の裁定 —— fable review 2周分の却下を降ろす](#2026-08-10-gitops-と-skill-分類の裁定--fable-review-2周分の却下を降ろす)
@@ -1163,3 +1173,227 @@ if 構造を本体と共有する —— 構造を分岐で迂回すると「本
 
 worktree 並行の初実践: H-27(メインツリー)と H-32(専用 worktree)を同時進行し、
 ファイル重複ゼロで衝突なしにマージできた。「並行は worktree」の語彙が実務で回った初回。
+
+## 2026-08-10 agy-mcp を新設 —— Antigravity CLI を包み、黙って死ぬ経路を3つ塞ぐ
+
+`plugins/agy-mcp/` を追加した。`agy`(Antigravity CLI, Google)を MCP サーバとして包み、
+Gemini の Google 検索グラウンディングを1ツールとして使えるようにする。認証は Antigravity
+(AI Pro のサブスク枠)で、**追加設定ゼロで動く**ことが取り柄。`uv run --script` の
+PEP 723 単一ファイル。ツールは `agy_search` / `agy_ask` の2つだけ。
+
+**実測で判明した agy の挙動(いずれも一次情報。再測定不要):**
+
+- **print モードは常に `num_turns=1`。**ツール権限が headless で自動拒否される
+  (`jetski: no output produced — a tool required the "command" permission`)ため、
+  2ターン目へ行く手段が塞がれている。**モデルが賢いからではない。**
+- **ただし呼び出しを重ねれば会話は伸びる。**`--conversation <cid>` で `num_turns=2` を実測。
+  指示語だけの追撃が通る。→ **多段の深掘りは agy に権限を与えるのではなく、呼び出し側が
+  追撃することで実現する。**
+- **サーバ側ツール(検索グラウンディング / URL 取得)は権限を通らず、1ターン内で何度も走る。**
+  1ページ=45,622 tok / 3ページ=121,648 tok と入力が比例して増えるのに `num_turns` は 1。
+- **`status:"SUCCESS"` で `response` が空**になる回がある(モデルがシェルを使おうとして
+  拒否されたとき)。`gemini-3.6-flash-low` で発生。**検索の既定モデルは `gemini-3.5-flash-low`**
+  (3.6 は空応答に加え、出典に実在しない裸の URL を返した回もあった)。
+- **JSON 出力に不正な制御文字が混ざる**ことがある(`Invalid control character at column 95`)。
+  素の `json.loads` は落ちる。`strict=False` + 行境界をずらしながらの再挑戦で受ける。
+- **存在しない `conversation_id` を渡すと、エラーにせず新しい会話を始めて平然と答える**
+  (`status:"SUCCESS"` / rc=0。返却 cid が違う一点でしか見分けられない)。要求 cid と
+  返却 cid の突き合わせで fail-closed にした。
+- **`--json-schema` がある**(スキーマファイルで構造化出力を強制できる)。実測で機能した。
+
+**却下と保留:**
+
+- `R-41` **却下: agy に `--dangerously-skip-permissions` を与える** —— この MCP への入力は
+  ウェブ検索結果を含む外部由来なので、shell を開けると「検索結果に書かれた指示でコマンドが
+  走る」経路が完成する。かつ**得るものが無い**: 欲しかった多段の試行錯誤は
+  `--conversation` の追撃で無料で手に入る(原則6)。
+  **再訪条件: 追撃では届かない仕事(ローカルのファイルを読ませる等)が実際に出てきたとき。**
+  そのときも `permissions.allow` に `read_file` だけを名指しする形から検討する
+  (設定は `~/.gemini/antigravity-cli/settings.json`。現在 `permissions` キー自体が無い)。
+- `R-42` **却下: agy の `-c`(直近の会話を継続)を使う** —— この MCP は毎回 tempdir を cwd に
+  して agy を起動する(ユーザーのリポジトリを読ませないため)ので、**「直近」を紐づける
+  安定した作業空間がそもそも存在しない**。実測でも、まっさらな tempdir で `-c` は継続されず、
+  **新規会話のまま「直前の話題」に自信を持って答えた**(rc=0 / SUCCESS)。
+  `openai/codex-plugin-cc` が `--resume-last` を採れるのは、あちらが利用者のセッションの
+  作業ディレクトリからコマンドとして起動されるからで前提が違う。**再訪条件: なし**
+- `R-43` **却下: smoke.sh に出典 URL の実在確認(HTTP)を入れる** —— ネットワーク由来の
+  不安定さで smoke が落ちるようになると「落ちても気にしない」に転んで検知器ごと死ぬ
+  (原則5: 落とすのは CI 相当の検証だけ)。**再訪条件: なし**
+- `R-44` **保留: 動画・YouTube を agy 経由で取る** —— 経路が存在しない。詳細は下の節。
+  **再訪条件: agy の changelog に媒体入力(`--print` からの添付 / YouTube)が載ったとき。**
+- `R-45` **却下: MCP tasks 拡張(`io.modelcontextprotocol/tasks`)を自前実装する** ——
+  Claude Code は **2分を超えた MCP 呼び出しを自動でバックグラウンドタスクへ移し**、
+  task ID を即返して結果を task notification で届ける(v2.1.212+、`/tasks` に出る)。
+  `openai/codex-plugin-cc` が `--background`/`status`/`result`/`cancel` を自前で持つのは、
+  あちらがスラッシュコマンド方式で MCP に乗っていないから。**既存機構で届く**(原則6)。
+  **再訪条件: 自動バックグラウンド化が無効な環境(headless 等)を常用するようになったとき。**
+
+## 2026-08-10 agy に動画・YouTube の口は無い —— 「見たような答え」が返る危険
+
+ユーザーの「Gemini なら YouTube はいけるはず」という指摘を受けて検証し直した。
+**指摘は正しく、Gemini は YouTube を扱える。扱えないのは agy(の print モード)。**
+
+**自己申告に依存しない検証:**
+
+- 指定された実在動画(`zdIqsbtqhcA`)に対し、`gemini-3.5-flash-low` も**最上位の
+  `gemini-3.1-pro-high`** も【視聴していない】と答えた。**モデル選択の問題ではない。**
+- ⚠️ **危険な形が出た**: 同じ回答の中で、話者3人・尺 14分54秒という**メタデータは正確に
+  答えた**(検索由来)。**フレームを見ずに「見たような答え」が作れる。**検証しなければ
+  視聴したと読める —— 原則4「それらしい出力は 0件より危険」の実例。
+- 架空の動画 ID(`aaaaaaaaaaa` / `Zx9Qk7Lm2Vw`)には「不可」と答えた。知識・検索で説明
+  できる範囲でしか答えない挙動と一致。
+- 中身をこちらで決めたローカル媒体(PNG に `QZ7M-4419`、MP4 に 0-5秒 `VX3K-8827` /
+  5-10秒 `NP5R-1163` を ffmpeg で焼いた)は、**ファイルに触る前に権限で止まった。**
+
+**媒体の入口は「無い」のではなく「ツールの向こう側にあり、print モードからは全部閉じている」:**
+
+| 経路 | 媒体 | print モードから |
+|---|---|---|
+| TUI のクリップボード貼り付け | 画像 | ✗(対話専用。changelog に実装記録あり) |
+| ブラウザ subagent(CDP) | スクリーンショット | ✗(`command` 権限で拒否) |
+| MCP サーバが返す inline media | 画像等 | ✗(同上) |
+| ローカルファイル | — | ✗(`read_file` 権限で拒否) |
+
+バイナリの文字列に `capture screenshot via CDP` / `BROWSER_INSERT_SCREENSHOT` /
+`enable-browser-subagent-v2` / `media data is nil or empty` があり、Gemini の媒体パート
+(`FileData` 142件 / `file_uri` 98件)も入っている。**器はあるが、CLI のユーザー入力から
+そこへ繋がる経路が無い。** `video/*` の MIME 文字列は1つも無い(`audio/mp3|mpeg|wav` はある)。
+`youtube` を含む文字列 254件はすべて `package:google/corp/youtube/...` 形式の社内 proto 名。
+
+**⚠️ YouTube に限っては権限の話と無関係。** ローカルファイルでもブラウザのスクショでも
+ないので、どのツール経路にも乗らない。URL は本文テキストとして渡るだけ。
+
+**したがって動画・YouTube は Gemini API 直(`GEMINI_API_KEY`)しか経路が無い。**
+無料枠は YouTube 1日8時間まで、プロンプト内で `MM:SS` を指してシーン参照できる。
+⚠️ **Google AI Pro は API の tier に影響しない** —— 一次資料(rate-limits)で確認済みで、
+tier は Cloud Billing の有効化だけで決まり、AI Pro/Ultra への言及は無い。agy が動くのは
+Antigravity 側の認証で、API とは別系統。**認証系が違うので、建てるなら別プラグイン。**
+
+## 2026-08-10 openai/codex-plugin-cc から借りたもの・借りなかったもの
+
+Codex を Claude Code から使う公式プラグイン(`ghq get openai/codex-plugin-cc`)を読んだ。
+同じ問題(CLI 由来のエージェントを別のエージェントから使う)を解いている。
+
+**借りた:**
+
+- **継続か新規かをモデルの判断に委ねない。**あちらの契約は
+  「`--resume`: always resume, **even if the request text is ambiguous**」/
+  「`--fresh`: always fresh, **even if it sounds like a follow-up**」。
+  → agy-mcp は `conversation_id` の有無だけで決め、プロンプトの文面を一切見ない。
+  description に「省略した場合は必ず新しい会話になる」を明記した。
+- **失敗したツールの代わりにもっともらしい答えを生成しない。**
+  「if Codex was never successfully invoked, **do not generate a substitute answer at all**」。
+  原則4と同じ思想の明文化。
+
+**借りなかった(理由付き):**
+
+- 非同期ジョブ機構(`--background` / `status` / `result` / `cancel`)→ `R-45`。
+- スラッシュコマンド方式 —— あちらが自前でジョブ管理を持つ必要が出たのはこの選択の帰結。
+- app-server の JSON-RPC(`thread/resume`)による深い統合 —— **agy はその口を持たない**。
+  CLI フラグ層で組むのは妥協ではなく、この CLI で取れる最良の層。
+
+**設計として効いた発見: subagent を「考えるもの」ではなく「転送するだけのもの」にしている。**
+
+> The rescue subagent is a **forwarder, not an orchestrator**. Its only job is to invoke
+> `task` once and return that stdout unchanged. Do not inspect the repository, read files,
+> grep, monitor progress, ... or do any follow-up work of your own.
+
+subagent を使う目的が「並列に考えさせる」ではなく**コンテキストの隔離**。
+委譲先の長い出力が親の文脈を汚さないことだけが狙い。
+
+**`R-39`(Stop hook での tidy 促し)への新証拠 —— 却下は維持、ただし再訪の出発点が変わる。**
+却下理由は「**『区切り』は機械判定できない**」だった。あちらは**判定できない述語を判定
+できる述語に置き換えて**回避している:
+
+> Only review it if Claude actually did **code changes** in that turn.
+> **Do not treat the previous Claude response as proof that code changes happened;
+> verify that from the repository state** before you block.
+
+「区切りか」ではなく「**このターンで編集が起きたか**」を、モデルの自己申告ではなく
+**リポジトリの状態から**確かめる。これは機械的に決まる。ただし再訪条件(検査C 導入後も
+「正典未更新のまま push」が実測で再発)はまだ満たしていないので**却下は維持**。
+次に再訪するときは**この述語から始める**こと。あちらの Stop フックは `timeout: 900` で
+毎ターン Codex のフルレビューを回す重い門であり、harness が欲しいものとは重さが違う。
+
+**harness が使っていないチャネルを1つ見つけた: `CLAUDE_ENV_FILE`。**
+SessionStart フックでここに `export NAME=value` を追記すると**セッション全体の環境変数を
+増やせる**。あちらは `session_id` と `transcript_path` を流し、`/codex:transfer`
+(いまの Claude セッションを Codex の再開可能スレッドへ移送)をこれで実現している。
+パスが `~/.claude/projects` 配下であることを `realpath` で確認する封じ込め付き。
+
+## 2026-08-10 着手順ボード v0.2.0 → v0.4.0 —— モバイルで壊れていた
+
+ユーザーの5点の指摘(H-3 が宙に浮く / 折りたたみがダークパターン / サイズが分かりづらい /
+次タスクのカードが不要 / 辺構造が分かりづらい)を v0.2.0 で、Artifact 公開のための
+`--fragment` を v0.3.0 で、モバイル対応とバー整理を v0.4.0 で入れた。
+
+**v0.3.0 は 390px で `scrollWidth=4,554px`(273要素がはみ出し)だった。**
+原因は**狭い幅のために足した media query そのもの**:
+
+```css
+@media (max-width:520px){.boards{grid-template-columns:1fr;}}   /* ← これ1行 */
+```
+
+`1fr` = `minmax(auto,1fr)` の `auto` が min-content 最小を意味し、行が `white-space:nowrap`
+なので最長行の全長までトラックが膨らむ。広い幅用の `minmax(460px,1fr)` は最小が明示値
+なので無事だった。**狭い幅を守るための1行だけが、狭い幅を壊していた。**
+`minmax(0,1fr)` で解消(390/430/768/1440 ほか12幅で超過0件)。
+⚠️ **指摘されるまで、モバイル用と言いながら壊れたものを公開し続けていた**
+—— 「スマホでも見たい」が要件だったのに、実機幅で一度も測っていなかった。
+
+**判断の記録:**
+
+- **狭い幅(≤560px)ではレールを畳む。**縦線が繋がる前提は「全行が1行」で、折り返すと
+  v0.2.0 で画素まで数えて潰した「鎖に見える」が復活する。依存の情報は ⇠/⇐ バッジに残る。
+- **頭サイズのバーはトークン1本のみ**(ユーザー指示)。文字数は 10,000字超のときだけ
+  バッジで出す。**ただし判定を自前でせず `nd-tasks.sh` の `errors[]` の文面をそのまま出す**
+  (閾値と issue 番号を2箇所に複製しない = 原則7)。**pointer 型のリポジトリでは
+  切り詰めが起きないので出ない** —— 存在しない機構を根拠に警告しない。
+- **長い行を `line-clamp` で畳まない。**長い行が長く見えるのは正しい報告で、直す場所は
+  ND 側(H-22 は項目名に不具合報告の全文が入っている)。
+
+**表示バグを1件修正:** `note` は生 HTML を組み立てる文字列で `inline()` を通していないため、
+markdown の `**` が変換されず画面に出ていた(v0.2.0 から)。
+
+**この日の実装で、仕様側の誤りを実装者に拾われたのが3件目・4件目。**
+(3) `mcp>=1.2` は現在 **2.0.0** を解決し、2.x に `mcp.server.fastmcp` は無い。
+(4) agy は失敗理由を **stdout の JSON の `error`** に入れ、stderr は空のまま rc=1 を返す
+—— 仕様どおり stderr だけ見る初版は「理由が1文字も入らない失敗メッセージ」を返していた。
+
+## 2026-08-10 追記: Gemini CLI の個人向け OAuth 経路は Google が閉じていた
+
+「Gemini CLI なら `analyzeFile` で動画分析できたはず」という指摘を受けて検証した。
+
+- **agy に `analyze_file` は存在しない。**バイナリの権限名は `command` / `run_command` /
+  `edit_file` と、実測で観測した `read_file` のみ。
+- `~/.gemini/settings.json` が残っており(`"selectedAuthType": "oauth-personal"`、
+  `ideMode`、`sandbox-exec`)、**Gemini CLI を過去に使っていた形跡**があった。
+  OAuth の認証情報(`oauth_creds.json` / `google_accounts.json`)も残っている。
+- `npx -y @google/gemini-cli`(0.54.4)で実際に叩いたところ、**Google 側が拒否した**:
+
+```
+reasonCode: 'UNSUPPORTED_CLIENT'
+reasonMessage: 'This client is no longer supported for Gemini Code Assist for individuals.
+                To continue using Gemini, please migrate to the Antigravity suite of products'
+tierId: 'free-tier'  tierName: 'Gemini Code Assist for individuals'
+```
+
+**追証(同日)**: gemini-cli のリポジトリは現役(archived=False / 最終 push 2026-08-10 /
+★106k / v0.54.4)で README も OAuth 無料枠をうたっているため、一度「古い認証情報が
+旧テナントに紐づいているだけでは」と読み替えたが、**これは誤りだった。**
+ユーザーが手で再実行しても同じ `IneligibleTierError`。同じエラーの issue #28473
+(2026-07-21)は **closed as not planned**。拒否されているのは**アカウントではなく
+client**(`UNSUPPORTED_CLIENT`)なので**再ログインでは解決しない**。
+README の「Google Sign-in で 1,000 req/day」は Code Assist ライセンス保有者向けの
+記述が残っているものと見られる。
+
+**結論: 個人の Google アカウントで無料に使えたマルチモーダル経路は Google が畳み、
+コーディング用途の Antigravity へ寄せた。** agy に媒体の口が無いのは実装の抜けではなく、
+その移行の帰結。**残る経路は Gemini API(AI Studio のキー)だけ。**
+キーがあるなら **Gemini CLI をキー認証で使うのが最短**(マルチモーダルを持っているので、
+専用プラグインを書かずに済む)—— 建てる前に必ず比較すること。
+
+**2つの CLI の違い(実測):** gemini-cli は OSS・Node・認証3択(OAuth/APIキー/Vertex)・
+Gemini のみ。agy は Go 単一バイナリ・Antigravity のサブスク枠・**Claude Sonnet 4.6 /
+Opus 4.6 / GPT-OSS 120B も選べる**。設定の親が同じ `~/.gemini/` なのは血縁の証拠で、
+agy は gemini-cli の系譜にコーディング特化とマルチモデルを乗せたものに見える。
