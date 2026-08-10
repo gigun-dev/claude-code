@@ -1,0 +1,1 @@
+{"mcpServers":{"agy":{"type":"stdio","command":"uv","args":["run","--script","${CLAUDE_PLUGIN_ROOT}/server.py"]}}}

@@ -1,0 +1,12 @@
+{
+  "name": "agy-mcp",
+  "version": "0.1.0",
+  "description": "Antigravity CLI (agy) MCP server (Gemini with Google Search grounding)",
+  "mcpServers": {
+    "agy": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "--script", "${CLAUDE_PLUGIN_ROOT}/server.py"]
+    }
+  }
+}
