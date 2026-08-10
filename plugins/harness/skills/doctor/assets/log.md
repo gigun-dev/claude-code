@@ -1,4 +1,4 @@
-<!-- harness-template v0.13.0 (配布元: gigun-dev/claude-code plugins/harness) -->
+<!-- harness-template v0.14.0 (配布元: gigun-dev/claude-code plugins/harness) -->
 # 作業ログ({{DATE}} 開始)
 
 > **位置づけ**: 時系列の生記録。**追記専用アーカイブ**で、通常は全文ロードしない。
@@ -100,6 +100,6 @@
 ## {{DATE}} ハーネス導入
 
 - **判断**: セッション引き継ぎの正典(`next-directions.md`)とは別に、時系列の生記録を
-  この log.md へ分けた。**却下した案**: 正典1本に全部書く —— 頭が肥大して SessionStart の
-  注入(10KB で無言に切り詰められる)に載らなくなるため。
+  この log.md へ分けた。**却下した案**: 正典1本に全部書く —— 冒頭(毎セッション読み込まれる
+  範囲)が肥大して SessionStart の注入(10KB で無言に切り詰められる)に載らなくなるため。
 - 以降の作業記録はここへ追記する。書く条件は上の6つ。

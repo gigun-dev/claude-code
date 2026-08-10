@@ -1,4 +1,4 @@
-<!-- harness-template v0.1.0 (配布元: gigun-dev/claude-code plugins/harness) -->
+<!-- harness-template v0.2.0 (配布元: gigun-dev/claude-code plugins/harness) -->
 # {{PROJECT_NAME}}
 
 <!-- ここに足すときの判定: その一文はエージェントの行動を変えるか(プラスにもマイナスにも)。
@@ -27,7 +27,8 @@
 ## 現在地・次の作業(セッション引き継ぎ)
 
 - 正典は **`docs/next-directions.md`** — SessionStart フック(`.claude/settings.json`)が
-  頭(`session-head-end` マーカーまで)を自動注入する。作業の区切りごとに必ず更新
-  (完了は打ち消し線+✅、変化は `> **YYYY-MM-DD 更新:**` を積層。計画は消さない)。
+  冒頭(`session-head-end` マーカーまで = 毎セッション読み込まれる範囲)を自動注入する。
+  作業の区切りごとに必ず更新(完了は打ち消し線+✅、変化は `> **YYYY-MM-DD 更新:**` を
+  追記していく。計画は消さない)。
 
 - 詳細・技術スタック・アーキテクチャは `README.md` を参照。

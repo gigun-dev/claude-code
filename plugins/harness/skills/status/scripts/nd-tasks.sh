@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.19.0 (配布元: gigun-dev/claude-code plugins/harness)
+# harness-template v0.20.0 (配布元: gigun-dev/claude-code plugins/harness)
 #   — next-directions.md の「着手順」節を読んで一覧化し(読み取り専用)、
 #     ID 指定で「着手順」節と「完了記録」節**だけ**を書き換える(--add / --done / --note / --archive)。
 #
@@ -247,7 +247,7 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
   --add "<概要>" --criteria "<完了条件>"
                   「着手順」節の末尾に未完了項目を1件足す。**ID は自動採番** ——
                   接頭辞はそのファイルで既に使われているもの(`H-` / `IOS-` など)を継承し、
-                  番号は**ファイル全体**(着手順 + 完了記録 + カタログ部)の最大値 + 1。
+                  番号は**ファイル全体**(着手順 + 完了記録 + 詳細部)の最大値 + 1。
                   着手順だけを見て採番すると**アーカイブ済みの ID を再利用**してしまい、
                   log.md からの参照が別物を指すようになるため、走査範囲は必ず全体。
   --done <ID> --evidence "<何を確認したか>"
@@ -257,8 +257,8 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
                   既に `[x]` + 証拠行あり → 何もせず正常終了(冪等)。
                   既に `[x]` だが証拠行なし → 証拠行だけを足す(no-evidence 違反の解消)。
   --note <ID> "<本文>"
-                  その項目の末尾に `> **YYYY-MM-DD 更新:** <本文>` を積層する。
-                  完全に同一の行が既にあれば積まない(二重実行での重複を防ぐ)。
+                  その項目の末尾に `> **YYYY-MM-DD 更新:** <本文>` を追記で足す。
+                  完全に同一の行が既にあれば足さない(二重実行での重複を防ぐ)。
   --archive [--apply]
                   **証拠行を持つ `[x]` 項目**を「着手順」から `## 完了記録` へ移す。
                   **既定は dry-run**(何がどこへ移るかを出すだけ)。実際に書き換えるのは
@@ -270,13 +270,13 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
   nd-tasks.sh --add "doctor の pre-push 検査を hooksPath 起点に直す" \
               --criteria "dotfiles で誤検知が消え、claude-code では「無い」が残ること"
   nd-tasks.sh --done H-1 --evidence "2026-08-07 / 00b8686 / 使い捨て repo 3件で hooksPath が保たれることを実測"
-  nd-tasks.sh --note H-5 "80行予算は後から足したので H-8 の棚卸し結果は未達のまま"
+  nd-tasks.sh --note H-5 "80行予算は後から足したので H-8 の整理結果は未達のまま"
   nd-tasks.sh --archive                 # 何が移るかを見る
   nd-tasks.sh --archive --apply         # 実際に移す
   nd-tasks.sh --done H-1 --evidence "…" docs/harness/next-directions.md   # 対象を明示
 
 書き込み操作の不変条件:
-  - 触るのは「## 着手順」節と「## 完了記録」節だけ。現在地・カタログ部・
+  - 触るのは「## 着手順」節と「## 完了記録」節だけ。現在地・詳細部・
     `<!-- session-head-end` マーカー行には1バイトも触らない。
   - `## 完了記録` が無ければ session-head-end マーカーの直後に作る。
   - 一時ファイル + mv(atomic)。途中で落ちても正典が半分だけ書き潰されることはない。
@@ -287,7 +287,8 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
     ロックを取らないので待たされない。持ち主が異常終了して残ったロックは、
     次の書き込みが「PID が実在しない」かつ「10秒以上前」の両方を確認してから自動で奪う。
   - fail-closed。未知の ID / 「着手順」節が無い / 接頭辞が決められない —— **何も書かずに落ちる。**
-  - 書き込み後に「頭」の文字数と概算トークン数を出す(予算 8,000字 / 3,000 tok)。超えたら警告する。
+  - 書き込み後に「冒頭」(毎セッション読み込まれる範囲)の文字数と概算トークン数を出す
+    (予算 8,000字 / 3,000 tok)。超えたら警告する。
   - --all / --lint / --format json とは併用できない(読み取りと書き込みを混ぜない)。
 
 読み取る書式(この形だけを正とする):
@@ -298,17 +299,17 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
   - [x] `H-1` 概要
         → 2026-08-05 / bc3350f / 何を確認したか(**証拠行**。[x] には必須)
   節の終わりは次の `## ` か行頭 `<!-- session-head-end` か EOF。
-  **読むのは最初の `## 着手順` 1節だけ**(頭にある1節が正。下はカタログ部)。
+  **読むのは最初の `## 着手順` 1節だけ**(冒頭にある1節が正。下は詳細部)。
   2つ目以降の同名見出しに項目行があると orphan-items 違反になる。
   証拠を書けない移行時のみ `(移行: 証拠なし)` を項目か継続行に含めて免除する。
 
 出力の3区分:
   1. 次にやること      [ ] の項目。完了条件つき
   2. 完了(証拠あり)  [x] かつ証拠行を持つもの
-  3. 整理対象          [x] すべて。閉じた時点で「頭」に置く理由が消えるので、
-                       カタログ部か log.md へ移す候補(移すのは /harness:tidy の仕事)
+  3. 整理対象          [x] すべて。閉じた時点で「冒頭」に置く理由が消えるので、
+                       詳細部か log.md へ移す候補(移すのは /harness:tidy の仕事)
 
-頭のサイズ(2つの機構を、それぞれの単位で見る):
+冒頭のサイズ(2つの機構を、それぞれの単位で見る):
   文字数 —— 切り詰め。SessionStart の stdout は **10,000 文字**超で無言に切り詰められ、
     2KB のプレビューだけが注入される(claude-code#70460 / #84021)。
     8,000字超で警告 / 10,000字超で強い警告。
@@ -322,13 +323,13 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
   2. 同一ファイル内での ID 重複                                              dup-id
   3. 項目行に見える(`- [`)のに書式に合わず ID が取れない  ←ドリフト検知器  malformed
   4. `<!-- session-head-end` マーカーが無い                                   no-marker
-     頭注入型のフックを持つリポジトリでのみ違反。pointer 型 / ハーネス未導入では
+     冒頭注入型のフックを持つリポジトリでのみ違反。pointer 型 / ハーネス未導入では
      注入自体が無いので警告どまり(一律に鳴らすと検知器が信用されなくなる)。
   5. `## 着手順` 節が無い                                                    no-section
   6. 節はあるが `- [` 行が1本も無い(旧書式のまま未移行)                    not-migrated
   7. `- [` 行はあるのに1件も読めない(**ドリフト**。fail-closed)            empty-section
   8. 2つ目以降の `## 着手順` に項目行がある(読まれず閉じられない)          orphan-items
-     読むのは最初の1節だけ。カタログ部の `## 着手順の詳細` のように項目行を
+     読むのは最初の1節だけ。詳細部の `## 着手順の詳細` のように項目行を
      持たない同名見出しでは鳴らない(落とすものがあるときだけ鳴らす)。
 
   ⚠️ 5・6(未移行)は **--all のときだけ警告へ落とす**。横断 board は毎日叩くもので、
@@ -337,7 +338,7 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
 
 終了コード:
   0  違反なし(読み取り)/ 書き込んだ・何もしなかった・dry-run を出した(書き込み)
-  1  違反あり(fail-closed の検知を含む)。頭のサイズ超過・--all の未移行は
+  1  違反あり(fail-closed の検知を含む)。冒頭のサイズ超過・--all の未移行は
      警告であって違反ではない
   2  使い方の誤り / 走査対象が1件も無い / 書き込み対象のファイルが1本に定まらない /
      --done に --evidence が無い
@@ -654,7 +655,8 @@ function ltrim(s) { sub(/^[ \t]+/, "", s); sub(/^(　)+/, "", s); sub(/^[ \t]+/,
 # 書き側は最初の節しか見ないので「そんな ID は無い」と拒否する(実測)。
 # **目の前の一覧に見えている項目を閉じられない。**「1文字も違えないこと」と両方のコメントに
 # 書いてあったが、散文の規律で二重実装を同期し続けるのは無理だった(この repo が繰り返し
-# 潰してきた「複製すれば必ずドリフトする」の再発。盆栽の7原則 7)。
+# 潰してきた「複製すれば必ずドリフトする」の再発。盆栽の7原則 = ハーネスに何かを足す/変える
+# 前に採点するための7つの判断基準で、全文は .claude/rules/harness.md にある。その原則7)。
 #
 # したがって **「どの行が何であるか」はここだけが決める。** エディタは行番号を受け取って
 # 書き換えるだけで、節を探すことも ID を照合することもしない。
@@ -914,7 +916,7 @@ END {
   #    見出しが在り、そこに項目行は無い。**落とすものがあるときだけ**鳴らすのが要点で、
   #    見出しの存在で鳴らすと「鳴りっぱなしで無視される」側の死に方をする。
   if (shitems > 0)
-    emit_err("orphan-items", shline, "V", "`## 着手順` が2つ以上ある —— 読むのは**最初の1つ**(" secline " 行目)だけなので、" shline " 行目の節にある項目行 " shitems " 本は**一覧にも出ず `--done` でも閉じられない**(最初の " shfirst " 行目付近)。頭の `## 着手順` へ移すか、見出しの名前を変えること(`## 着手順の詳細` のように項目行を持たない見出しは鳴らさない)")
+    emit_err("orphan-items", shline, "V", "`## 着手順` が2つ以上ある —— 読むのは**最初の1つ**(" secline " 行目)だけなので、" shline " 行目の節にある項目行 " shitems " 本は**一覧にも出ず `--done` でも閉じられない**(最初の " shfirst " 行目付近)。冒頭の `## 着手順` へ移すか、見出しの名前を変えること(`## 着手順の詳細` のように項目行を持たない見出しは鳴らさない)")
   # 0件の理由を2つに割る。**この区別が検知の要**:
   #   未移行(no-section / not-migrated)= まだチェックリストにしていない。既知の状態で異常ではない
   #   ドリフト(empty-section)          = 項目行のつもりの行は在るのに1件も読めない。
@@ -993,10 +995,10 @@ scan_file() {
   if [ "$has_marker" -eq 0 ]; then
     if [ "$inject" -eq 1 ]; then
       emit_rec E "$repo" "$comp" "$f" no-marker 0 V \
-        "session-head-end マーカーが無い —— このリポジトリのフックは頭注入型なので、**注入が fail-closed で停止している**(誰も気づかないまま止まる)。現在地・着手順の直後に行頭から <!-- session-head-end --> を復元すること"
+        "session-head-end マーカーが無い —— このリポジトリのフックは冒頭注入型(冒頭 = 毎セッション読み込まれる範囲)なので、**注入が fail-closed で停止している**(誰も気づかないまま止まる)。現在地・着手順の直後に行頭から <!-- session-head-end --> を復元すること"
     else
       emit_rec E "$repo" "$comp" "$f" no-marker 0 W \
-        "session-head-end マーカーが無い(このリポジトリに頭注入型のフックが無い = pointer 型かハーネス未導入。注入が止まっているわけではないが、頭/カタログの境界が無いので読み手は全文を読むことになる。導入は /harness:doctor)"
+        "session-head-end マーカーが無い(このリポジトリに冒頭注入型のフックが無い = pointer 型かハーネス未導入。注入が止まっているわけではないが、冒頭/詳細部の境界が無いので読み手は全文を読むことになる。導入は /harness:doctor)"
     fi
   else
     # #70460 / #84021: SessionStart の stdout は **10,000 文字**超で無言に切り詰められ、
@@ -1021,15 +1023,18 @@ scan_file() {
     #    (= head_injection_mode() の結果)をそのまま再利用する(docs/principles.md 規則6
     #    「新機構を足す前に、既存機構で届くか見る」)。
     #
-    #    **$inject=1(頭注入型)のときは以下、1文字も変えていない** —— 既存の配布先
-    #    (実際に頭注入型で運用されているリポジトリ)へ与える文面は変えない。
+    #    **$inject=1(冒頭注入型)のときは、この 2026-08-08 の変更で判定も文面も動かしていない**
+    #    —— 既存の配布先(実際に冒頭注入型で運用されているリポジトリ)へ与える内容は変えない。
+    #    ⚠️ 2026-08-10 に**語彙だけ**直した(「頭」→「冒頭」/「棚卸し」→「整理」/「カタログ部」→
+    #    「詳細部」)。条件も数値も分岐も動かしていない、純粋な言い換え —— 配布先のエージェントは
+    #    読んだ文書の言葉づかいをそのまま真似るので、ここだけ独自語彙が残ると各リポジトリへ伝播する。
     if [ "$inject" -eq 1 ]; then
       if [ "$head_chars" -gt "$HEAD_HARD_CHARS" ]; then
         emit_rec E "$repo" "$comp" "$f" head-truncated 0 W \
-          "頭が ${head_chars}字(> ${HEAD_HARD_CHARS}字)—— SessionStart の stdout は 10,000字超で**無言に切り詰められ 2KB のプレビューだけが注入される**(anthropics/claude-code#70460・#84021)。いま実際に切れている。棚卸しして頭を縮めること"
+          "冒頭が ${head_chars}字(> ${HEAD_HARD_CHARS}字)—— SessionStart の stdout は 10,000字超で**無言に切り詰められ 2KB のプレビューだけが注入される**(anthropics/claude-code#70460・#84021)。いま実際に切れている。整理して冒頭を縮めること"
       elif [ "$head_chars" -gt "$HEAD_WARN_CHARS" ]; then
         emit_rec E "$repo" "$comp" "$f" head-large 0 W \
-          "頭が ${head_chars}字(目安 ${HEAD_WARN_CHARS}字)—— 10,000字を超えると SessionStart の stdout が無言に切り詰められる(#70460)。余裕が ${HEAD_HARD_CHARS}字まで"
+          "冒頭が ${head_chars}字(目安 ${HEAD_WARN_CHARS}字)—— 10,000字を超えると SessionStart の stdout が無言に切り詰められる(#70460)。余裕が ${HEAD_HARD_CHARS}字まで"
       fi
     fi
     # トークンは切り詰めとは別の機構。$inject の値にかかわらず「頭が大きい」という事実
@@ -1039,9 +1044,10 @@ scan_file() {
     # 「棚卸し前に検査側を緩めて警告を消した」ことになってしまう)。
     if [ "$head_tokens" -gt "$HEAD_WARN_TOKENS" ]; then
       if [ "$inject" -eq 1 ]; then
-        # 頭注入型: 既存文面のまま(毎セッションの実費として鳴らす)。1文字も変えていない。
+        # 冒頭注入型: 既存文面のまま(毎セッションの実費として鳴らす)。2026-08-08 の分岐追加では
+        # 動かしておらず、2026-08-10 の語彙の言い換え(上のコメント参照)だけが入っている。
         emit_rec E "$repo" "$comp" "$f" head-costly 0 W \
-          "頭が ≒${head_tokens} tok(予算 ${HEAD_WARN_TOKENS} tok)—— 切り詰めには余裕があるが、**毎セッション注入されるので全セッションのコストになる**。棚卸しか --archive で降ろすこと"
+          "冒頭が ≒${head_tokens} tok(予算 ${HEAD_WARN_TOKENS} tok)—— 切り詰めには余裕があるが、**毎セッション注入されるので全セッションのコストになる**。整理するか --archive で降ろすこと"
       else
         # pointer 型 / ハーネス未導入: 「毎セッション payer」ではなく「ポインタを辿って
         # 読みに行ったときに1回払う」コストとして書き直す。頭が大きいこと自体は消えて
@@ -1064,7 +1070,7 @@ scan_file() {
         #    読んだ人の行動は変えない —— 規則2b「その一文はエージェントの行動を変えるか」。
         #    判断はこのコメントに置き、警告は「何をすればよいか」だけに絞る。
         emit_rec E "$repo" "$comp" "$f" head-costly 0 W \
-          "頭が ≒${head_tokens} tok(目安 ${HEAD_WARN_TOKENS} tok)—— このフックは pointer 型なので**毎セッション注入されるわけではない**が、ポインタを辿って読むたびに払う。棚卸しか --archive で降ろすこと"
+          "冒頭が ≒${head_tokens} tok(目安 ${HEAD_WARN_TOKENS} tok)—— このフックは pointer 型なので**毎セッション注入されるわけではない**が、ポインタを辿って読むたびに払う。整理するか --archive で降ろすこと"
       fi
     fi
   fi
@@ -1316,12 +1322,12 @@ function do_note(   k, ln, j, nind) {
   # 二重実行での重複を防ぐ。積層(append)が本来の意味なので**内容が違えば何本でも積む**が、
   # 完全一致は「同じコマンドをもう一度叩いた」以外にありえないので黙って落とす。
   for (j = istart[k]; j <= iend[k]; j++) if (L[j] == ln) {
-    say("I", "同じ内容の更新行が既にある(" j " 行目)。積まなかった。")
+    say("I", "同じ内容の更新行が既にある(" j " 行目)。足さなかった。")
     changed = 0
     return
   }
   add_ins(iend[k], ln)
-  say("I", "`" id "` の末尾に `> **" today " 更新:**` を積んだ。")
+  say("I", "`" id "` の末尾に `> **" today " 更新:**` を追記した。")
   changed = 1
 }
 
@@ -1397,7 +1403,7 @@ function do_archive(   k, i, nm, dst, has_entry) {
     add_ins(dst, "")
     add_ins(dst, "## 完了記録(着手順から降ろしたもの)")
     add_ins(dst, "")
-    add_ins(dst, "頭は予算制なので、完了した項目はここへ降ろす。**ID は再利用しない**(log.md から参照されるため)。")
+    add_ins(dst, "冒頭は予算制なので、完了した項目はここへ降ろす。**ID は再利用しない**(log.md から参照されるため)。")
     add_ins(dst, "")
     # 過去形にしない —— このメッセージは dry-run でも出る(まだ1バイトも書いていない)。
     say("I", "`## 完了記録` 節が無いので、session-head-end マーカーの直後に新設する。")
@@ -1484,7 +1490,7 @@ AWK
     local f=$1 marker lines
     marker=$(grep -n -m1 '^<!-- session-head-end' "$f" | cut -d: -f1 || true)
     if [ -z "$marker" ]; then
-      echo "⚠️ session-head-end マーカーが無いので「頭」のサイズを測れない(境界が定義できない)。" >&2
+      echo "⚠️ session-head-end マーカーが無いので「冒頭」のサイズを測れない(境界が定義できない)。" >&2
       return 0
     fi
     lines=$((marker - 1))
@@ -1492,16 +1498,16 @@ AWK
     # 行数も出すが**予算としては出さない**(参考値)。行はどの機構も使っておらず、
     # 言語構成で 2 倍以上ブレる —— 予算に使うと日本語の正典だけ不当にきつくなる。
     # それでも表示は残す: 人が「どこを削るか」を探すときの手掛かりは結局行だから。
-    printf '頭: %s字 / ≒%s tok(予算 %s字 / %s tok)・%s 行(参考)\n' \
+    printf '冒頭: %s字 / ≒%s tok(予算 %s字 / %s tok)・%s 行(参考)\n' \
       "$MEAS_CHARS" "$MEAS_TOKENS" "$HEAD_WARN_CHARS" "$HEAD_WARN_TOKENS" "$lines"
-    # ⚠️ 閾値を上げて警告を消すのは禁止。減らす手段(--archive / 棚卸し)を必ず添える。
+    # ⚠️ 閾値を上げて警告を消すのは禁止。減らす手段(--archive / 整理)を必ず添える。
     if [ "$MEAS_CHARS" -gt "$HEAD_HARD_CHARS" ]; then
-      echo "✗ 頭が ${MEAS_CHARS}字(> ${HEAD_HARD_CHARS}字)—— SessionStart の stdout は**無言に切り詰められ 2KB のプレビューだけが注入される**(anthropics/claude-code#70460・#84021)。いま実際に切れている。--archive で降ろすか棚卸しすること。" >&2
+      echo "✗ 冒頭が ${MEAS_CHARS}字(> ${HEAD_HARD_CHARS}字)—— SessionStart の stdout は**無言に切り詰められ 2KB のプレビューだけが注入される**(anthropics/claude-code#70460・#84021)。いま実際に切れている。--archive で降ろすか整理すること。" >&2
     elif [ "$MEAS_CHARS" -gt "$HEAD_WARN_CHARS" ]; then
-      echo "⚠️ 頭が ${MEAS_CHARS}字(予算 ${HEAD_WARN_CHARS}字)。余裕は ${HEAD_HARD_CHARS}字まで。**閾値は上げない** —— --archive で降ろすか棚卸しすること。" >&2
+      echo "⚠️ 冒頭が ${MEAS_CHARS}字(予算 ${HEAD_WARN_CHARS}字)。余裕は ${HEAD_HARD_CHARS}字まで。**閾値は上げない** —— --archive で降ろすか整理すること。" >&2
     fi
     if [ "$MEAS_TOKENS" -gt "$HEAD_WARN_TOKENS" ]; then
-      echo "⚠️ 頭が ≒${MEAS_TOKENS} tok(予算 ${HEAD_WARN_TOKENS} tok)。切り詰めには余裕があるが**毎セッション払う**。**閾値は上げない** —— --archive で降ろすか棚卸しすること。" >&2
+      echo "⚠️ 冒頭が ≒${MEAS_TOKENS} tok(予算 ${HEAD_WARN_TOKENS} tok)。切り詰めには余裕があるが**毎セッション払う**。**閾値は上げない** —— --archive で降ろすか整理すること。" >&2
     fi
   }
 
@@ -1584,7 +1590,7 @@ AWK
   case "$OP" in
     add)     printf '✓ `%s` を追加した — %s\n' "$(report_value N)" "$TARGET" ;;
     done)    printf '✓ `%s` を完了にした — %s\n' "$OP_ID" "$TARGET" ;;
-    note)    printf '✓ `%s` に更新行を積んだ — %s\n' "$OP_ID" "$TARGET" ;;
+    note)    printf '✓ `%s` に更新行を追記した — %s\n' "$OP_ID" "$TARGET" ;;
     archive) printf '✓ %s 件を `## 完了記録` へ移した — %s\n' "$nmove" "$TARGET" ;;
   esac
   print_head_size "$TARGET"
@@ -1783,7 +1789,7 @@ awk -v grouped="$ALL" -v nfiles="$nfiles" -v nmigr="$nmigrated_out" -v nviol="$n
   # 毎セッションの実費は**トークン**。行は出さない(言語構成で 2 倍以上ブレる代理指標)。
   # 項目が0件のリポジトリでもここだけは出す。
   function head_table(r,   i, f, p, verdict) {
-    print ""; print "### 頭のサイズ(SessionStart が注入する範囲)"; print ""
+    print ""; print "### 冒頭のサイズ(SessionStart が注入する範囲)"; print ""
     print "| ファイル | 文字 | 概算tok | 判定 |"
     print "|---|---|---|---|"
     for (i = 1; i <= n; i++) {
@@ -1792,7 +1798,7 @@ awk -v grouped="$ALL" -v nfiles="$nfiles" -v nmigr="$nmigrated_out" -v nviol="$n
       p = f[4]; sub("^" root[r] "/", "", p)
       # 判定は「重い順に1つだけ」。マーカー無し > 切り詰め > 文字が目安超 > トークン超。
       # 複数出すと**どれから直せばいいかが消える**(表の1セルに収める以上、順位付けが要る)。
-      if (f[6] != "1") verdict = (f[7] == "1" ? "✗ マーカー無し = 注入が停止中" : "⚠️ マーカー無し(頭/カタログの境界が無い)")
+      if (f[6] != "1") verdict = (f[7] == "1" ? "✗ マーカー無し = 注入が停止中" : "⚠️ マーカー無し(冒頭/詳細部の境界が無い)")
       else if (f[5] + 0 > hard_chars) verdict = "✗ " comma(hard_chars) "字超 — 無言に切り詰められている(#70460)"
       else if (f[5] + 0 > warn_chars) verdict = "⚠️ 目安 " comma(warn_chars) "字 超"
       else if (f[9] + 0 > warn_tok) verdict = "⚠️ 予算 " comma(warn_tok) " tok 超(毎セッションの実費)"
@@ -1883,7 +1889,7 @@ awk -v grouped="$ALL" -v nfiles="$nfiles" -v nmigr="$nmigrated_out" -v nviol="$n
       print ""; print "### 整理対象 (" cnt3 ")"; print ""
       if (cnt3 == 0) print "(なし)"
       else {
-        print "完了 `[x]` は閉じた時点で「頭」に置く理由が消える —— カタログ部か log.md へ移す候補。"
+        print "完了 `[x]` は閉じた時点で「冒頭」に置く理由が消える —— 詳細部か log.md へ移す候補。"
         print "対象: " ids (noevi > 0 ? "(うち証拠行なし " noevi " 件)" : "")
         print "**移すのは `/harness:tidy` の仕事。** next は読んで出すだけで動かさない。"
       }
