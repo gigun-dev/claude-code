@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.3.0 (配布元: gigun-dev/claude-code plugins/harness)
+# harness-template v0.4.0 (配布元: gigun-dev/claude-code plugins/harness)
 #   — 着手順ボード(2カラムの高密度 HTML)を nd-tasks.sh の JSON から**決定論的に**生成する。
 #
 # 【なぜスクリプト化するか(原則3: 予算を先に置くと規律が要らなくなる)】
@@ -86,6 +86,8 @@
 #        「とりあえず details に入れる」が再発する。**機構ごと消す**方が構造的に強い。
 #
 # (3) 頭サイズを「N件 超過」からミニ棒グラフ2本にした。
+#     ⚠️ **v0.4.0 でこの2本は「トークン1本」に減った**(常時は文字のバーを出さない)。
+#        理由は下の「v0.4.0 で変えた2点」(2)。ここは v0.2.0 時点の記録として残してある。
 #     「2件 超過」は**予算に対する現状**を1文字も伝えていない(8,001字なのか 30,000字なのか
 #     区別できない)。ND ファイルごとに文字/トークンの2本を描き、警告(8,000字・3,000tok)と
 #     **切り詰め(10,000字)の位置に縦マーカー**を立てる —— 「あと何文字で無言切り詰めか」は
@@ -170,13 +172,93 @@
 #      (原則2: 投機的な汎用化はコードの重みに見合わない)。<body> に実際に属性が付く変更が
 #      入ったときに、このコメントごと見直せばよい。
 #
+# =============================================================================
+# 【v0.4.0 で変えた2点 —— ユーザーレビュー(2026-08-10)への回答】
+# =============================================================================
+#
+# (1) 実機幅(390 / 430px)に対応した。**それまで一度も実機幅で測っていなかった。**
+#     v0.3.0 で --fragment(claude.ai Artifact 経由でスマホから見るための機能)を足した
+#     にもかかわらず、レイアウトは PC 幅前提のままだった —— 測ってみたら
+#     **390px で document.scrollWidth が 4,554px**、つまり画面の 11.7 倍に横スクロールしていた。
+#     機能を足した幅で一度も測っていなかった、という原則4そのままの穴。
+#
+#     犯人は1行だった: `@media (max-width:520px){.boards{grid-template-columns:1fr}}`。
+#     `1fr` は `minmax(auto,1fr)` の略で、この `auto` は **min-content 最小**を意味する。
+#     行は `white-space:nowrap` なので min-content = 最長行の全長(4,534px)になり、
+#     トラックがそこまで膨らむ。皮肉なことに、**この media query は狭い幅のために足したもの**
+#     で、広い幅で効いている `minmax(460px,1fr)` の方は最小が明示値なので膨らまない
+#     (だから 768px と 1440px では溢れず、狭い幅でだけ壊れていた)。
+#     → `minmax(0,1fr)` にするだけで scrollWidth は 390px ちょうどに落ちる(実測)。
+#
+#     ⚠️ **ただし溢れが消えただけでは読めない。**トラックが縮むと今度は
+#        `text-overflow:ellipsis` が効いて、390px では本文の表示幅が 250px 前後 ——
+#        ほぼ全行が「…」で潰れる。そこで**狭い幅では行を折り返す**ことにした。
+#     ⚠️ **折り返しとレール(罫線の縦線)は両立しない。**レールが縦に繋がって見える前提は
+#        「全行が同じ高さ = 1行」で、折り返した瞬間に行の高さが 1〜3行ぶんバラつき、
+#        1文字ぶんの高さしかない罫線字形の間に隙間が空く(= 鎖に見える。v0.2.0 で
+#        画素まで数えて潰した壊れ方が、そのまま復活する)。
+#        採った案: **狭い幅ではレールを畳む(display:none)。**依存の情報は
+#        バッジ(⇠ X 待ち / ⇐ X ✔)が名指しで持っているので、消えるのは
+#        「どこからどこへ跨いでいるか」という構造だけ。**縦に細長い画面では、
+#        そもそも上流の行と下流の行が同時に画面へ入らない**ので、レールが本来の仕事
+#        (2点を目で繋ぐ)をできる場面が少ない —— 失うものが小さい側を切った。
+#        ⚠️ ボツ案1: レールを罫線文字ではなく **CSS の border で描く**(縦線は
+#           `border-left` で高さいっぱいに伸びるので、行の高さがバラついても繋がる)。
+#           見送った理由は、角(╭╮╰╯)と ● の位置が「行の縦中央」になり、**折り返して
+#           3行になった行では角が本文の途中を指す**から。繋がってはいるが意味がズレる線を
+#           描くくらいなら、畳んで「無い」と分かる方がよい(原則4の精神 —— それらしい絵は
+#           何も無いより危険)。
+#        ⚠️ ボツ案2: 狭い幅では nowrap のまま横スクロールさせる(overflow-x:auto)。
+#           **横スクロールを出さないことが今回の要件**だし、スマホで横スクロールする表は
+#           「読めない」と同義。
+#     ⚠️ 折り返しモードでは行を flex から**素の段落(display:block)**に戻している。
+#        flex のままだと本文とバッジが同じ1本の flex 行に並び、バッジの幅ぶん本文が
+#        削られる(バッジは flex:none なので縮まない)。block に戻せば本文もバッジも
+#        同じ行組みに乗り、**幅が足りなくなった所で自然に次の行へ流れる**。
+#        ⚠️ そのとき `text-indent` を負にしてぶら下げインデントにするが、バッジ(inline-block)
+#           には `text-indent:0` を打ち直すこと —— text-indent は継承するので、打ち直さないと
+#           バッジの中の文字だけが左へ 1.7em ずれて枠から飛び出す。
+#     ⚠️ 切り替え点は **560px**。根拠は「1カラムになったボードの本文幅が、PC(1440px・
+#        2カラム)の本文幅 380px を下回る点」= 幅 570px 前後(実測: 1440px でも 27行中 15行は
+#        既に ellipsis で畳まれており、それがユーザーの受け入れている水準)。つまり
+#        **PC より読みづらくなった所から折り返す**という基準で、768px(タブレット縦)は
+#        本文 578px 取れるので PC より広く、レールも残る。
+#
+# (2) 頭サイズのバーを「トークン」1本だけにした(「文字」のバーを消した)。
+#     ユーザー指摘「文字より token only で良いのでは」。毎セッション実費として効くのは
+#     トークンで、文字はその近似でしかない —— **同じことを言う2本目**は面積の無駄。
+#     ⚠️ **ただし文字数を完全に捨てはしない。**文字にはトークンに無い意味が1つだけある:
+#        **10,000字を超えると SessionStart の stdout が無言で切り詰められる**(#70460)。
+#        これは「予算オーバー」ではなく**機能が壊れる閾値**で、トークン数からは分からない。
+#        そこで「**常時はトークンだけ、壊れているときだけ文字を出す**」にした:
+#          - 切り詰めが起きているときだけ ⚠ バッジを出す(数値付き)
+#          - 起きていなければ1文字も出さない(今回の主旨は情報を減らすことなので、
+#            「予算内です」という報告のために面積を使わない)
+#          - 判定材料が**取れない**ときは黙らない(原則4)。「切り詰め判定: 抽出できず」を
+#            出す —— 測れていないことを「予算内」と同じ顔(=無表示)にしない。
+#     ⚠️ **「10,000字を超えたか」を自分で計算してはいけなかった。**実装中に気づいた ——
+#        nd-tasks.sh は同じ比較を**頭注入型のフックがあるリポジトリでだけ**行っている。
+#        pointer 型(このリポジトリ自身がそう)では頭が SessionStart の stdout を通らず、
+#        **10,000字の壁が存在しない**ので、そこで鳴らすのは「存在しない機構を根拠にした
+#        警告」= 確かめても再現しない誤検知になる(nd-tasks.sh 側に、その誤検知を避けた
+#        経緯がコメントで残っている)。だからボードは判定せず、nd-tasks.sh の
+#        errors[] にある head-truncated を**文面ごとそのまま**出す。
+#        ⚠️ 丸投げにすると、向こうのコード名が変わった日に黙って何も出なくなる。
+#           独立した第二の計測(head_injection と head_chars)で毎回突き合わせ、食い違ったら
+#           stderr で鳴らす(表示は止めない)。原則4の「検知器を検証する」をここで払う。
+#        → **その結果、このリポジトリでは頭が何字でもバッジは出ない。**pointer 型だから。
+#           バッジの実物は合成 ND(.claude/hooks に頭注入型のフックを置いたもの)で確認した。
+#     ⚠️ 凡例(最下部 .meta)の「バーの縦線 = …」も**バッジが出ているときだけ**
+#        切り詰めの説明を足す。実物に無いものを説明に残すと、次に読む人は「バッジが
+#        出るはずなのに出ていない = 壊れている」と読む(説明と実物のズレが検知器を殺す)。
+#
 # 【依存(新規に増やさない)】
 #   bash + python3 + git。python3 は verify.sh・doctor が既に必須にしているので追加負担は無い。
 #   ⚠️ python3 が無い環境では**黙って劣化させず落とす**(原則4。「検査できなかった」を
 #      「合格」にしないのと同じで、「描けなかった」を「空のボード」にしない)。
 set -euo pipefail
 
-VERSION="0.3.0"
+VERSION="0.4.0"
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 NDTASKS="$SELF_DIR/nd-tasks.sh"
 # 予算の正典は plugins/harness/budgets.sh。**ここには数値を書かない**(nd-tasks.sh と同じ理由 ——
@@ -220,8 +302,17 @@ usage() {
   ⎇ name   = --branches 指定時のみ。その ID に言及する未マージのコミットがあるブランチ
   行の右端のレール(●─╮ │ ●─╯)= 依存辺。上流の行から下流の行へ。同じボード内のみ描く
              (アーカイブ済みへの辺は終点の行が無いのでバッジだけ)。
-  頭サイズのバー = ND の頭。縦線が予算(文字は警告と切り詰めの2本、トークンは1本)。
-             目盛りは全ボード共通なので、ボード同士を長さで比較できる。
+             ⚠️ **画面幅 560px 以下では畳む**(v0.4.0)。狭い幅では行を折り返すため、
+             全行が同じ高さという前提が崩れてレールが鎖に見える。依存の情報自体は
+             上のバッジ(⇠ / ⇐)に残るので、消えるのは「跨ぎ方」の絵だけ。
+  頭サイズのバー = ND の頭。**トークン1本だけ**(v0.4.0。毎セッションの実費はトークンで、
+             文字数は同じことの近似でしかない)。縦線が予算。目盛りは全ボード共通なので、
+             ボード同士を長さで比較できる。
+  ⚠ バッジ  = 頭が実際に切り詰められているときだけ出る(nd-tasks.sh の head-truncated を
+             そのまま表示する)。SessionStart の stdout は 10,000字超で**無言で**切り詰め
+             られる(#70460)—— 予算超過ではなく機能の破損なので、文字数はこの1点のために
+             だけ残してある。⚠️ **pointer 型のフック(頭を stdout に通さない配線)では
+             壁が無いので出ない** —— 判定条件は nd-tasks.sh 側が正典で、ここでは再計算しない。
   行をクリック = focus。上流(これを塞いでいるもの)と下流(これが解けると動くもの)を
              推移的に出す。もう一度クリック / Esc / ✕ で解除。全域グラフは描かない。
   「現在地」とカタログ目次は各ボードの下に**常時表示**(v0.2.0 で <details> を全廃した ——
@@ -389,8 +480,10 @@ JSON_PATH   = os.environ["BOARD_JSON"]
 OUT_PATH    = os.environ["BOARD_OUT"]
 BRANCH_PATH = os.environ.get("BOARD_BRANCHES", "")
 VERSION     = os.environ.get("BOARD_VERSION", "?")
-WARN_CHARS  = int(os.environ.get("BOARD_WARN_CHARS", "8000"))
 WARN_TOKENS = int(os.environ.get("BOARD_WARN_TOKENS", "3000"))
+# ⚠️ v0.4.0 で BOARD_WARN_CHARS(8,000字の警告)は**受け取らなくなった**。文字のバーを
+#    やめたので描く場所が無く、8,000字の警告そのものは nd-tasks.sh が違反として出している。
+#    使わない値を受け取り続けると「ここでも見ているはず」と読まれる(原則2・原則7)。
 # 切り詰めの壁(#70460)。バーの「ここを越えると無言で切られる」マーカーに使う。
 # ⚠️ 既定値を書いてはいるが、これは budgets.sh が読めない環境用の保険ではない ——
 #    シェル側が `[ -r "$BUDGETS" ]` で先に落としているので、実運用でこの既定は使われない。
@@ -409,6 +502,53 @@ with open(JSON_PATH, encoding="utf-8") as fp:
     data = json.load(fp)
 items = data.get("items", [])
 files = data.get("files", [])
+
+# =============================================================================
+# 頭の切り詰め(10,000字・#70460)—— **判定は自分でやらない**
+# =============================================================================
+# v0.4.0 で「文字のバーを消し、10,000字を超えたときだけ警告を出す」を実装するにあたり、
+# 素朴に `head_chars > 10000` を書きかけて**それが誤りだと分かった**:
+#   nd-tasks.sh は同じ比較を**頭注入型のフックがあるリポジトリでだけ**行っている
+#   (nd-tasks.sh の head_injection_mode / head-truncated の周辺コメントに経緯がある)。
+#   pointer 型(このリポジトリ自身がそう)では、頭は SessionStart の stdout を通らない
+#   ので **10,000字の壁がそもそも存在しない**。そこで警告を出すのは「存在しない機構を
+#   根拠に鳴らす」ことで、鳴った側が確かめても再現しない = 検知器が信用を失う。
+# したがってボードは**判定せず、nd-tasks.sh が出した errors[] の head-truncated を
+# そのまま表示する**(原則7: 同じ判断を2箇所に置かない。閾値も文面も向こうが正典)。
+#
+# ⚠️ ただし「向こうに任せる」と、コード名が変わった日に**黙って何も出なくなる**。
+#    そこで独立した第二の計測(head_injection と head_chars)で突き合わせ、食い違ったら
+#    stderr で鳴らす —— 表示は常に nd-tasks 側に従い、**この照合は表示を止めも足しもしない**
+#    (原則4: 検知器を検知器で検証する。ただし検証が本体の邪魔をしないこと)。
+TRUNC_CODE = "head-truncated"
+trunc_msg = {}          # file パス -> nd-tasks が書いた警告文(そのまま出す)
+for e in data.get("errors", []):
+    if e.get("code") == TRUNC_CODE and e.get("file"):
+        trunc_msg.setdefault(e["file"], e.get("message") or "")
+
+def _cross_check_trunc():
+    """nd-tasks の判定と、こちら側の素朴な再計算がズレていないかを見る(表示には影響しない)。
+
+    こちら側の再計算 = 「頭注入型 かつ head_chars > 10,000字」。nd-tasks の判定条件を
+    **同じ材料から独立に組み立て直した**もので、一致するのが正常。ズレる原因は2つとも
+    知りたい類のもの: (a) 向こうのコード名/条件が変わった、(b) JSON に head_injection が
+    無い古い nd-tasks と組み合わされた。どちらも「黙って何も出ない」で通してよくない。
+    """
+    for f in files:
+        p, ch = f.get("file", ""), f.get("head_chars")
+        mine = bool(f.get("head_injection")) and ch is not None and ch > HARD_CHARS
+        theirs = p in trunc_msg
+        if mine == theirs:
+            continue
+        # 名前の付け方は他の警告(extract_archived の label)と揃える。単一プロダクト型では
+        # dirname が "docs" になってしまい、どのリポジトリの話か分からない。
+        warn("切り詰め判定が食い違っている: %s —— nd-tasks は %s、こちらの再計算は %s"
+             "(head_injection=%r, head_chars=%r, 壁=%d)。表示は nd-tasks 側に従う。"
+             % (f.get("component") or f.get("repo") or p,
+                "出している" if theirs else "出していない",
+                "超過" if mine else "非超過",
+                f.get("head_injection"), ch, HARD_CHARS))
+_cross_check_trunc()
 
 # =============================================================================
 # ND 全文の読み込み(ファイルにつき1回だけ)
@@ -928,12 +1068,16 @@ def render_row(it, is_next, rail):
         "".join(parts),
     )
 
-# --- 頭サイズのミニ棒グラフ -----------------------------------------------------
+# --- 頭サイズのミニ棒グラフ(v0.4.0: トークン1本だけ) ----------------------------
 # 「N件 超過」を捨ててバーにした理由はファイル冒頭 (3)。ここでの設計上の要点は2つ:
-#   (a) **目盛りは全ボード共通**(下の SCALE_*)。ボードごとに正規化すると 8,934字 と
-#       3,825字 のバーが同じ長さになり、棒グラフである意味が消える。
+#   (a) **目盛りは全ボード共通**(下の SCALE_TOKENS)。ボードごとに正規化すると
+#       ≒7,754 tok と ≒3,057 tok(2026-08-10 の実測値)のバーが同じ長さになり、
+#       棒グラフである意味が消える。
 #   (b) 予算は**マーカー(縦線)**であって上限ではない。バーは予算を超えたら超えた分だけ
 #       伸びる —— 「予算で頭打ち」に描くと、2倍超過と 1.01倍超過が同じ絵になる。
+# v0.4.0 で「文字」のバーを落としたので **SCALE_CHARS は無くなった**(使わない目盛りを
+# 計算だけ残すと、次に読む人が「どこかで使っているはず」と探す時間を払う。原則2)。
+# 文字数は「10,000字を超えたか」の1点でしか使わず、それは目盛りを必要としない。
 def _scale(values, floor):
     """目盛りの上端。予算(floor)と実測の最大値の**大きい方**を基準に少し余白を足す。
 
@@ -942,7 +1086,6 @@ def _scale(values, floor):
     """
     return max([floor] + [v for v in values if v]) * 1.08
 
-SCALE_CHARS  = _scale([f.get("head_chars") for f in files], HARD_CHARS)
 SCALE_TOKENS = _scale([f.get("head_tokens_est") for f in files], WARN_TOKENS)
 
 def _pct(v, scale):
@@ -960,21 +1103,36 @@ def bar(label, cur, budget, scale, unit, marks):
                "{:,}".format(cur), "{:,}".format(budget), unit))
 
 def size_bars(meta):
-    if meta.get("head_chars") is None:
-        # 空欄にしない(原則4)。頭が測れていないのは「予算内」ではなく「測れていない」。
-        return '<div class="bar-miss">頭サイズ: %s(files[] に head_chars が無い)</div>' % MISSING
-    out = bar("文字", meta["head_chars"], WARN_CHARS, SCALE_CHARS, "字",
-              [(WARN_CHARS, "", "警告 %s字(予算)" % "{:,}".format(WARN_CHARS)),
-               (HARD_CHARS, "hard", "切り詰め %s字 —— SessionStart の stdout はここを超えると"
-                                    "無言で切られる(#70460)" % "{:,}".format(HARD_CHARS))])
+    """頭サイズの表示。**常時出るのはトークンのバー1本だけ**(v0.4.0)。
+
+    文字のバーを消した理由と、文字数を完全には捨てない理由はファイル冒頭の v0.4.0 (2)。
+    要約すると: 毎セッションの実費はトークンで、文字数はその近似 = 2本目は面積の無駄。
+    ただし文字にはトークンから読めない意味が1つある —— **10,000字超で SessionStart の
+    stdout が無言で切り詰められる**(#70460)。これは予算超過ではなく機能の破損なので、
+    「壊れているときだけ」出す。**判定も文面も nd-tasks.sh のものを借りる**(上の
+    trunc_msg。素朴な `head_chars > 10000` が誤りである理由はそこのコメント)。
+    8,000字(警告)の方はここには出さない: あれは切り詰めではなく予算の話で、
+    nd-tasks.sh が違反として既に出している(原則7: 同じ閾値を2箇所で描かない)。
+    """
     tk = meta.get("head_tokens_est")
     if tk is None:
         # **0 として描かない。**「0 tok」は「予算内」に見えるが、実際は測れていない
         # (トークン概算はベンダー固有なので、配布先の JSON に無いことがありうる)。原則4。
-        out += '<div class="bar-miss">トークン: %s(files[] に head_tokens_est が無い)</div>' % MISSING
+        out = '<div class="bar-miss">トークン: %s(files[] に head_tokens_est が無い)</div>' % MISSING
     else:
-        out += bar("トークン", tk, WARN_TOKENS, SCALE_TOKENS, " tok",
-                   [(WARN_TOKENS, "", "予算 %s tok(毎セッションの実費)" % "{:,}".format(WARN_TOKENS))])
+        out = bar("トークン", tk, WARN_TOKENS, SCALE_TOKENS, " tok",
+                  [(WARN_TOKENS, "", "予算 %s tok(毎セッションの実費)" % "{:,}".format(WARN_TOKENS))])
+    msg = trunc_msg.get(meta.get("file", ""))
+    if msg:
+        # ⚠️ バーにはしない。ここで言いたいのは「予算に対してどこか」ではなく
+        #    「**もう切れている**」という二値だから —— 目盛りを描くと程度の問題に見える。
+        # 文面は nd-tasks.sh が書いたものをそのまま出す(**強調と `code` だけ**変換する)。
+        # 自前で書き直すと、閾値・issue 番号・言い回しの3つが2箇所に増える。
+        out += '<div class="trunc">⚠ %s</div>' % inline(msg)
+    elif meta.get("head_chars") is None:
+        # 文字数が無い = **切り詰めが起きているかを判定できる材料が無い**。黙って「出さない」と
+        # 「超えていないから出さない」が同じ絵になるので、ここは鳴らす(原則4)。
+        out += '<div class="bar-miss">切り詰め判定: %s(files[] に head_chars が無い)</div>' % MISSING
     return out
 
 board_html = []
@@ -1050,10 +1208,22 @@ meta_line = (
     '<span>⇠ X 待ち = X(未完了)に依存 → 着手できない</span>'
     '<span>⇐ X ✔ = X に依存。X は完了済み(着手順の <code>[x]</code> か完了記録)</span>'
     '<span>⇐ X = X が ND のどこにも無い(散文中の例 / 書き間違い)</span>'
+    # レールは狭い幅(560px 以下)では畳んである。**凡例も一緒に畳む** —— 画面に無いものを
+    # 説明したまま残すと、読み手は「出るはずのものが出ていない = 壊れている」と読む。
+    # 代わりに、狭い幅でだけ見える説明を同じ場所へ置く(切り替えは CSS 側の1箇所)。
     '<span class="rail-legend">●─╮ │ ●─╯ = 依存辺。上流の行から下流の行へ</span>'
-    '<span>バーの縦線 = 予算(文字は警告 %s / 切り詰め %s、トークンは %s)</span>'
-    % ("{:,}".format(WARN_CHARS), "{:,}".format(HARD_CHARS), "{:,}".format(WARN_TOKENS))
+    '<span class="rail-legend-narrow">依存辺のレールは狭い幅では畳んである'
+    '(行を折り返すと縦線が繋がらないため)。依存は上の ⇠ / ⇐ バッジで読む</span>'
+    '<span>バーの縦線 = 頭のトークン予算 %s tok(毎セッションの実費)</span>'
+    % "{:,}".format(WARN_TOKENS)
 )
+# 切り詰めの説明は**バッジが実際に出ているときだけ**。1枚も出ていない画面に
+# 「⚠ = …」とだけ書いてあると、次に読む人は出ていないバッジを探しに行く(原則4)。
+# ⚠️ 条件は「バッジを出したか」そのもの(trunc_msg)にしてある。閾値をここで再計算すると、
+#    バッジ側と条件がズレた日に「凡例だけある」が起きる。
+if trunc_msg:
+    meta_line += ('<span>⚠ = 頭が %s字を超え、SessionStart の stdout が無言で'
+                  '切り詰められている(#70460)</span>' % "{:,}".format(HARD_CHARS))
 if branches:
     meta_line += '<span>⎇ = %s に未マージのコミットがあるブランチ</span>' % html.escape(BASE_BRANCH or "基準ブランチ")
 meta_line += '<span>行をクリック → 上流/下流(Esc で解除)</span>'
@@ -1063,7 +1233,11 @@ note = (
     "依存は自由文から %d 本だけ抽出できる(機械可読フィールドは 0。<code>H-15</code> が入ったら "
     "<code>render-board.sh</code> の <code>extract_edges()</code> だけを差し替える)。"
     "全域グラフを描かないのは、29項目のノードが画面に収まらず順序が消えるのを実測したため —— "
-    "レールが描くのは**同じボードの中で行から行へ跨ぐ辺だけ**で、近傍の全体が要るときは行をクリックする。"
+    # note は生 HTML を組み立てる文字列なので inline() を通していない(<code> が二重エスケープ
+    # される)。よって markdown の ** は変換されず、画面にそのまま出ていた(v0.2.0〜v0.4.0 の
+    # 表示バグ)。ここでは素直に <strong> を直書きする —— note だけのために inline() を
+    # 「HTML を素通しする」版に分岐させると、エスケープの穴を作る側の変更になる。
+    "レールが描くのは<strong>同じボードの中で行から行へ跨ぐ辺だけ</strong>で、近傍の全体が要るときは行をクリックする。"
 ) % len(edges_all)
 if archived_e:
     note += (
@@ -1120,7 +1294,11 @@ TEMPLATE_BODY = """<title>harness 着手順ボード</title>
   --card:#ffffff; --accent:#3e7c4f; --warn:#b0821f;
 }
 body{background:var(--paper);color:var(--ink);font-family:-apple-system,'Hiragino Sans','Noto Sans JP',sans-serif;
-  line-height:1.6;margin:0;padding:2rem 1.25rem 3rem;}
+  line-height:1.6;margin:0;padding:2rem 1.25rem 3rem;
+  /* iOS Safari の自動文字拡大を止める(v0.4.0)。横長の要素があると Safari は本文だけを
+     勝手に大きくするので、幅の計算(下の狭い幅モード)と実機の見た目がズレる。
+     デスクトップでは無効なので、PC 幅の見た目は変わらない(幾何の実測でも差 0)。 */
+  -webkit-text-size-adjust:100%;text-size-adjust:100%;}
 main{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:1.5rem;}
 header h1{font-size:1.3rem;margin:0 0 .2rem;}
 header p{margin:0;color:var(--sub);font-size:.8rem;}
@@ -1135,7 +1313,14 @@ header p{margin:0;color:var(--sub);font-size:.8rem;}
 .tile .v small{font-size:.72rem;color:var(--sub);font-weight:400;}
 .tile.warn .v{color:var(--warn);}
 .boards{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:1rem;align-items:start;}
-@media (max-width:520px){.boards{grid-template-columns:1fr;}}
+/* ⚠️ **`1fr` と書いてはいけない。**`1fr` は `minmax(auto,1fr)` の略で、この `auto` は
+   min-content 最小 = 「トラックは中身の最小幅より小さくならない」を意味する。行は
+   white-space:nowrap なので min-content が最長行の全長になり、**390px の画面で
+   scrollWidth が 4,554px** まで膨らんでいた(v0.3.0 の実測。横スクロールの唯一の原因が
+   これ1行だった)。上の広い幅用 `minmax(460px,1fr)` が無事なのは最小が明示値だからで、
+   **狭い幅のために足した行だけが狭い幅を壊していた**。
+   `minmax(0,1fr)` にすると scrollWidth はちょうど画面幅に収まる(390 / 430px で実測)。 */
+@media (max-width:520px){.boards{grid-template-columns:minmax(0,1fr);}}
 .board{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:.65rem .9rem .8rem;}
 .board h2{font-size:.78rem;letter-spacing:.06em;color:var(--sub);margin:.1rem 0 .45rem;
   text-transform:uppercase;display:flex;justify-content:space-between;}
@@ -1184,6 +1369,8 @@ li.blocked{opacity:.5;}
       強調は**色だけ**で行う。 */
 .rail i.hot{color:var(--warn);}
 .rail-legend{font-family:var(--mono);}
+/* レールを畳んだ狭い幅でだけ出す代替の凡例。既定は消しておく(下の狭い幅モードで入れ替える)。 */
+.rail-legend-narrow{display:none;}
 .br{font-family:var(--mono);font-size:.72em;color:var(--sub);border:1px dashed var(--line);
   border-radius:3px;padding:0 .35em;margin-left:.3em;flex:none;}
 /* focus 中の強調。色は既存トークンの上に薄い面を敷くだけで、両テーマで破綻しない値にした。 */
@@ -1194,6 +1381,13 @@ li.hl-down{background:rgba(62,124,79,.14);}
 /* --- 頭サイズのミニ棒グラフ ---------------------------------------------------
    単色の div とマーカー線だけ。ライブラリも SVG も使わない —— 必要なのは「予算に対して
    どこにいるか」の一目で、目盛り・凡例・ツールチップの効いたグラフではない。 */
+/* ⚠️ v0.4.0(バー2本→1本)で余白を測り直した結果、**数値は1つも変えていない**。
+   根拠: 上下の空きは `.extra` の padding-top .5rem + `.bar` の margin .15rem = 約10px で
+   上下対称。**2本ぶんの都合で入れた値が1つも無かった**(`.bar` の margin は「隣のバー」
+   ではなく罫線と本文との間隔のために効いており、1本でも同じ仕事をしている)。
+   `.bk` の 4.2em も、残った方の「トークン」がちょうど収まる幅。
+   ズレていないものを「1本になったから」という理由だけで動かすと、次に読む人は
+   その数値に意味があると読む —— 測って変更不要だったことを記録する方を採った。 */
 .bars{margin-bottom:.5rem;}
 .bar{display:flex;align-items:center;gap:.5em;font-size:.7rem;color:var(--sub);
   font-variant-numeric:tabular-nums;margin:.15rem 0;}
@@ -1209,6 +1403,12 @@ li.hl-down{background:rgba(62,124,79,.14);}
 .bar.over .bv{color:var(--warn);}
 .bar .bv small{opacity:.7;}
 .bar-miss{font-size:.7rem;color:var(--warn);margin-bottom:.4rem;}
+/* 切り詰めバッジ(v0.4.0)。**バーではなく枠付きの一行**にしてある —— 言いたいのは
+   「予算に対してどこか」ではなく「もう切れている」という二値で、目盛りを描くと
+   程度の問題に見えてしまう。出るのは nd-tasks.sh が head-truncated を報告したときだけ
+   (= 頭注入型のフックがあり、かつ 10,000字超。判定はこちらでは行わない)。 */
+.trunc{font-size:.7rem;color:var(--warn);border:1px solid var(--warn);border-radius:3px;
+  padding:.12rem .45rem;margin-top:.25rem;}
 /* --- 現在地 / カタログ目次(v0.2.0: 折りたたみ要素を廃して常時表示)--------------
    ⚠️ **テンプレートの中では、廃した HTML 要素の名前を綴らない**(コメントでも)。
       「出力に折りたたみが1つも無い」は grep で検証する項目なので、コメントが
@@ -1238,8 +1438,10 @@ li.hl-down{background:rgba(62,124,79,.14);}
 .focus .ft .id{font-family:var(--mono);color:var(--accent);margin-right:.5em;}
 .focus .crit{font-size:.8rem;color:var(--sub);margin-top:.3rem;}
 .focus h3{font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--sub);margin:.6rem 0 .15rem;}
+/* 1カラムへの切り替えは下の「狭い幅モード」に集約した(v0.4.0)。切り替え点を 520 と 560 の
+   2つ持つと、その 40px の帯だけ「行は折り返すのに focus は2カラム」という誰も見ていない
+   組み合わせができる。**幅の分岐は1本にする。** */
 .fcols{display:grid;grid-template-columns:1fr 1fr;gap:.9rem;}
-@media (max-width:520px){.fcols{grid-template-columns:1fr;}}
 .focus li{white-space:normal;cursor:default;font-size:.82rem;}
 .focus li .id{font-family:var(--mono);font-size:.78em;color:var(--sub);flex:none;width:3.6em;}
 .focus li.done{color:var(--sub);}
@@ -1247,6 +1449,69 @@ li.hl-down{background:rgba(62,124,79,.14);}
 .meta{display:flex;gap:1.2rem;flex-wrap:wrap;font-size:.78rem;color:var(--sub);}
 .note{font-size:.8rem;color:var(--sub);margin:0;}
 code{font-family:var(--mono);font-size:.85em;}
+/* =============================================================================
+   狭い幅モード(v0.4.0)—— 実機のスマホ(390 / 430px)で読めるようにする
+   =============================================================================
+   【なぜ 560px か】
+     ここは「PC より読みづらくなった所」。1440px の PC では板が2カラムなので本文の幅は
+     380px 前後で、そこでも 27行中 15行は既に ellipsis で畳まれている —— それが
+     受け入れられている水準。1カラムのボードの本文幅が 380px を割るのが幅 570px あたり
+     なので、切り上げて 560px で折り返しへ倒す。768px(タブレット縦)は本文が 578px 取れて
+     PC より広いので、そちらは畳まない = レールも残る。
+
+   【何を変えるか(2つだけ)】
+     (a) 行を flex から**素の段落**に戻して折り返す。flex のままだとバッジ(flex:none)が
+         幅を先取りして本文がさらに細くなる。block に戻せば本文もバッジも同じ行組みに乗る。
+     (b) レール(罫線の縦線)を畳む。**折り返しと両立しない** —— 縦線が繋がって見える前提は
+         「全行が1行の高さ」で、行が 2〜3行になると罫線字形の間に隙間が空いて鎖に見える
+         (v0.2.0 で画素まで数えて潰した壊れ方が復活する)。依存の情報はバッジが名指しで
+         持っているので、失うのは「どこからどこへ跨いでいるか」の絵だけ。しかも縦に細長い
+         画面では上流の行と下流の行が同時に入らないことが多く、その絵は元々働けない。
+         ボツ案・詳細はファイル冒頭の v0.4.0 (1)。
+   ============================================================================= */
+@media (max-width:560px){
+  /* 左右の余白を詰めて本文へ回す(2rem→1.25rem で 16px、390px 画面では本文の +6%)。 */
+  body{padding:1.25rem .75rem 2rem;}
+  /* 長い英数字トークン(HARNESS_BOARD_BASE / next-directions.md 等)は日本語と違って
+     どこでも折り返せないので、そのままだと1語で画面を突き破る。狭い幅でだけ許可する
+     —— 広い幅で anywhere を効かせると、単語の途中で切れて読みにくくなる。 */
+  main{overflow-wrap:anywhere;}
+  .boards{gap:.7rem;}
+  .board{padding:.6rem .7rem .7rem;}
+  /* (a) 行 = 段落。padding-left と負の text-indent でぶら下げインデントにし、
+     折り返した2行目以降を ■/☐ の右へ揃える(行の始まりが目で追える)。
+     縦の padding を .08rem → .35rem に増やしているのは**タップ標的**のため
+     (指で押す対象が 21px は狭い。折り返しで行が高くなるぶんと合わせて 30px 以上を確保)。 */
+  .board > ul > li{display:block;white-space:normal;padding:.35rem 0 .35rem 1.7em;
+    text-indent:-1.7em;}
+  .board > ul > li .g{display:inline;width:auto;margin-right:.3em;}
+  .board > ul > li .id{display:inline;width:auto;margin-right:.45em;}
+  /* ellipsis を解除する。overflow:hidden も一緒に外さないと、折り返した2行目以降が
+     1行ぶんの高さに切り取られて**消える**(hidden は縦にも効く)。
+     ⚠️ ボツ案: `-webkit-line-clamp:3` で3行に畳む。この正典には本文が 400字ある項目が
+        実在し(H-22 / H-32)、390px では 1行が 10行になる —— 一覧性は確かに落ちる。
+        それでも採らなかった理由は2つ: (1) clamp は **黙って消す**方式に戻ること
+        (原則4。ellipsis を嫌ってここまで来たのに、行数を変えただけの同じ穴に落ちる)、
+        (2) 行が長いのはボードの欠陥ではなく**その ND の1行が 400字ある**という事実で、
+        直す場所は正典の側。長い行が長く見えるのは、むしろ正しい報告。
+        (`-webkit-box` が必要で下のぶら下げインデントと両立しない、という実務上の
+         理由もあるが、それは決め手ではない。) */
+  .board > ul > li .t{display:inline;overflow:visible;text-overflow:clip;}
+  /* ⚠️ text-indent は継承する。バッジ側で 0 に打ち直さないと、枠の中の文字だけが
+     左へ 1.7em ずれて枠から飛び出す(実測で確認した罠)。 */
+  .board > ul > li .dep,.board > ul > li .br{display:inline-block;text-indent:0;}
+  /* (b) レールと、その凡例を畳む。**画面に無いものを説明に残さない。** */
+  .rail{display:none;}
+  .rail-legend{display:none;}
+  .rail-legend-narrow{display:inline;}
+  /* タイルは2枚が並ぶと数値が ellipsis で潰れるので、1枚ずつ横いっぱいに置く。 */
+  .tile{flex:1 1 100%;min-width:0;}
+  .tile .v{white-space:normal;}
+  /* focus は縦積み。上流/下流を横に並べると 1カラムあたり 160px しか無く読めない。 */
+  .fcols{grid-template-columns:1fr;gap:.5rem;}
+  /* 凡例は縦に積む(横並びの gap 1.2rem は狭い画面では隙間ばかりになる)。 */
+  .meta{gap:.35rem .9rem;font-size:.74rem;}
+}
 </style>
 <main>
 <header>
@@ -1348,6 +1613,17 @@ __BOARDS__
       panel.appendChild(cols);
     }
     panel.hidden = false;
+    // focus パネルはボードの**上**に置いてある。下の方の行を押したとき、パネルは画面の外で
+    // 開くので「押したのに何も起きない」ように見える —— 縦に長いスマホでは1画面に数行しか
+    // 入らないので、ほぼ必ずそうなる(v0.4.0 で実機幅を触って気づいた)。
+    // ⚠️ **見えていないときだけ**動かす。無条件に呼ぶと、PC で最上部の行を押しただけで
+    //    画面がガタつく(既定の block:"start" ではなく "nearest" なのも同じ理由 ——
+    //    必要な最小量しかスクロールしない)。
+    // ⚠️ ボツ案: パネルを position:sticky で常に画面へ貼り付ける。ボードの一番上に居座って
+    //    狭い画面の高さを恒久的に食うので、読むための面積を守る側を採った。
+    var pr = panel.getBoundingClientRect();
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    if (pr.top < 0 || pr.bottom > vh) panel.scrollIntoView({block: "nearest", behavior: "smooth"});
     if (rows[id]) rows[id].className += " sel";
     u.forEach(function(n){ if (rows[n]) rows[n].className += " hl-up"; });
     d.forEach(function(n){ if (rows[n]) rows[n].className += " hl-down"; });
@@ -1415,7 +1691,6 @@ BOARD_JSON="$tmp/tasks.json" \
 BOARD_OUT="$OUT" \
 BOARD_BRANCHES="$tmp/branches" \
 BOARD_VERSION="$VERSION" \
-BOARD_WARN_CHARS="$HEAD_WARN_CHARS" \
 BOARD_WARN_TOKENS="$HEAD_WARN_TOKENS" \
 BOARD_HARD_CHARS="$HEAD_HARD_CHARS" \
 BOARD_BASE="${BASE:-}" \
