@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# harness-template v0.20.0 (配布元: gigun-dev/claude-code plugins/harness)
+# harness-template v0.21.0 (配布元: gigun-dev/claude-code plugins/harness)
 #   — next-directions.md の「着手順」節を読んで一覧化し(読み取り専用)、
-#     ID 指定で「着手順」節と「完了記録」節**だけ**を書き換える(--add / --done / --note / --archive)。
+#     ID 指定で「着手順」節と「完了記録」節**だけ**を書き換える
+#     (--add / --done / --note / --rewrite / --archive)。
 #
 # 書き込み側の設計意図(2026-08-07 追加):
 #   **スクリプトを唯一の書き手にする。** それまで着手順の項目はエージェントが手で書いており、
@@ -9,6 +10,18 @@
 #   最後」といった**手で書くときに間違えないための説明**が約20行あった。書式を機械が書けば
 #   ドリフトは構造的に起きなくなり、散文の側は消せる(公式 agentskills.io のスクリプト化基準:
 #   「一発で正しく書けないほど複雑」「毎回同じロジックを再発明している」に合致する)。
+#
+# --rewrite を足した理由(2026-08-12 追加):
+#   **書き込み操作4つは、どれも項目を短くできなかった。**--note は積むだけ、--archive は
+#   `[x]` になるまで動かせない、--add / --done は増やす方向。結果、着手中の項目は
+#   更新行が積まれるほど太る一方で、実測で正典の冒頭が **10,538字**(うち着手順 9,113字
+#   = 86%)まで育った。冒頭は **10,000字を超えると無言で切り詰められる**(#70460 / #84021)
+#   ので、後半は実際に次のセッションへ届いていなかった。
+#   **「着手順を書き換えてよいのはこのスクリプトだけ」と決めた以上、縮める操作が無いのは
+#   仕様の穴。**手で縮めさせると書式がドリフトし、読み取り側が黙って壊れる。
+#   → `--rewrite <ID> "<新しい本文>" [--criteria "<新しい完了条件>"]` を足した。
+#     本文と(指定時のみ)完了条件を差し替え、`> **… 更新:**` を全部落とす。
+#     **証拠行・チェック状態・ID・並び順は保つ。**
 #
 #   **不変条件は4つ。実装として守れなければ失敗とみなす:**
 #     1. **ID は再利用しない。** 採番は「着手順」だけでなく**ファイル全体**(完了記録・カタログ部
@@ -38,7 +51,7 @@
 #   実在するので、机上の空論ではない。
 #
 #   **read-modify-write 全体を排他ロックで包む。** 対象は書き込み操作
-#   (--add / --done / --note / --archive)だけ —— 一覧 / --lint / --format json のような
+#   (--add / --done / --note / --rewrite / --archive)だけ —— 一覧 / --lint / --format json のような
 #   読み取り経路には一切入らない(下で acquire_lock を呼ぶのは書き込みブロックの中だけ)。
 #   読み取りは `/harness:status` や `!` 記法で毎回無条件に走るので、そこがロック待ちで
 #   詰まると体験そのものが壊れる。書き込みは滅多に起きず、待っても実害が薄い。
@@ -259,6 +272,17 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
   --note <ID> "<本文>"
                   その項目の末尾に `> **YYYY-MM-DD 更新:** <本文>` を追記で足す。
                   完全に同一の行が既にあれば足さない(二重実行での重複を防ぐ)。
+  --rewrite <ID> "<新しい本文>" [--criteria "<新しい完了条件>"]
+                  **既に書いた項目を短くする唯一の操作**(冒頭は 10,000字を超えると
+                  無言で切り詰められるので、縮める手段が要る)。その項目の本文
+                  (概要 + ぶら下がる散文)を差し替え、その項目の
+                  `> **YYYY-MM-DD 更新:**` を**すべて削除**する。
+                  --criteria があれば `→ 完了条件:` も差し替え、無ければ**現状のまま**。
+                  **保つもの: チェック状態 `[ ]`/`[x]`・ID・証拠行・項目の並び順。**
+                  置き換えた本文と削除した更新行は**全文を stderr へ出す**(黙って消さない)。
+                  実行後に冒頭の文字数の増減を出す(例: `冒頭: 10,538 → 9,214字(-1,324)`)。
+                  本文が空、または行頭 `>` の行を含むときはエラー(更新行と混ざるため)。
+                  消す前に、残したい経緯は log.md へ移すこと(履歴は git にも残る)。
   --archive [--apply]
                   **証拠行を持つ `[x]` 項目**を「着手順」から `## 完了記録` へ移す。
                   **既定は dry-run**(何がどこへ移るかを出すだけ)。実際に書き換えるのは
@@ -271,6 +295,8 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
               --criteria "dotfiles で誤検知が消え、claude-code では「無い」が残ること"
   nd-tasks.sh --done H-1 --evidence "2026-08-07 / 00b8686 / 使い捨て repo 3件で hooksPath が保たれることを実測"
   nd-tasks.sh --note H-5 "80行予算は後から足したので H-8 の整理結果は未達のまま"
+  nd-tasks.sh --rewrite H-22 "冒頭を予算内に戻す。経緯は log.md 2026-08-09 の節へ移した"
+  nd-tasks.sh --rewrite H-22 "冒頭を予算内に戻す" --criteria "冒頭が 8,000字を下回ること"
   nd-tasks.sh --archive                 # 何が移るかを見る
   nd-tasks.sh --archive --apply         # 実際に移す
   nd-tasks.sh --done H-1 --evidence "…" docs/harness/next-directions.md   # 対象を明示
@@ -341,7 +367,7 @@ ID を指定して同じ節を書き換える操作もここに集約してあ�
   1  違反あり(fail-closed の検知を含む)。冒頭のサイズ超過・--all の未移行は
      警告であって違反ではない
   2  使い方の誤り / 走査対象が1件も無い / 書き込み対象のファイルが1本に定まらない /
-     --done に --evidence が無い
+     --done に --evidence が無い / --rewrite の本文が空か行頭 `>` の行を含む
   3  書き込み操作の対象の状態が合わない —— **何も書いていない**。
      未知の ID / 「## 着手順」節が無い / 採番の接頭辞が決められない /
      「## 完了記録」を作る位置(session-head-end マーカー)が無い /
@@ -357,12 +383,18 @@ EXPLICIT=()       # 明示指定されたファイル(自動探索を上書き�
 
 # 書き込み操作。**対話プロンプトは一切出さない**(公式 agentskills.io の「スクリプトは
 # 入力を全部フラグで受ける」に従う。プロンプトを出すとエージェントからは無反応に見えて固まる)。
-OP=""             # "" | add | done | note | archive。同時に2つ指定したらエラー
-OP_ID=""          # --done / --note の対象 ID
+OP=""             # "" | add | done | note | rewrite | archive。同時に2つ指定したらエラー
+OP_ID=""          # --done / --note / --rewrite の対象 ID
 OP_SUMMARY=""     # --add の概要
-OP_CRITERIA=""    # --add の完了条件
+OP_CRITERIA=""    # --add / --rewrite の完了条件
 OP_EVIDENCE=""    # --done の証拠(何を確認したか)
 OP_NOTE=""        # --note の本文
+OP_BODY=""        # --rewrite の新しい本文
+# **「--criteria が指定されたか」は値の有無では判定できない。**--rewrite では
+# 「--criteria 無し = 完了条件を現状のまま保つ」が既定なので、空文字を渡されたときと
+# 指定されなかったときを区別する必要がある(区別しないと、`--criteria ""` が黙って
+# 「現状維持」に化ける = 利用者の指定が無かったことになる。この repo が最も嫌う沈黙)。
+CRITERIA_GIVEN=0
 APPLY=0           # --archive を実際に適用するか(既定 dry-run)
 
 # 操作フラグが2つ来たら落とす。--add と --done を同時に受けると「どちらが効いたのか」が
@@ -395,7 +427,7 @@ while [ $# -gt 0 ]; do
       set_op add; OP_SUMMARY="$2"; shift 2 ;;
     --criteria)
       need_val --criteria "${2-__MISSING__}" '--criteria "dotfiles で誤検知が消えること"'
-      OP_CRITERIA="$2"; shift 2 ;;
+      OP_CRITERIA="$2"; CRITERIA_GIVEN=1; shift 2 ;;
     --done)
       need_val --done "${2-__MISSING__}" '--done H-1'
       set_op done; OP_ID="$2"; shift 2 ;;
@@ -407,6 +439,11 @@ while [ $# -gt 0 ]; do
       need_val --note "${2-__MISSING__}" '--note H-5 "80行予算は未達のまま"'
       need_val "--note の本文" "${3-__MISSING__}" '--note H-5 "80行予算は未達のまま"'
       set_op note; OP_ID="$2"; OP_NOTE="$3"; shift 3 ;;
+    --rewrite)
+      # --note と同じく**値を2つ取る**(ID と新しい本文)。仕様は `--rewrite <ID> "<本文>"`。
+      need_val --rewrite "${2-__MISSING__}" '--rewrite T-1 "縮めた本文"'
+      need_val "--rewrite の本文" "${3-__MISSING__}" '--rewrite T-1 "縮めた本文"'
+      set_op rewrite; OP_ID="$2"; OP_BODY="$3"; shift 3 ;;
     --archive) set_op archive; shift ;;
     --apply) APPLY=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -456,6 +493,11 @@ if [ -n "${OP:-}" ]; then
   OP_CRITERIA=$(sanitize_value "$OP_CRITERIA")
   OP_EVIDENCE=$(sanitize_value "$OP_EVIDENCE")
   OP_NOTE=$(sanitize_value "$OP_NOTE")
+  # --rewrite の本文も同じ経路に乗せる。**独自の正規化を書かない**のが要点 ——
+  # 改行素通しで構造注入を許した 2026-08-08 の事故は、値の経路が1本でなかったことが
+  # 遠因だった。畳まれた 6 桁の字下げは、書くときに項目の実際の字下げへ揃え直す
+  # (エディタ側 do_rewrite の lstrip)。
+  OP_BODY=$(sanitize_value "$OP_BODY")
 fi
 
 # --- 書き込み操作の引数検証(実行は後段。ここでは何も読まない) -----------------
@@ -492,11 +534,48 @@ case "$OP" in
       echo "  証拠を書けない移行時のみ --evidence \"(移行: 証拠なし)\" を許す。" >&2
       exit 2
     } ;;
+  rewrite)
+    # 空の本文は**項目を消す操作に化ける**(概要が空の項目行が残り、読み側では
+    # 「概要が無い項目」になる)。消したいなら --done → --archive が正しい経路なので、
+    # ここは通さない。空白だけの本文も同じ扱い(LC_ALL=C で ASCII 空白だけを見る ——
+    # ロケール依存の [:space:] は macOS で全角の扱いがぶれる)。
+    if [ -z "$(printf '%s' "$OP_BODY" | LC_ALL=C tr -d ' \t\n')" ]; then
+      echo "✗ --rewrite の本文が空。" >&2
+      echo "  項目を消したいのではなく短くしたいはず —— 新しい本文を渡すこと。" >&2
+      echo "  例: --rewrite $OP_ID \"何をするか1行で。詳細は log.md へ\"" >&2
+      echo "  本当に項目を畳むなら --done で閉じて --archive で降ろす。" >&2
+      exit 2
+    fi
+    # 本文に引用行(`>` 始まり)を混ぜさせない。混ぜると `> **YYYY-MM-DD 更新:**` と
+    # 見分けが付かない行を**本文として**書き込むことになり、次の --rewrite がそれを
+    # 「更新行」として黙って消す(自分で仕込んだ地雷を自分で踏む形)。
+    # ⚠️ 判定は「行頭が `>`」= **パーサが引用行を見分けている正規表現と同じアンカー**に
+    #    合わせてある(`> ` の2文字ではなく `>` 1文字)。仕様の文言より僅かに厳しいが、
+    #    緩い側に倒すと `>foo` が c_para の計算を狂わせ、後の --done が証拠行を
+    #    変な位置へ入れる。**厳しくして落ちる**方は目に見えるので安全側。
+    if printf '%s\n' "$OP_BODY" | grep -q '^[[:space:]]*>'; then
+      echo "✗ --rewrite の本文に引用行(行頭 \`>\`)が含まれている。" >&2
+      echo "  更新行(\`> **YYYY-MM-DD 更新:**\`)と区別が付かなくなるので受け付けない。" >&2
+      echo "  経緯を残したいなら本文へ地の文として書くか、--note で別途積むこと。" >&2
+      exit 2
+    fi
+    # `--criteria ""` は「完了条件を空にする」= 閉じ方が決まらない項目を作る操作。
+    # --add が空の完了条件を拒むのと同じ理由で拒む(現状維持なら --criteria ごと省く)。
+    if [ "$CRITERIA_GIVEN" -eq 1 ] && [ -z "$OP_CRITERIA" ]; then
+      echo "✗ --criteria が空。完了条件の無い項目は「何をすれば閉じられるか」が決まらない。" >&2
+      echo "  元の完了条件をそのまま残したいなら --criteria を省くこと(既定が現状維持)。" >&2
+      exit 2
+    fi ;;
 esac
 
 # 操作に属さないフラグが単独で来たら落とす。黙って無視すると「--evidence を付けたのに
 # 証拠が入らなかった」に気づけない(サイレントな取りこぼしはこの repo が最も嫌う壊れ方)。
-[ -z "$OP_CRITERIA" ] || [ "$OP" = "add" ] || { echo "✗ --criteria は --add と一緒に使う(指定: --${OP:-なし})。" >&2; exit 2; }
+# ⚠️ 判定は `-z "$OP_CRITERIA"`(値が空なら黙って通す)のまま **意図的に変えていない。**
+#    CRITERIA_GIVEN を見て「指定されたか」で弾く方が筋は良いが、それだと
+#    `--done X --evidence … --criteria ""` が従来は素通りしていたのに落ちるようになる ——
+#    **既存4操作の挙動を1バイトも変えない**という今回の制約に反する。--rewrite 側の
+#    `--criteria ""` は、上の rewrite ケースで別途拒んである(そちらは新設なので自由)。
+[ -z "$OP_CRITERIA" ] || [ "$OP" = "add" ] || [ "$OP" = "rewrite" ] || { echo "✗ --criteria は --add か --rewrite と一緒に使う(指定: --${OP:-なし})。" >&2; exit 2; }
 [ -z "$OP_EVIDENCE" ] || [ "$OP" = "done" ] || { echo "✗ --evidence は --done と一緒に使う(指定: --${OP:-なし})。" >&2; exit 2; }
 [ "$APPLY" -eq 0 ] || [ "$OP" = "archive" ] || { echo "✗ --apply は --archive と一緒に使う(dry-run を実行に変えるフラグ)。" >&2; exit 2; }
 
@@ -663,7 +742,7 @@ function ltrim(s) { sub(/^[ \t]+/, "", s); sub(/^(　)+/, "", s); sub(/^[ \t]+/,
 #
 # レコード形式(US 区切り。**read モードでは1本も出さない / layout モードでは I・E を出さない**):
 #   L <key> <value>   ファイル全体の構造。key は下の END を参照
-#   T <k> <id> <status> <start> <end> <mind> <aind> <hasevi> <para> <edate> <summary>
+#   T <k> <id> <status> <start> <end> <mind> <aind> <hasevi> <para> <edate> <scol> <summary>
 #       start/end  項目の開始行と最終行(継続行を含む。空行は範囲を切らない)
 #       mind/aind  継続行の最小字下げ / 「→」行の最小字下げ(0 = 該当行なし)
 #       hasevi     証拠行(「→ 完了条件:」以外の「→」)を持つか。**--lint の no-evidence と
@@ -671,6 +750,20 @@ function ltrim(s) { sub(/^[ \t]+/, "", s); sub(/^(　)+/, "", s); sub(/^[ \t]+/,
 #                  --archive は移す」が起きる
 #       para       末尾の `> 更新:` 引用ブロックの手前の行(証拠行の挿入位置)
 #       edate      最初の証拠行の先頭にある YYYY-MM-DD("" = 無い)
+#       scol       項目行のうち **`- [x] `ID`` までの桁数**(= 閉じバッククォートの位置)。
+#                  --rewrite が概要だけを差し替えるときに「ここまでは保つ」境界として使う。
+#                  ⚠️ **自由文(summary)より前に置く。**US は markdown 本文に出ないので
+#                  後ろでも壊れはしないが、可変長の自由文を最後に置くのは US 区切りの
+#                  レコードでは基本の作法(将来フィールドを足すときに毎回ここで迷わない)。
+#   C <k> <lines>   その項目の継続行の**種別表**。lines は空白区切りの `<行番号>:<種別>`。
+#                   種別: c=「→ 完了条件:」とその折り返し / e=証拠行とその折り返し /
+#                         u=`> **… 更新:**` の引用行 / p=それ以外の散文(本文)
+#       **--rewrite 専用。**「本文だけ差し替える」「更新行だけ消す」「完了条件は
+#       --criteria があるときだけ差し替える」を書き側が判断するには、どの行が何かを
+#       行番号で知る必要がある。ここを出さずにエディタ側で `^>` や `^→` を見ると、
+#       H-19 で潰したはずの**書式の二重実装**がそのまま復活する(実際に読み側と
+#       書き側の答えが割れた前科がある)。**種別の判定は下の継続行規則1箇所だけ**で、
+#       read モードの c_det / c_done / c_evi への振り分けと**同じ分岐**から採っている。
 #   A <id>          `## 完了記録` に降ろし済みの ID(未知 ID の診断を親切にするため)
 # ⚠️ 値の中に US は現れない(markdown 本文に出てこない制御文字を選んである)。
 function lay(k, v) { print "L" US k US v }
@@ -688,7 +781,8 @@ function emit_err(code, ln, sev, msg) {
 # そこがまた二重実装になる。分けてよいのは「出力するか否か」だけ)。
 function reset() { c_id=""; c_st=""; c_sum=""; c_det=""; c_done=""; c_evi=""; c_ex=0; c_ln=0
                    c_last=""; c_aind=0
-                   c_end=0; c_mind=999; c_amin=999; c_para=0; c_edate="" }
+                   c_end=0; c_mind=999; c_amin=999; c_para=0; c_edate=""
+                   c_scol=0; c_kinds="" }
 
 function flush() {
   if (c_id == "") { reset(); return }
@@ -702,10 +796,14 @@ function flush() {
   # 旧エディタは「`→` 行が完了条件以外にあるか」で見ており、`→` だけ書いて中身が空の行を
   # 証拠として数えていた —— lint が no-evidence と言う項目を --archive が移せてしまう。
   # 1本化にあたって **lint 側の判定へ寄せた**(証拠ゲートを緩める方向へは倒さない)。
-  if (layout)
+  if (layout) {
     print "T" US nitem US c_id US c_st US c_ln US (c_end == 0 ? c_ln : c_end) \
           US (c_mind == 999 ? 0 : c_mind) US (c_amin == 999 ? 0 : c_amin) \
-          US (c_evi == "" ? 0 : 1) US (c_para == 0 ? c_ln : c_para) US c_edate US c_sum
+          US (c_evi == "" ? 0 : 1) US (c_para == 0 ? c_ln : c_para) US c_edate \
+          US c_scol US c_sum
+    # 継続行が1本も無い項目では C を出さない(空レコードを読ませても得が無い)。
+    if (c_kinds != "") print "C" US nitem US c_kinds
+  }
   else
     print "I" US repo US comp US file US c_id US c_st US c_sum US c_det US c_done US c_evi
   reset()
@@ -833,6 +931,11 @@ shadow && /^- \[/                 { shitems++; if (shfirst == 0) shfirst = NR; n
   c_id = substr(r, 2, p - 1)
   c_sum = trim(substr(r, p + 2))
   c_ln = NR
+  # 概要が始まる**手前**の桁 = 閉じバッククォートの絶対位置。r は 7 桁目(開き
+  # バッククォート)から始まり、閉じは r の p+1 文字目なので 7 + p。
+  # --rewrite はここまでを丸ごと残すことで、チェック状態も ID も**触らずに**保つ
+  # (状態文字を書き戻す do_done 方式より、保つ範囲が広い分こちらが安全)。
+  c_scol = 7 + p
   if (c_id in seen)
     emit_err("dup-id", NR, "V", "ID が重複: `" c_id "`(" seen[c_id] " 行目にもある)")
   else
@@ -865,22 +968,34 @@ shadow && /^- \[/                 { shitems++; if (shfirst == 0) shfirst = NR; n
     # それを証拠として数えてはいけないので、ここで明確に分ける。
     if (t ~ /^完了条件(:|：)/) {
       sub(/^完了条件(:|：)/, "", t); t = trim(t)
-      c_done = (c_done == "" ? t : c_done VT t); c_last = "d"
+      c_done = (c_done == "" ? t : c_done VT t); c_last = "d"; kind = "c"
     } else {
       # 最初の証拠ブロックの先頭に YYYY-MM-DD があれば控える。--archive が付ける
       # 「✅ 日付」に使う —— 今日を無条件に使うと、3日前に閉じた項目が今日閉じたことに
       # なって記録が嘘になる。**この抽出も書き側には持たせない**(書式の解釈は1箇所)。
       if (c_evi == "" && t != "" && match(t, /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/))
         c_edate = substr(t, 1, 10)
-      c_evi = (c_evi == "" ? t : c_evi VT t); c_last = "e"
+      c_evi = (c_evi == "" ? t : c_evi VT t); c_last = "e"; kind = "e"
     }
   } else if (c_last != "" && ind > c_aind) {
     # 直前の「→」行より深く字下げされた行は、その行の**折り返し**とみなす。
     # 別ブロック(VT)ではなく FF で繋ぐ —— ここを間違えると証拠が2本あることになる。
     if (c_last == "d") c_done = c_done FF t; else c_evi = c_evi FF t
+    # 折り返しは**頭の行と同じ種別**にする。別種別にすると --rewrite が
+    # 「完了条件は消したのに、その折り返しだけ残る」という壊れ方をする。
+    kind = (c_last == "d" ? "c" : "e")
   } else {
     c_det = (c_det == "" ? t : c_det VT t); c_last = ""
+    # ⚠️ `> **… 更新:**` の行も read モードでは c_det(散文)に入る —— **その振り分けは
+    #    変えない**(既存4操作の挙動を1バイトも動かさないため)。ここで分けているのは
+    #    layout の種別だけで、--rewrite が「消した更新行を stderr へ全文出す」ために要る。
+    #    折り返し判定を先に通した後でこの分岐に来ているので、「→ 行より深く字下げされた
+    #    `>` 行」は上の e/c 側になる —— **read モードの解釈と1バイトも食い違わない**のが要点。
+    kind = (t ~ /^>/ ? "u" : "p")
   }
+  # 種別表は read モードでも組み立てる(出力しないだけ)。**モードごとに別の理屈で
+  # 数えると、そこがまた二重実装になる** —— c_end / c_mind と同じ扱いに揃えてある。
+  c_kinds = c_kinds (c_kinds == "" ? "" : " ") NR ":" kind
   next
 }
 
@@ -1090,7 +1205,7 @@ nds_of_repo() {
 }
 
 # =============================================================================
-# 書き込み操作の実行(--add / --done / --note / --archive)
+# 書き込み操作の実行(--add / --done / --note / --rewrite / --archive)
 # =============================================================================
 # 引数の検証は上の「書き込み操作の引数検証」で済ませてある。ここは「引数は正しい」前提で、
 # 対象ファイルを1本に決め、エディタ(awk)に新しい全文を作らせ、atomic に置き換えるだけ。
@@ -1145,7 +1260,7 @@ EOF
   LOCKDIR="$(dirname "$TARGET")/.$(basename "$TARGET").lock"
   if ! acquire_lock; then
     echo "✗ ロックが取れない($LOCKDIR)。${LOCK_WAIT_TOTAL}秒待っても他プロセスが解放しなかった。" >&2
-    echo "  **何も書いていない。**別の書き込み操作(--add / --done / --note / --archive)が" >&2
+    echo "  **何も書いていない。**別の書き込み操作(--add / --done / --note / --rewrite / --archive)が" >&2
     echo "  同時に走っている可能性がある。しばらく待ってから再実行すること。" >&2
     echo "  それでも解消しないなら、持ち主が異常終了した可能性がある —— $LOCKDIR/owner の" >&2
     echo "  PID が実在するか確認し、実在しなければ手動で rm -rf しても安全(fail-closed の後始末)。" >&2
@@ -1182,6 +1297,11 @@ EOF
 # 素の判定(字下げの計算はパーサが出す imind に寄せたので ind_of() は要らなくなった)。
 function blank(s) { return (s ~ /^[ \t]*$/) }
 function sp(k,   s) { s = ""; while (length(s) < k) s = s " "; return s }
+# **利用者が渡した値**の行頭空白を落とす(ファイルの行ではない)。sanitize_value が
+# 畳んだ 6 桁の字下げを剥がし、項目の実際の字下げへ揃え直すために要る。
+# ⚠️ これは「書式の解釈」ではない —— 入力文字列の正規化であって、正典のどの行が
+#    何であるかの判断は1つも含まない(その判断はパーサだけが持つ、という線は保たれている)。
+function lstrip(s) { sub(/^[ \t]+/, "", s); return s }
 function say(sev, msg) { print sev "\t" msg >> report }
 # **何も書かずに落ちる**のがこの関数の全て。呼び出し側は exit 3 を見て stdout を捨てる。
 function die(msg) { say("E", msg); exit 3 }
@@ -1205,6 +1325,8 @@ function add_ins(pos, text) { insn[pos]++; ins[pos, insn[pos]] = text }
 #   mk              session-head-end マーカー行(0 = 無い)
 #   pfx / maxn      採番の接頭辞 / ファイル全体でのその接頭辞の最大番号
 #   istart[] iend[] iid[] istat[] isum[] imind[] iaind[] ihas_evi[] ipara[] iedate[]
+#   iscol[]         項目行のうち `- [x] `ID`` までの桁数(--rewrite が保つ範囲の右端)
+#   ikinds[]        継続行の種別表 "<行番号>:<種別> …"(--rewrite だけが読む)
 #   arch[id]        完了記録に降ろし済みの ID
 function read_layout(   line, f, k, nrec) {
   nrec = 0
@@ -1216,11 +1338,12 @@ function read_layout(   line, f, k, nrec) {
     split(line, f, US)
     if (f[1] == "L") lv[f[2]] = f[3]
     else if (f[1] == "A") arch[f[2]] = 1
+    else if (f[1] == "C") ikinds[f[2] + 0] = f[3]
     else if (f[1] == "T") {
       k = f[2] + 0; if (k > ni) ni = k
       iid[k] = f[3]; istat[k] = f[4]; istart[k] = f[5] + 0; iend[k] = f[6] + 0
       imind[k] = f[7] + 0; iaind[k] = f[8] + 0; ihas_evi[k] = f[9] + 0
-      ipara[k] = f[10] + 0; iedate[k] = f[11]; isum[k] = f[12]
+      ipara[k] = f[10] + 0; iedate[k] = f[11]; iscol[k] = f[12] + 0; isum[k] = f[13]
     }
   }
   close(layoutfile)
@@ -1328,6 +1451,104 @@ function do_note(   k, ln, j, nind) {
   }
   add_ins(iend[k], ln)
   say("I", "`" id "` の末尾に `> **" today " 更新:**` を追記した。")
+  changed = 1
+}
+
+# --- 操作: --rewrite ---------------------------------------------------------
+# **なぜ在るか(2026-08-12)。**それまでの書き込み操作4つ(--add / --done / --note /
+# --archive)は**どれも項目を短くできなかった** —— --note は積むだけ、--archive は
+# `[x]` になるまで動かせない。結果、着手中の項目は更新行が積まれるほど太り、
+# 実測で正典の冒頭が 10,538字(内 着手順が 9,113字 = 86%)まで育った。冒頭は
+# **10,000字を超えると無言で切り詰められる**(#70460 / #84021)ので、後半は実際に
+# 次のセッションへ届いていない。**縮める手段が1つも無い**のが直接の動機。
+#
+# やること:
+#   1. 本文(項目行の概要 + ぶら下がる散文)を新しい本文へ差し替える
+#   2. その項目の `> **YYYY-MM-DD 更新:**` を**すべて**消す(何を消したかは stderr へ全文)
+#   3. --criteria があれば `→ 完了条件:` も差し替える。無ければ**現状のまま**
+# 保つもの: チェック状態 `[ ]`/`[x]`、ID、**証拠行**、項目の並び順。
+#
+# ⚠️ **証拠行は消さない。**消すと `[x]` の項目が no-evidence 違反に化け、
+#    「自分で書いた正典を自分の --lint が叱る」という 2026-08-08 と同型の壊れ方をする。
+#    証拠は「何を確認したか」の記録で、本文が長いこととは無関係。
+# ボツ案: 更新行を「最新の1本だけ残す」。残す基準が「新しい方が正しい」という
+#    仮定に依存する(古い更新の方が重要なことは普通にある)。**全部消して、消したものを
+#    その場で見せ、必要なら新しい本文へ書き手が畳み直す**方が、判断が人の側に残る。
+# ボツ案: 移動先(log.md のどこへ移したか)の申告を必須にする。2026-08-09 の実測で
+#    「毎セッション読まれる場所から移しても記録は失われない」ことが確認済み(履歴は
+#    log.md と git にある)なので、書かせても行動を変えない義務が増えるだけ。
+function do_rewrite(   k, i, m, parts, pair, ln, kd, ind, nb, bl, nn, np, notes, prose) {
+  k = find_item(id)
+  # 未知の ID は **unknown_id() = die() = exit 3**(何も書かずに落ちる)。
+  # ⚠️ 仕様書には「exit 2」とあるが、**兄弟操作(--done / --note)に合わせて 3 にした。**
+  #    このスクリプトの終了コードは 2 =「使い方の誤り(ファイルを読む前に分かる)」/
+  #    3 =「対象の状態が合わない(未知の ID を含むと --help に明記)」で分けてある。
+  #    ここだけ 2 にすると、`rc == 3 → ID が無い` で分岐している呼び出し側が
+  #    --rewrite でだけ誤読する。**仕様の主眼(fail-closed で1バイトも書かない)は
+  #    どちらでも満たす**ので、区別が壊れない側を採った。1行で戻せる判断なので、
+  #    仕様どおり 2 にするなら unknown_id() を経由せず個別に落とすこと。
+  if (k == 0) unknown_id()
+  # 新しい行の字下げは既存の「→」行に合わせる。無ければ 6(`- [x] ` の幅 = --add が書く形)。
+  # ⚠️ imind(継続行の最小字下げ)は**使わない** —— 更新行は 2 桁で書かれるので、
+  #    更新行を持つ項目では imind が 2 に引きずられる。いま消そうとしている行の
+  #    字下げに、これから書く行を合わせるのは筋が悪い。
+  ind = (iaind[k] > 0 ? iaind[k] : 6)
+
+  # --- 1) 継続行を種別ごとに仕分ける ---------------------------------------
+  # 種別はパーサが出したもの(ikinds)。**ここで `^>` や `^→` を見てはいけない** ——
+  # H-19 で1本化した「書式を解釈するのはパーサだけ」の線を跨ぐと、また答えが割れる。
+  nn = 0; np = 0
+  m = (ikinds[k] == "" ? 0 : split(ikinds[k], parts, " "))
+  for (i = 1; i <= m; i++) {
+    split(parts[i], pair, ":")
+    ln = pair[1] + 0; kd = pair[2]
+    if (kd == "u")      { del[ln] = 1; notes[++nn] = L[ln] }   # 更新行 → 全部消す
+    else if (kd == "p") { del[ln] = 1; prose[++np] = L[ln] }   # 旧本文 → 差し替える
+    else if (kd == "c") { if (setcrit) del[ln] = 1 }           # 完了条件 → --criteria のときだけ
+    # kd == "e"(証拠行とその折り返し)は**触らない**。
+  }
+  # 項目の中の空行も落とす。本文を消した跡に空行だけが浮いて残ると、項目の切れ目に
+  # 見えて読みにくいうえ、縮めるための操作なのに行が減らない。
+  # ボツ案: 消した行に隣接する空行だけを選んで落とす。規則が「隣接とは何か」に依存して
+  #   説明できなくなる割に、得られる差は空行1本ぶん(項目内の空行は元々ごく稀)。
+  for (i = istart[k] + 1; i <= iend[k]; i++) if (blank(L[i])) del[i] = 1
+
+  # --- 2) 項目行の概要を差し替える -----------------------------------------
+  # `- [x] `ID`` までを**そのまま残す**ので、チェック状態も ID も定義上変わりようがない
+  # (do_done のように状態文字を書き戻す形だと、保つ範囲が狭いぶん壊す余地が広い)。
+  if (iscol[k] < 7 || index(substr(L[istart[k]], 1, iscol[k]), iid[k]) == 0)
+    die("内部エラー: 項目行の「保つ範囲」に ID `" iid[k] "` が入っていない(" istart[k] " 行目)。**何も書いていない。**")
+  prose[++np] = L[istart[k]]      # 旧本文の1行目 = 項目行。消えたものとして必ず見せる
+  nb = split(ENVIRON["ND_BODY"], bl, "\n")
+  L[istart[k]] = substr(L[istart[k]], 1, iscol[k]) " " bl[1]
+  # 2行目以降は継続行として項目行の直後へ。sanitize_value が付けた 6 桁の字下げは
+  # 剥がして ind へ揃え直す(項目ごとに実際の字下げが違いうるため)。
+  for (i = 2; i <= nb; i++) add_ins(istart[k], sp(ind) lstrip(bl[i]))
+  # 新しい完了条件は**本文の直後**に置く。--add が書く並び(概要 → 完了条件 → 証拠)と
+  # 同じになり、証拠行より前に来る。
+  # ボツ案: 元の `→ 完了条件:` の位置に差し込む。元の位置は項目ごとにばらつく(証拠行の
+  #   後ろにあることすらある)ので、**差し替えるたびに並びが変わらない**方を選んだ。
+  if (setcrit) add_ins(istart[k], sp(ind) "→ 完了条件: " ENVIRON["ND_CRITERIA"])
+
+  # --- 3) 何を消したかを必ず見せる -----------------------------------------
+  # **黙って消さない。**git に残るとはいえ、実行した本人がその場で見られないと
+  # 「消えたことに気づくのが次のセッション」になる。stderr へ全文出す(W + D)。
+  say("I", "`" id "` の本文を差し替えた" (setcrit ? "(完了条件も差し替えた)" : "(完了条件は元のまま)") "。")
+  if (np > 0) {
+    say("W", "置き換えた本文 " np " 行(消えた内容。必要なら log.md へ移すこと):")
+    # 項目行を prose の最後に積んであるので、表示だけ先頭へ回して元の並びに戻す。
+    say("D", prose[np])
+    for (i = 1; i < np; i++) say("D", prose[i])
+  }
+  if (nn > 0) {
+    say("W", "削除した更新行 " nn " 本(`> **… 更新:**`。git には残るが、いま消えたものをここに出す):")
+    for (i = 1; i <= nn; i++) say("D", notes[i])
+  }
+  # `[x]` で証拠行が無い項目は、`(移行: 証拠なし)` の免除が**本文の中にあった**可能性が
+  # 高い。本文ごと差し替えると免除も消え、次の --lint が no-evidence で鳴る ——
+  # 鳴ってから原因を探すのは高くつくので、その場で言っておく(止めはしない)。
+  if (istat[k] == "x" && !ihas_evi[k])
+    say("W", "`" id "` は `[x]` だが証拠行が無い —— 本文に `(移行: 証拠なし)` が入っていた場合、差し替えで免除も消えるので `--lint` が no-evidence で鳴る。`--done " id " --evidence \"何を確認したか\"` で証拠を足すか、新しい本文へ免除を書き直すこと。")
   changed = 1
 }
 
@@ -1455,6 +1676,7 @@ END {
   if      (op == "add")     do_add()
   else if (op == "done")    do_done()
   else if (op == "note")    do_note()
+  else if (op == "rewrite") do_rewrite()
   else if (op == "archive") do_archive()
   else die("内部エラー: 未知の操作 " op)
   if (!changed) exit 10
@@ -1469,7 +1691,13 @@ AWK
 
   # report を人向けに流す。**stdout = データ / stderr = 診断**を守る:
   #   I(何をしたか)と M(移動の内訳)は操作の結果 = データなので stdout。
-  #   E / W は診断なので stderr。N / C は機械用の値なので、ここでは出さない。
+  #   E / W / D は診断なので stderr。N / C は機械用の値なので、ここでは出さない。
+  #
+  # D = **消した行の全文**(--rewrite だけが出す)。直前の W が「何を何本消したか」の
+  # 見出しで、D はその中身。W と分けているのは、⚠️ を行数ぶん並べると本文が読めなく
+  # なるから —— 見出しに1回だけ ⚠️ を出し、中身は字下げして素のまま見せる。
+  # ⚠️ 消した行は**加工しない**(先頭の空白も落とさない)。原文をそのまま貼り戻せる形で
+  #    見せるのが目的で、整形すると「消えたもの」と「見せているもの」が別物になる。
   emit_report() {
     local TAB sev msg
     TAB=$(printf '\t')
@@ -1479,27 +1707,61 @@ AWK
         W) printf '⚠️ %s\n' "$msg" >&2 ;;
         I) printf '%s\n' "$msg" ;;
         M) printf '  %s\n' "$msg" ;;
+        D) printf '    %s\n' "$msg" >&2 ;;
       esac
     done < "$REPORT"
   }
   report_value() { awk -F '\t' -v k="$1" '$1 == k { print $2; exit }' "$REPORT"; }
 
+  # 「冒頭」(先頭 〜 session-head-end マーカーの手前)を測る。
+  #   成功 → 0 を返し MEAS_CHARS / MEAS_TOKENS / HEAD_LINES に入れる
+  #   マーカーが無い → 1(冒頭の境界が定義できない = 測りようがない)
+  # **書き込みの前後で2回呼ぶために切り出した**(--rewrite が増減を出す)。
+  # ボツ案: print_head_size の中で before も測る。呼ぶ時点では既に書き終わっているので
+  #   「前」が測れない。かといってマーカー探索を書き込み前に複製すると、同じ判定が
+  #   2箇所になる(このスクリプトが H-19 で1本化したのと同じ種類のドリフト源)。
+  measure_head() {
+    local f=$1 marker
+    marker=$(grep -n -m1 '^<!-- session-head-end' "$f" | cut -d: -f1 || true)
+    [ -n "$marker" ] || return 1
+    HEAD_LINES=$((marker - 1))
+    if [ "$HEAD_LINES" -ge 1 ]; then measure "$(sed -n "1,${HEAD_LINES}p" "$f")"; else MEAS_CHARS=0; MEAS_TOKENS=0; fi
+    return 0
+  }
+
+  # 桁区切り。増減を読むための数字なので、4桁以上は素の数字だと差が目で取れない
+  # (10538 と 9214 の差はぱっと見で分からないが、10,538 と 9,214 なら分かる)。
+  # 負数は符号を保つ(-1,324)。awk なのは bash 3.2 に文字列操作の道具が乏しいため。
+  comma() { awk -v n="$1" 'BEGIN { s = sprintf("%d", n < 0 ? -n : n); out = ""
+      while (length(s) > 3) { out = "," substr(s, length(s) - 2) out; s = substr(s, 1, length(s) - 3) }
+      printf "%s%s%s", (n < 0 ? "-" : ""), s, out }'; }
+
   # 書き込み後の「頭」のサイズ。**その場で出す**のが要点 —— 書いた本人が予算超過に
   # 気づかないと、次のセッションで SessionStart が無言に切り詰められるまで誰も気づかない。
   print_head_size() {
-    local f=$1 marker lines
-    marker=$(grep -n -m1 '^<!-- session-head-end' "$f" | cut -d: -f1 || true)
-    if [ -z "$marker" ]; then
+    local f=$1 lines delta sign
+    if ! measure_head "$f"; then
       echo "⚠️ session-head-end マーカーが無いので「冒頭」のサイズを測れない(境界が定義できない)。" >&2
       return 0
     fi
-    lines=$((marker - 1))
-    if [ "$lines" -ge 1 ]; then measure "$(sed -n "1,${lines}p" "$f")"; else MEAS_CHARS=0; MEAS_TOKENS=0; fi
+    lines=$HEAD_LINES
     # 行数も出すが**予算としては出さない**(参考値)。行はどの機構も使っておらず、
     # 言語構成で 2 倍以上ブレる —— 予算に使うと日本語の正典だけ不当にきつくなる。
     # それでも表示は残す: 人が「どこを削るか」を探すときの手掛かりは結局行だから。
-    printf '冒頭: %s字 / ≒%s tok(予算 %s字 / %s tok)・%s 行(参考)\n' \
-      "$MEAS_CHARS" "$MEAS_TOKENS" "$HEAD_WARN_CHARS" "$HEAD_WARN_TOKENS" "$lines"
+    if [ -n "${HEAD_CHARS_BEFORE:-}" ]; then
+      # --rewrite だけがここへ来る。**何のための操作かを数字で示す** ——
+      # 「縮めるために実行したのに縮んでいない(むしろ増えた)」が一目で分かる形にする。
+      # 桁区切りをこの版だけに入れているのは、既存4操作の出力を1バイトも変えないため
+      # (同じ行の中で区切り有り/無しが混ざる方が読みにくいので、版ごとに揃えてある)。
+      delta=$((MEAS_CHARS - HEAD_CHARS_BEFORE))
+      sign=""; [ "$delta" -gt 0 ] && sign="+"
+      printf '冒頭: %s → %s字(%s%s) / ≒%s tok(予算 %s字 / %s tok)・%s 行(参考)\n' \
+        "$(comma "$HEAD_CHARS_BEFORE")" "$(comma "$MEAS_CHARS")" "$sign" "$(comma "$delta")" \
+        "$(comma "$MEAS_TOKENS")" "$(comma "$HEAD_WARN_CHARS")" "$(comma "$HEAD_WARN_TOKENS")" "$lines"
+    else
+      printf '冒頭: %s字 / ≒%s tok(予算 %s字 / %s tok)・%s 行(参考)\n' \
+        "$MEAS_CHARS" "$MEAS_TOKENS" "$HEAD_WARN_CHARS" "$HEAD_WARN_TOKENS" "$lines"
+    fi
     # ⚠️ 閾値を上げて警告を消すのは禁止。減らす手段(--archive / 整理)を必ず添える。
     if [ "$MEAS_CHARS" -gt "$HEAD_HARD_CHARS" ]; then
       echo "✗ 冒頭が ${MEAS_CHARS}字(> ${HEAD_HARD_CHARS}字)—— SessionStart の stdout は**無言に切り詰められ 2KB のプレビューだけが注入される**(anthropics/claude-code#70460・#84021)。いま実際に切れている。--archive で降ろすか整理すること。" >&2
@@ -1510,6 +1772,17 @@ AWK
       echo "⚠️ 冒頭が ≒${MEAS_TOKENS} tok(予算 ${HEAD_WARN_TOKENS} tok)。切り詰めには余裕があるが**毎セッション払う**。**閾値は上げない** —— --archive で降ろすか整理すること。" >&2
     fi
   }
+
+  # --- 書き込み**前**の冒頭サイズ(--rewrite の増減表示のため) ------------------
+  # **ロックの内側で測る。**外で測ると、測ってから書くまでの間に他プロセスが書き換えた
+  # 場合に「前」が別の内容のものになり、増減が嘘になる(数字が出ているのに間違っている
+  # = 0件より危険、という原則4の壊れ方)。
+  # --rewrite のときだけ測るのは、既存4操作の出力を1バイトも変えないため
+  # (print_head_size は HEAD_CHARS_BEFORE が空なら従来どおりの1行を出す)。
+  HEAD_CHARS_BEFORE=""
+  if [ "$OP" = "rewrite" ] && measure_head "$TARGET"; then
+    HEAD_CHARS_BEFORE=$MEAS_CHARS
+  fi
 
   # --- 構造の解析は**読み側のパーサに任せる**(H-19) ---------------------------
   # エディタを呼ぶ前に、同じ parser.awk を layout モードで1回回して「どの行が何であるか」を
@@ -1527,8 +1800,12 @@ AWK
   fi
 
   rc=0
+  # ⚠️ setcrit は **-v で渡してよい**(0/1 の数値なので、-v のバックスラッシュ解釈に
+  #    引っかかる余地が無い)。利用者が書いた文字列は従来どおり ENVIRON 経由。
   ND_SUMMARY="$OP_SUMMARY" ND_CRITERIA="$OP_CRITERIA" ND_EVIDENCE="$OP_EVIDENCE" ND_NOTE="$OP_NOTE" \
+  ND_BODY="$OP_BODY" \
     awk -v op="$OP" -v id="$OP_ID" -v today="$TODAY" -v report="$REPORT" -v layoutfile="$LAYOUT" \
+        -v setcrit="$CRITERIA_GIVEN" \
         -f "$EDITOR" "$TARGET" > "$NEW" || rc=$?
 
   case "$rc" in
@@ -1591,6 +1868,7 @@ AWK
     add)     printf '✓ `%s` を追加した — %s\n' "$(report_value N)" "$TARGET" ;;
     done)    printf '✓ `%s` を完了にした — %s\n' "$OP_ID" "$TARGET" ;;
     note)    printf '✓ `%s` に更新行を追記した — %s\n' "$OP_ID" "$TARGET" ;;
+    rewrite) printf '✓ `%s` の本文を書き換えた — %s\n' "$OP_ID" "$TARGET" ;;
     archive) printf '✓ %s 件を `## 完了記録` へ移した — %s\n' "$nmove" "$TARGET" ;;
   esac
   print_head_size "$TARGET"

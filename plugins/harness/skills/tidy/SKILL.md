@@ -68,9 +68,14 @@ If the check says "code was touched today but the canon was not", you must write
 - Stack changes as `> **YYYY-MM-DD 更新:**`. **Never delete the plan.**
 
 **The `## 着手順` section has exactly one writer: `nd-tasks.sh`** (shipped with
-`/harness:status`). Use `--add` / `--done` / `--note` / `--archive` rather than hand-editing
-— hand edits drift the format, and numbering must scan the whole file to avoid reusing an
-archived ID. 現在地 and the catalog are prose and are edited by hand.
+`/harness:status`). Use `--add` / `--done` / `--note` / `--rewrite` / `--archive` rather than
+hand-editing — hand edits drift the format, and numbering must scan the whole file to avoid
+reusing an archived ID. 現在地 and the catalog are prose and are edited by hand.
+
+When the stacked 更新 lines have made an item too long for the head, **fold them into the
+body with `--rewrite <ID> "<new body>"`** (it drops every 更新 line on that item and prints
+what it deleted). That is compaction, not deleting the plan: move the history into `log.md`
+first — it also stays in git.
 
 ### Uncommitted work
 

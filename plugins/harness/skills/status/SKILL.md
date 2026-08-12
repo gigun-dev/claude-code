@@ -57,7 +57,7 @@ and exits non-zero, so it does not qualify.
 
 ### Writing (status does not write; `/harness:tidy` calls these)
 
-**Never hand-edit `## 着手順`. Let these four write it.** As long as the script is the only
+**Never hand-edit `## 着手順`. Let these five write it.** As long as the script is the only
 writer, format drift cannot happen structurally — and numbering scans the whole file, so
 archived IDs are never reused. Below, `nd-tasks.sh` abbreviates the full path above:
 
@@ -65,8 +65,15 @@ archived IDs are never reused. Below, `nd-tasks.sh` abbreviates the full path ab
 nd-tasks.sh --add "<summary>" --criteria "<completion criteria>"   # file (auto-numbered ID)
 nd-tasks.sh --done <ID> --evidence "<what you verified>"           # close (evidence required)
 nd-tasks.sh --note <ID> "<text>"                                   # append an update
+nd-tasks.sh --rewrite <ID> "<new body>" [--criteria "<new criteria>"]  # shrink an open item
 nd-tasks.sh --archive [--apply]                                    # move to 完了記録 (dry-run by default)
 ```
+
+`--rewrite` is **the only way to make an item shorter** — the other four only grow the head,
+and the head is silently truncated above 10,000 characters. It replaces the body and drops
+**every** `> **YYYY-MM-DD 更新:**` line on that item, keeping the checkbox state, the ID, the
+evidence lines and the ordering. What it deleted is printed to stderr in full: **move
+anything worth keeping into `log.md` first.**
 
 ## Three buckets — including "no longer needs to be in the head"
 
