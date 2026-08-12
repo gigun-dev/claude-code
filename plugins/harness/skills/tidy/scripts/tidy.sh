@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# harness-template v0.17.0 — セッションを畳む前の状態検査(読み取り専用)。
+# harness-template v0.18.0 — セッションを畳む前の状態検査(読み取り専用)。
 #
 # 設計意図(2026-08-06):
 #   doctor は「設定が正しいか」を見る。こちらは「**次のセッションが再開できる状態か**」を見る。
@@ -94,7 +94,7 @@ finish() {
   fi
   # ⚠️ ここの版数は先頭の `harness-template v…` 行と**手で揃える**(いま2箇所にある)。
   #    2026-08-10 に実際にズレた —— 先頭だけ v0.16.0 に上げてこちらが v0.15.0 のまま出た。
-  echo "=== 検査完了: ${items} 件(tidy.sh v0.17.0) ==="
+  echo "=== 検査完了: ${items} 件(tidy.sh v0.18.0) ==="
   exit 0
 }
 
@@ -121,6 +121,12 @@ echo "=== harness:tidy — $(basename "$root") ==="
 nds=()
 [ -f docs/next-directions.md ] && nds+=("docs/next-directions.md")
 for f in docs/*/next-directions.md; do [ -f "$f" ] && nds+=("$f"); done
+# コンポーネント名の一覧(pointer 型のときだけ意味を持つ)。紐づかない変更の報告に使う。
+comps=()
+for f in "${nds[@]}"; do
+  c=$(basename "$(dirname "$f")")
+  [ "$c" != "docs" ] && comps+=("$c")
+done
 
 echo
 echo "## 未コミットの作業"
@@ -138,9 +144,14 @@ echo "## 正典の更新"
 if [ ${#nds[@]} -eq 0 ]; then
   warn "next-directions.md が無い。/harness:doctor で導入できる"
 else
-  # 今日変更されたファイル(コミット済み + 未コミット)。正典自身と docs は除く。
+  # 今日変更されたファイル(コミット済み + 未コミット)。**正典そのものだけ**を除く。
+  # 正典を更新したこと自体を「正典の更新が必要な作業」に数えないための除外なので、
+  # 対象は next-directions.md と log.md の2種類だけでよい。
+  # ⚠️ ここを `^docs/` にしていた(v0.17.0 まで)。docs/ 配下を丸ごと落としていたため、
+  #    docs/principles.md のような正典でない文書を触った日が完全に見えなくなっていた。
   changed_today=$( { git log --since="$today 00:00" --name-only --format="" 2>/dev/null
-                     git status --porcelain | sed 's/^...//'; } | grep -vE '^docs/|^$' | sort -u )
+                     git status --porcelain | sed 's/^...//'; } \
+                   | grep -vE '^docs/([^/]+/)?(next-directions|log)\.md$|^$' | sort -u )
 
   for nd in "${nds[@]}"; do
     if [ ! -r "$nd" ]; then
@@ -165,7 +176,7 @@ else
     nd_today=$(git log --since="$today 00:00" --name-only --format="" -- "$nd" 2>/dev/null | grep -c . || true)
 
     if [ "$rel_n" -eq 0 ]; then
-      note "$nd: 今日は docs/ 以外の変更が無い(正典の更新自体を作業に数えないため docs/ は除外)"
+      note "$nd: 今日はこのコンポーネントに紐づく変更が無い(正典そのものの更新は数えない)"
     elif [ "$nd_dirty" -gt 0 ]; then
       ok "$nd: 未コミットの更新あり(コミットを忘れないこと)"
     elif [ "$nd_today" -gt 0 ]; then
@@ -227,6 +238,24 @@ else
       fi
     fi
   done
+fi
+
+# どの正典にも紐づかない変更(scripts/ や README など)を最後に報告する。
+# **紐づけは自動でやらない** —— 全コンポーネントに紐づけると、無関係な正典まで
+# 「更新漏れ」と催促され、うるさくて誰も読まなくなる(2026-08-06 に実際に起きた形)。
+# ここは warn ではなく note にしてある: どこへ記録するかは人が決めることで、
+# 毎回警告にすると同じ理由で機構が死ぬ。
+if [ ${#comps[@]} -gt 0 ] && [ -n "$changed_today" ]; then
+  unattr="$changed_today"
+  for c in "${comps[@]}"; do
+    unattr=$(printf '%s\n' "$unattr" | grep -vF "$c" || true)
+  done
+  unattr_n=$(printf '%s' "$unattr" | grep -c . || true)
+  if [ "$unattr_n" -gt 0 ]; then
+    note "どの正典にも紐づかない変更が ${unattr_n} 件(scripts/ や README など)。"
+    note "     どのコンポーネントの記録に残すかは人が決めること。自動では紐づけない。"
+    printf '%s\n' "$unattr" | head -5 | sed 's/^/       /'
+  fi
 fi
 
 echo
