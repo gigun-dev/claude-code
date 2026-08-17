@@ -87,7 +87,7 @@ overall_failed=0
 # -----------------------------------------------------------------------
 # (1) シェル構文チェック — 追跡対象の *.sh すべてに bash -n
 # -----------------------------------------------------------------------
-echo "=== [1/6] シェル構文チェック (bash -n) ==="
+echo "=== [1/7] シェル構文チェック (bash -n) ==="
 sh_failed=0
 sh_files=$(git ls-files '*.sh')
 if [ -z "$sh_files" ]; then
@@ -118,7 +118,7 @@ fi
 # (2) JSON 妥当性チェック — 追跡対象の *.json すべてをパース
 # -----------------------------------------------------------------------
 echo ""
-echo "=== [2/6] JSON 妥当性チェック ==="
+echo "=== [2/7] JSON 妥当性チェック ==="
 json_failed=0
 if ! command -v python3 >/dev/null 2>&1; then
 	# python3 が無い環境で「JSON チェックを黙ってスキップし、結果として
@@ -167,7 +167,7 @@ fi
 # (3) 正典の書式チェック — docs/*/next-directions.md の「着手順」節
 # -----------------------------------------------------------------------
 echo ""
-echo "=== [3/6] 正典の書式チェック (nd-tasks.sh --lint) ==="
+echo "=== [3/7] 正典の書式チェック (nd-tasks.sh --lint) ==="
 lint_script="plugins/harness/skills/status/scripts/nd-tasks.sh"
 lint_failed=0
 if [ ! -f "$lint_script" ]; then
@@ -225,7 +225,7 @@ fi
 #   git ls-files で追跡有無を判定し、未追跡なら「対象外(片方しか無い)」と同じ扱いで
 #   黙って飛ばす。
 echo ""
-echo "=== [4/6] plugin.json 版数整合性チェック (.claude-plugin ⇔ .codex-plugin) ==="
+echo "=== [4/7] plugin.json 版数整合性チェック (.claude-plugin ⇔ .codex-plugin) ==="
 ver_failed=0
 if ! command -v python3 >/dev/null 2>&1; then
 	# (2) の JSON 妥当性チェックと同じ理由(原則4「検知器は黙って死ぬ前提で検証する」)。
@@ -328,7 +328,7 @@ fi
 #   「合格」として扱うと、パス指定のミスをそのまま見逃す最悪の壊れ方になる
 #   ((1)(2)(4) の 0件時の扱いと同じ規律 —— 原則4「検知器は黙って死ぬ前提で検証する」)。
 echo ""
-echo "=== [5/6] marketplace.json プラグイン一覧整合性チェック (.claude-plugin ⇔ .agents) ==="
+echo "=== [5/7] marketplace.json プラグイン一覧整合性チェック (.claude-plugin ⇔ .agents) ==="
 mp_failed=0
 claude_mp=".claude-plugin/marketplace.json"
 codex_mp=".agents/plugins/marketplace.json"
@@ -418,7 +418,7 @@ fi
 #   (2)(4)(5) と同じ理由。**未検査を合格扱いにしない。**
 #   agy-mcp が存在するのに検査できないなら、それは合格ではなく「検査できていない」。
 echo ""
-echo "=== [6/6] agy-mcp パース回帰テスト (--selftest-parse) ==="
+echo "=== [6/7] agy-mcp パース回帰テスト (--selftest-parse) ==="
 agy_failed=0
 agy_server="plugins/agy-mcp/server.py"
 if ! git ls-files --error-unmatch -- "$agy_server" >/dev/null 2>&1; then
@@ -439,6 +439,37 @@ else
 	fi
 fi
 [ "$agy_failed" -ne 0 ] && overall_failed=1
+
+# -----------------------------------------------------------------------
+# [7/7] log.md の索引の鮮度
+# -----------------------------------------------------------------------
+# 【なぜ関門に入れるのか】
+#   log-index.sh --check は決定論的で 1 秒未満・ネットワーク不要 = CI 相当。
+#   にもかかわらず **tidy からしか呼ばれておらず**、tidy を回さずに push すれば
+#   索引が古いまま通っていた。索引は「この案は前に検討したか」を日付を知らずに
+#   辿るための唯一の経路なので、古いまま気づかない状態は高くつく。
+#
+#   ⚠️ **--check は書き換えない**(読むだけ)。verify.sh は pre-push と CI から
+#   走るので、ここで書き込むと「push しようとしたらファイルが変わる」ことになる。
+#   直すのは tidy の仕事。
+echo ""
+echo "=== [7/7] log.md 索引の鮮度チェック (log-index.sh --check) ==="
+idx_failed=0
+idx_script="plugins/harness/skills/tidy/scripts/log-index.sh"
+if ! git ls-files --error-unmatch -- "$idx_script" >/dev/null 2>&1; then
+	echo "- $idx_script が無いので検査しない(このリポジトリに harness の tidy skill は入っていない)"
+else
+	if idx_out=$(bash "$idx_script" --check 2>&1); then
+		echo "✓ log.md 索引: 最新"
+		# 警告(同じ却下 ID が複数行にある等)は rc=0 でも出るので、拾って見せる。
+		printf '%s\n' "$idx_out" | grep '⚠️' | sed 's/^/    /' || true
+	else
+		echo "✗ log.md の索引が古い —— /harness:tidy か log-index.sh の実行で再生成すること"
+		printf '%s\n' "$idx_out" | tail -20 | sed 's/^/    /'
+		idx_failed=1
+	fi
+fi
+[ "$idx_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
 # まとめ
