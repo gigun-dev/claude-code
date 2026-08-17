@@ -64,4 +64,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # uv は [6/7](agy-mcp のパース回帰テスト)が要る。入れていなかったため
+      # 2026-08-15 から3回連続で CI が落ちていた —— 検査は正しく「未検査を合格扱いに
+      # しない」と鳴っていたのに、**ローカルの verify.sh が rc=0 だったので誰も見に
+      # 行かなかった**。⚠️ 検査を緩めるのではなく、検査できる環境にする側で直す。
+      - uses: astral-sh/setup-uv@v5
       - run: bash scripts/verify.sh
