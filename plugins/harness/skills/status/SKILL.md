@@ -73,7 +73,10 @@ nd-tasks.sh --archive [--apply]                                    # move to 完
 and the head is silently truncated above 10,000 characters. It replaces the body and drops
 **every** `> **YYYY-MM-DD 更新:**` line on that item, keeping the checkbox state, the ID, the
 evidence lines and the ordering. What it deleted is printed to stderr in full: **move
-anything worth keeping into `log.md` first.**
+anything worth keeping into `log.md` first.** It then looks for each deleted 更新 line in the
+sibling `log.md` and **names the ones whose text it cannot find** — a warning only (rc stays
+0). Paraphrased moves do not match, so the message says *this string was not found*, never
+"it is lost": decide per item whether to move the original.
 
 ## Three buckets — including "no longer needs to be in the head"
 

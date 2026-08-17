@@ -73,8 +73,9 @@ hand-editing — hand edits drift the format, and numbering must scan the whole 
 reusing an archived ID. 現在地 and the catalog are prose and are edited by hand.
 
 When the stacked 更新 lines have made an item too long for the head, **fold them into the
-body with `--rewrite <ID> "<new body>"`** (it drops every 更新 line on that item and prints
-what it deleted). That is compaction, not deleting the plan: move the history into `log.md`
+body with `--rewrite <ID> "<new body>"`** (it drops every 更新 line on that item, prints what
+it deleted, and **names any deleted line whose text it cannot find in `log.md`** — a warning,
+not a failure). That is compaction, not deleting the plan: move the history into `log.md`
 first — it also stays in git.
 
 ### Uncommitted work
