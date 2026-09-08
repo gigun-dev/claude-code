@@ -79,7 +79,7 @@ remaining work; the section below only explains each item.
 ## 情報の書き分け方針
 
 - **コード = How** / **テスト = What** / **コミットログ = Why** / **コメント = Why not**。
-- **コメントはコードと同量レベルでベッタベタに書く。** 詳細は `.claude/rules/comments.md`
+- **コメントは必要十分に。多いほど良いではない。** 詳細は `.claude/rules/comments.md`
   (コード編集時に自動ロード)。
 
 ## 現在地・次の作業(セッション引き継ぎ)
