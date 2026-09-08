@@ -20,13 +20,13 @@
 
 ## 情報の書き分け方針
 
-- **コード = How** / **テスト = What** / **コミットログ = Why** / **コメント = Why not**。
-- **コメントは必要十分に。多いほど良いではない。** 詳細は `.claude/rules/comments.md`
+- コード = How / テスト = What / コミットログ = Why / コメント = Why not。
+- コメントは必要十分に。多いほど良いではない。詳細は `.claude/rules/comments.md`
   (コード編集時に自動ロード)。
 
 ## 現在地・次の作業(セッション引き継ぎ)
 
-- 正典は **`docs/next-directions.md`** — SessionStart フック(`.claude/settings.json`)が
+- 正典は `docs/next-directions.md` — SessionStart フック(`.claude/settings.json`)が
   冒頭(`session-head-end` マーカーまで = 毎セッション読み込まれる範囲)を自動注入する。
   作業の区切りごとに必ず更新(完了は打ち消し線+✅、変化は `> **YYYY-MM-DD 更新:**` を
   追記していく。計画は消さない)。

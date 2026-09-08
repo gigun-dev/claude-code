@@ -23,6 +23,6 @@ symlink しない。恒久化すべき知識だけを上記の instructions / do
 
 ## 保守
 
-- 共通 instruction、skill、rules、hook script は **Claude 側の正典だけを編集する**。
+- 共通 instruction、skill、rules、hook script は Claude 側の正典だけを編集する。
 - Claude settings / plugin / MCP を変えた場合、Codex adapter にも同じ意図を反映する。
 - `.claude/settings.local.json` の permission allowlist は個人環境なので Codex へ移植しない。
