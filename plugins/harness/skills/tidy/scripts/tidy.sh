@@ -94,7 +94,7 @@ finish() {
   fi
   # ⚠️ ここの版数は先頭の `harness-template v…` 行と**手で揃える**(いま2箇所にある)。
   #    2026-08-10 に実際にズレた —— 先頭だけ v0.16.0 に上げてこちらが v0.15.0 のまま出た。
-  echo "=== 検査完了: ${items} 件(tidy.sh v0.18.0) ==="
+  echo "=== 検査完了: ${items} 件(tidy.sh v0.19.0) ==="
   exit 0
 }
 
@@ -271,6 +271,27 @@ else
     [ "$ahead" -gt 0 ] && warn "未 push が ${ahead} コミット" || ok "push 済み"
   else
     skip "upstream (${up}) との比較(git rev-list)に失敗し、push 漏れの有無を検査できなかった"
+  fi
+fi
+
+# 着手順の書式。散文で「唯一の書き手は nd-tasks.sh」と要求していたが機械では見ておらず、
+# 2026-09-08 に cf-fireboard で手編集が素通りした(8 項目が ID 形式に合わず、lint の
+# `empty-section` が「タスクが無いと解釈してはいけない」状態になっていた)。
+# 「必ず〜する」は守られる保証がない —— 決定的にしたいなら検査する、というハーネス自身の原則。
+# nd-tasks.sh は status skill 側に在るので、無ければ黙って飛ばす(配布の順序に依存させない)。
+nd_tasks=""
+for cand in "${HARNESS_SKILLS_DIR:-}/status/scripts/nd-tasks.sh" \
+            "$(dirname "$0")/../../status/scripts/nd-tasks.sh"; do
+  [ -n "$cand" ] && [ -x "$cand" ] && { nd_tasks="$cand"; break; }
+done
+if [ -n "$nd_tasks" ] && [ -f "docs/next-directions.md" ]; then
+  echo
+  echo "## 着手順の書式"
+  if lint_out=$(bash "$nd_tasks" --lint 2>&1); then
+    ok "違反なし"
+  else
+    warn "$(printf '%s' "$lint_out" | grep -c '^✗') 件の違反 —— /harness:status --lint で全文を見る"
+    printf '%s\n' "$lint_out" | grep '^✗' | head -5 | sed 's/^/       /'
   fi
 fi
 
