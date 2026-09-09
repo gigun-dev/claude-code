@@ -382,6 +382,26 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 素の /bin/sh — macOS ではこれが bash 3.2 で、新しい shell が通す書き方を落とす
+# ---------------------------------------------------------------------------
+# adr 側で実際に踏んだ(`$( … )` の中の `case` を bash 3.2 が解析できず、CLI が
+# 起動すらできないのにテストは全部緑だった)。todo は shebang が /bin/sh なので
+# 普段からこの shell で走っているが、番人は置いておく。
+setup binsh
+todo add "a task" >/dev/null
+adrdir="$TODO_DIR/docs/adr"
+mkdir -p "$adrdir"
+printf '# T\n\nDate: 2026-09-01\n' >"$adrdir/0001-t.md"
+if [ -x /bin/sh ]; then
+	t "/bin/sh で読める(構文エラーが無い)" "0" \
+		"$(/bin/sh "$TODOBIN" --help >/dev/null 2>&1; echo $?)"
+	t "/bin/sh でも ready が索引ごと走る" "決定(docs/adr/、1 件)—— 触れるなら従うか、新しい ADR で覆すことを提案する" \
+		"$(/bin/sh "$TODOBIN" ready 2>/dev/null | head -1)"
+else
+	printf 'skip: /bin/sh が無い\n'
+fi
+
+# ---------------------------------------------------------------------------
 # projects — 断片化を見えるようにする
 # ---------------------------------------------------------------------------
 setup projects
