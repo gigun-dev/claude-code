@@ -19,7 +19,16 @@ PROG=adr
 
 EX_USAGE=1  # 引数・状態の誤り
 EX_FORMAT=2 # 検査で指摘があった
-EX_NODIR=9  # ADR ディレクトリがまだ無い(内部用。外へは出さない)
+
+# ADR ディレクトリの解決は bin/todo と共有する(`todo ready` が決定の索引を出す
+# ため)。2 箇所に持つと片方だけ直されてずれるので、lib/ の 1 本だけを読む。
+ADRLIB=$(dirname "$0")/../lib/adr-dir.sh
+[ -r "$ADRLIB" ] || {
+	printf '%s: %s が読めない。プラグインの配置が壊れている\n' "$PROG" "$ADRLIB" >&2
+	exit 1
+}
+. "$ADRLIB"
+EX_NODIR=$ADR_EX_NODIR # ADR ディレクトリがまだ無い(内部用。外へは出さない)
 
 # 抽出結果の区切りは US (0x1f)。タブにすると `read` が空フィールドを潰す
 # —— IFS に入れたタブは POSIX 上「IFS 空白類」で、連続すると 1 個の区切りに
@@ -80,23 +89,22 @@ decisions の順に最初に見つかったもの。どれも無ければ何も�
 EOF
 }
 
-# ADR ディレクトリを決める。ADR_DIR があればそれだけを見る(明示された場所が
-# 無いのは誤りなので、黙って別の場所へ落ちない)。
+# ADR ディレクトリを決める。探索そのものは lib/adr-dir.sh(bin/todo と共有)。
+# ここが足しているのは、カレントディレクトリを基点にすることと、
+# 「ADR_DIR が実在しない」を die に振り分けることだけ。
+#
+# 「1 件も無い」は誤りではないので EX_USAGE と別の値で返す —— adr_dir は
+# コマンド置換の中で呼ばれ、die の exit 1 はそこで捕まってしまう。同じ 1 だと
+# 「ADR_DIR の指定が誤り」が「まだ 1 件も無い」に化けて 0 で成功してしまう。
 adr_dir() {
-	if [ -n "${ADR_DIR:-}" ]; then
-		[ -d "$ADR_DIR" ] || die "ADR_DIR='$ADR_DIR' が無い。ディレクトリを作るか ADR_DIR を直すこと"
-		printf '%s' "$ADR_DIR"
+	out=$(adr_resolve_dir .)
+	rc=$?
+	[ "$rc" -eq 0 ] && {
+		printf '%s' "$out"
 		return 0
-	fi
-	for d in docs/adr docs/decisions adr decisions; do
-		[ -d "$d" ] && {
-			printf '%s' "$d"
-			return 0
-		}
-	done
-	# 「1 件も無い」は誤りではないので EX_USAGE と別の値で返す —— adr_dir は
-	# コマンド置換の中で呼ばれ、die の exit 1 はそこで捕まってしまう。同じ 1 だと
-	# 「ADR_DIR の指定が誤り」が「まだ 1 件も無い」に化けて 0 で成功してしまう。
+	}
+	[ "$rc" -eq "$ADR_EX_BADDIR" ] &&
+		die "ADR_DIR='$ADR_DIR' が無い。ディレクトリを作るか ADR_DIR を直すこと"
 	return "$EX_NODIR"
 }
 
