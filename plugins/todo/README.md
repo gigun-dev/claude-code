@@ -67,6 +67,7 @@ worktree の implementer は報告するに留める(`skills/todo/SKILL.md` の�
 ```sh
 todo add "text"          # 作成日と id: を付けて追記(+proj @ctx key:value は text にそのまま書く)
 todo ready [TERM...]     # dep: が解けている open 行 = いま着手できる / 並列に投げられる
+                         #   ADR があれば先頭に決定の索引(題だけ)を出す
 todo ls [TERM...]        # open を優先度順に。TERM は AND、-TERM で除外
 todo start ID            # @wip を付ける / todo stop ID で外す
 todo do ID...            # @wip を外して done.txt へ移す
@@ -81,6 +82,11 @@ todo id                  # id: の無い open 行すべてに id: を配る(冪�
 
 **インターフェイスの正は `todo --help`。**ここは索引で、食い違ったら `--help` が正しい。
 
+- **`ready` の先頭には決定の索引が出る**(ADR が 1 件以上あるときだけ。0 件なら無音)。
+  出るのは `adr ls` と同じ題の索引で、**本文は出さないし truncate もしない** ——
+  新しい順に切ると、忘れやすい古い決定から先に隠れる。代わりに、行数が閾値
+  (`bin/todo` の `ADR_INDEX_WARN_AT`、既定 30)を超えたら索引自身がそう報せる。
+  `ls` には出さない —— 読む口は一つに保つ。
 - **ID は数値としての完全一致のみ。** ゼロ詰めは付けても付けなくてよい。
 - 対象は `$TODO_DIR/todo.txt` と `$TODO_DIR/done.txt`(既定は `.`)。
   環境変数名は todo.txt-cli と同じ `TODO_DIR`。

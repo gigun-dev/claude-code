@@ -246,6 +246,8 @@ t "候補一覧の定義も 1 つだけ" "1" \
 	"$(grep -h '^ADR_DIR_CANDIDATES=' "$lib" "$ADRBIN" "$here/../bin/todo" | wc -l | tr -d ' ')"
 t "bin/adr は lib を読み込む" "1" \
 	"$(grep -c '\. "\$ADRLIB"' "$ADRBIN" | tr -d ' ')"
+t "bin/todo も同じ lib を読み込む" "1" \
+	"$(grep -c '\. "\$ADRLIB"' "$here/../bin/todo" | tr -d ' ')"
 
 # ---------------------------------------------------------------------------
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

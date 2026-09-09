@@ -382,6 +382,91 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# ready の先頭に出る決定の索引
+# ---------------------------------------------------------------------------
+# ADR の置き場は TODO_DIR からの探索で決まる(todo にとってのリポジトリは
+# todo.txt が置いてある場所)。テストもその下に書く。
+adrfile() { # adrfile <TODO_DIR からの相対パス> <題>
+	mkdir -p "$TODO_DIR/$(dirname "$1")"
+	printf '# %s\n\nDate: 2026-09-01\n' "$2" >"$TODO_DIR/$1"
+}
+
+setup adr_index
+todo add "work on it" >/dev/null
+adrfile docs/adr/0001-pick-postgres.md 'Pick Postgres'
+adrfile docs/adr/0002-use-manual-sql.md 'Use manual SQL instead of an ORM'
+t "ready の先頭に決定の索引が出る" \
+	"決定(docs/adr/、2 件)—— 触れるなら従うか、新しい ADR で覆すことを提案する
+  0001 Pick Postgres
+  0002 Use manual SQL instead of an ORM" \
+	"$(todo ready | head -3)"
+t "索引の後ろにタスク行がそのまま続く" "2026-09-09 work on it id:0001" \
+	"$(todo ready | tail -1)"
+t "ls には索引を出さない(読む口は一つ)" "2026-09-09 work on it id:0001" "$(todo ls)"
+t "索引を出しても ready は 0 で返る" "0" "$(todo ready >/dev/null 2>&1; echo $?)"
+
+setup adr_index_none
+todo add "work on it" >/dev/null
+t "ADR が 1 件も無ければ何も出さない" "2026-09-09 work on it id:0001" "$(todo ready 2>/dev/null)"
+
+setup adr_index_empty
+todo add "work on it" >/dev/null
+mkdir -p "$TODO_DIR/docs/adr"
+t "ディレクトリだけあって 0 件なら何も出さない" "2026-09-09 work on it id:0001" \
+	"$(todo ready 2>/dev/null)"
+
+# 解決順は bin/adr と一致していること —— 索引と `adr ls` が別の場所を見ていたら、
+# 索引は「守るべき決定」を偽って見せることになる。
+setup adr_index_order
+todo add "work on it" >/dev/null
+adrfile docs/adr/0001-in-adr.md 'In adr'
+adrfile docs/decisions/0001-in-decisions.md 'In decisions'
+adrfile adr/0001-in-top.md 'In top'
+t "探索順は docs/adr が先(bin/adr と同じ)" "  0001 In adr" "$(todo ready | sed -n 2p)"
+t "索引の中身は adr ls と一致する" \
+	"$( (cd "$TODO_DIR" && "$here/../bin/adr" ls) | awk '{ n = $2; sub(/-.*/, "", n); t = $0; sub(/^[^ ]+ [^ ]+ [^ ]+ /, "", t); print "  " n " " t }')" \
+	"$(todo ready | sed -n 2p)"
+
+setup adr_index_fallback
+todo add "work on it" >/dev/null
+adrfile docs/decisions/0001-in-decisions.md 'In decisions'
+t "docs/adr が無ければ docs/decisions を索引に使う" \
+	"決定(docs/decisions/、1 件)—— 触れるなら従うか、新しい ADR で覆すことを提案する" \
+	"$(todo ready | head -1)"
+
+setup adr_index_adrdir
+todo add "work on it" >/dev/null
+adrfile docs/adr/0001-ignored.md 'Ignored'
+adrfile records/0001-picked.md 'Picked'
+ADR_DIR=records
+export ADR_DIR
+t "ADR_DIR は探索より優先する" \
+	"決定(records/、1 件)—— 触れるなら従うか、新しい ADR で覆すことを提案する
+  0001 Picked" \
+	"$(todo ready | head -2)"
+ADR_DIR=nosuchdir
+t "ADR_DIR が実在しなければ stderr で言い、一覧は出す" "1" \
+	"$(todo ready 2>&1 >/dev/null | grep -c "ADR_DIR='nosuchdir' が無い")"
+t "ADR_DIR が実在しなくても ready は 0 で返る" "0" "$(todo ready >/dev/null 2>&1; echo $?)"
+unset ADR_DIR
+
+# 閾値 —— 索引が長くなったことを索引自身が報せる。truncate はしない。
+setup adr_index_threshold
+todo add "work on it" >/dev/null
+i=1
+while [ "$i" -le 30 ]; do
+	adrfile "$(printf 'docs/adr/%04d-decision.md' "$i")" "Decision $i"
+	i=$((i + 1))
+done
+t "30 件では警告を出さない" "決定(docs/adr/、30 件)—— 触れるなら従うか、新しい ADR で覆すことを提案する" \
+	"$(todo ready | head -1)"
+adrfile docs/adr/0031-decision.md 'Decision 31'
+t "31 件で索引の直前に 1 行足す" "1" \
+	"$(todo ready | head -1 | grep -c '索引が 31 行ある(閾値 30)')"
+t "警告を出しても truncate はしない(31 件すべて出す)" "31" \
+	"$(todo ready | grep -c '^  00')"
+
+# ---------------------------------------------------------------------------
 # adr の分 — 実行口はこのファイル 1 つに保つ
 # ---------------------------------------------------------------------------
 # ファイルが 2 つに分かれているのは作業場の作り方が違うから: todo は TODO_DIR を
