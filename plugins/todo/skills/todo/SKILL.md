@@ -1,11 +1,12 @@
 ---
 name: todo
 description: >-
-  Manage repository tasks in todo.txt: read ready work at session start and update
-  tasks when work starts, finishes, splits, or changes. Use for repository task
-  tracking, including implicit state changes.
+  Manage repository tasks in todo.txt: read ready work at the start of work in a
+  repository, and update tasks whenever one starts, finishes, splits, or changes —
+  including when the user never says "todo". Tasks live in this repository's todo.txt
+  and done.txt, driven by the `todo` CLI. Also on '/todo:todo'.
 metadata:
-  version: "0.1.2"
+  version: "0.1.3"
 ---
 
 このスキルのディレクトリから `../../bin/todo` を絶対パスに解決し、対象リポジトリのルートで `ready` を実行する。以下の `todo` は、その同梱 CLI を引用符で囲んだ絶対パスで呼ぶことを指す。作業ディレクトリは対象リポジトリに保つ。

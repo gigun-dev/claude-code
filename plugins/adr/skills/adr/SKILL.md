@@ -1,13 +1,14 @@
 ---
 name: adr
 description: >-
-  Use the moment a decision that is hard to reverse gets made: when the user rules on
-  something, when a measurement refutes an approach, when someone asks "why is it done
-  this way", and before you propose a change in an area that may already be decided.
-  Read this repository's existing ADRs first, then offer to record the new one. Fire
-  even when nobody says "ADR".
+  Read this repository's recorded decisions before touching an area that may already be
+  decided, and record new hard-to-reverse ones. Use it at the start of work in a
+  repository, before proposing or implementing a change to a protocol, a default, a
+  build flag, a file format or a layout, when someone asks why it is done this way, when
+  a measurement refutes an approach, and when the user settles a trade-off. Fire even
+  when nobody says "ADR" or "decision".
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 このスキルのディレクトリから `../../bin/adr` を絶対パスに解決し、対象リポジトリのルートで `ls` を実行する。以下の `adr` は、その同梱 CLI を引用符で囲んだ絶対パスで呼ぶことを指す。作業ディレクトリは対象リポジトリに保つ。
@@ -23,3 +24,5 @@ ADR を書くのは、次の三つが全部そろうときだけ。覆すのに�
 受理された ADR は編集しない。覆すときは新しいファイルに書き、その中で古い番号を名指しする。古い方に加えてよいのは先頭の 1 行 `Superseded by NNNN` だけ。
 
 決定が仕事を生むなら、その仕事は ADR に書かない。todo の行にして `see:docs/adr/NNNN-....md` で根拠を指す。
+
+書いた ADR が既存の todo の行に関わるなら、その行にも `todo replace ID "..."` で `see:docs/adr/NNNN-<slug>.md` を足す。ADR の本文から todo の id を名指しするだけでは片方向で、次のセッションが読むのは `ready` の出力だけなので、そこから決定へ戻る経路が無い。
