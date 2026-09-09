@@ -9,48 +9,16 @@ metadata:
   version: "0.1.0"
 ---
 
-<!-- `|| true` は必須。`!` はスキルを読んだだけで無条件に走るので、ここに置けるのは
-     必ず成功するコマンドだけ。`check` は違反があると 2 で返る。 -->
-
 ```!
 "${CLAUDE_SKILL_DIR}/../../bin/todo" check || true
 ```
 
-# todo:doctor
+上が検査の結果だ。既定は診断までで、書くのは承認を得てからにする。ついでに直しておく、はしない。
 
-**既定は診断だけ。書くのは承認を得てから。**「ついでに直しておきました」をしない。
+指摘の読み方は次のとおり。`id:` が無い行は `add` 以外のコマンドが触れないので、`todo id` で配る。`id:` の重複はどちらを指しているか決まらない。存在しない id を指す `dep:` は、その行を永久に `ready` から外す。`dep:` の循環は輪の中の全員を永久に `ready` から外す。`key:value` の形式違反は、たとえば `see:https://…` のように value にコロンが二つ目に入ったもの。`x ` で始まる行が todo.txt にあると open として数え続ける。記法の定義は `../todo/SKILL.md` にあり、行が仕様上どう読まれるか分からないときだけ `../todo/references/todo-txt-format.md` を読む。
 
-## 検査（上の出力）
+直し方は行を直接編集しても `todo replace` や `todo append` でもよく、求めるのは直したあとに `todo check` が通ることだけだ。`todo` が PATH に無ければ `${CLAUDE_SKILL_DIR}/../../bin/todo` を使う。
 
-| 違反 | 何が起きるか |
-|---|---|
-| `id:` が無い | `add` 以外のコマンドがその行を触れない。**`todo id` で付ける** |
-| `id:` の重複 | どちらを指しているか決まらない |
-| 宙吊り `dep:` | その行は永久に `ready` に出ない |
-| 循環 `dep:` | 輪の中の全員が永久に `ready` に出ない |
-| `key:value` の形式違反 | 例: `see:https://…` は value にコロンが 2 つ目 |
-| `x ` 始まりが todo.txt にある | open として数え続ける |
+導入は承認を得てから、次の順で行う。`todo.txt` と `done.txt` が無ければ空で作り、`.gitignore` には入れない（タスクはリポジトリの資産で、個人の設定ではない）。`CLAUDE.md`（`AGENTS.md` があればそちらにも）へ `Tasks live in todo.txt; use the todo skills.` の一行だけ足す。書き方の規律は `todo:todo` が持っているので、ここに複製しない。リポジトリに検証コマンドがあれば、そこへ `todo check` を足すことを提案し、足すかは利用者が決める。
 
-`id:` `dep:` `see:` `@wip` の定義は `../todo/SKILL.md` の「語彙」。
-**行が仕様上どう読まれるか分からないときだけ** `../todo/references/todo-txt-format.md`
-（上流の仕様そのまま）を読む。
-
-直し方は行を直接編集するか `todo replace` / `todo append`。**どちらでもよい** ——
-要求するのは、直したあとに `todo check` が通ることだけ。
-`todo` が PATH に無ければ `${CLAUDE_SKILL_DIR}/../../bin/todo`。
-
-## 導入（承認を得てから）
-
-1. `todo.txt` と `done.txt` が無ければ空で作る。`.gitignore` に入れない ——
-   **タスクはリポジトリの資産で、個人の設定ではない。**
-2. `CLAUDE.md`（`AGENTS.md` があればそちらにも）へ 1 行だけ:
-   `Tasks live in todo.txt; use the todo skills.`
-   書き方の規律は `todo:todo` が持っている。複製すると必ずずれる。
-3. リポジトリの検証コマンド（`scripts/verify.sh` / `tools/test.sh` 等）があるなら、
-   そこへ `todo check` を足すことを**提案する**。足すかは利用者が決める。
-
-## しないこと
-
-- **フックを置かない。** 呼ばれる保証の無い場所に検査を置くと、検査が黙って死ぬ。
-  形式は書き込みのたびに CLI 自身が見ており、`ls` と `ready` が毎回結果を出す。
-- **現在地・経緯・log のファイルを作らない。** 経緯はコミットメッセージ、知識は docs。
+フックは置かず、現在地や経緯や log のファイルも作らない。形式は書き込みのたびに CLI 自身が見ており、`ls` と `ready` が毎回結果を出す。経緯はコミットメッセージに、知識は docs にある。
