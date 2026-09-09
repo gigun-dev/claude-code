@@ -329,7 +329,7 @@ if [ -x "$todosh" ]; then
 	t "todo.sh が done.txt を読める" "1" \
 		"$("$todosh" -d "$cfg" -p listfile done.txt 2>&1 | grep -c 'gamma id:ccc333')"
 else
-	printf '- skip: todo.sh が無い (%s)\n' "$todosh"
+	printf 'skip: 互換テスト — todo.sh が無い (%s)\n' "$todosh"
 fi
 
 # ---------------------------------------------------------------------------
