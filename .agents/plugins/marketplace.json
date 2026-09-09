@@ -14,6 +14,7 @@
     { "name": "ios-skills", "source": { "source": "local", "path": "./plugins/ios-skills" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
     { "name": "workers-fetch", "source": { "source": "local", "path": "./plugins/workers-fetch" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
     { "name": "harness", "source": { "source": "local", "path": "./plugins/harness" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "todo", "source": { "source": "local", "path": "./plugins/todo" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Productivity" },
     { "name": "telemetry", "source": { "source": "local", "path": "./plugins/telemetry" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Productivity" }
   ]
 }

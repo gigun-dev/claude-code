@@ -1,0 +1,731 @@
+#!/bin/sh
+# =============================================================================
+# todo — todo.txt 形式のタスクを CLI で操作する
+# =============================================================================
+# 形式の正は https://github.com/todotxt/todo.txt の README。語彙は todo.txt-cli
+# (todo.sh) から借りている。このスクリプトが足しているのは仕様の `key:value`
+# 拡張 2 つだけ:
+#
+#   id:xxxxxx … `add` が採番する 6 桁の小文字 16 進(/dev/urandom の 3 バイト)。
+#            行番号は編集とマージでずれるので、エージェントがタスクを指す手段が
+#            仕様の範囲内では他に無い。**連番にしない** —— 並行 worktree や別
+#            ブランチで足したタスクが同じ番号を取り、マージで衝突するため。
+#            採番に状態ファイルもカウンタも要らないのが乱数の利点。
+#   dep:xxxxxx … 依存。カンマ区切りで複数(値に空白・コロンを含まないので仕様内)。
+#            `ready` はこれを解決して「いま着手できる行」だけを出す。
+#
+# POSIX sh + awk のみ。bash 固有機能・python・jq に依存しない —— このスクリプトは
+# Nix shell の外や Codex の sandbox でも走る必要があり、todo.txt-cli 自身が
+# 単一の shell script であるのと同じ判断。
+# =============================================================================
+
+set -u
+
+PROG=todo
+TODO_DIR=${TODO_DIR:-.}
+TODO_FILE="$TODO_DIR/todo.txt"
+DONE_FILE="$TODO_DIR/done.txt"
+# TODO_TODAY はテスト用の注入点。日付を跨いだ実行で結果が変わるテストを書けない。
+TODAY=${TODO_TODAY:-$(date +%Y-%m-%d)}
+
+NL='
+'
+
+# 終了コードは --help が正。ここを増やすなら --help も直すこと。
+EX_USAGE=1  # 引数・状態の誤り
+EX_FORMAT=2 # 形式違反を見つけた / 書けば増やすので書かなかった
+EX_NOID=3   # ID が見つからない・曖昧
+
+# 診断は必ず stderr。データ(行)だけが stdout に出る。
+die() {
+	printf '%s: %s\n' "$PROG" "$1" >&2
+	exit "${2:-$EX_USAGE}"
+}
+
+usage() {
+	cat <<'EOF'
+usage: todo <command> [args]      — リポジトリのタスクを todo.txt 形式で操作する
+
+  add "TEXT"           作成日と id: を付けて todo.txt へ追記し、その行を出す
+  ready [TERM...]      dep: がすべて done の open 行 = いま着手できるもの
+  ls [TERM...]         open を優先度順に。TERM は AND、先頭 - で除外、大小無視
+  listproj [TERM...]   +project の一覧
+  listcon [TERM...]    @context の一覧
+  show ID...           1 行を出す(done.txt も見る)
+  start ID...          @wip を付ける(着手した)。既に付いていれば何もしない
+  stop ID...           @wip を外す(未完のまま置いた)。無ければ何もしない
+  do ID...             @wip を外して done.txt へ移す。既に done なら何もしない
+  pri ID PRIORITY      優先度 (A-Z) を付ける/差し替える
+  depri ID...          優先度を外す
+  replace ID "TEXT"    本文を置き換える(id:・作成日・優先度は保持)
+  append ID "TEXT"     行末に足す
+  prepend ID "TEXT"    本文の先頭に足す(優先度と作成日の後ろ)
+  check                形式検査。違反があれば stdout に出して 2 で終わる
+
+行の形 (https://github.com/todotxt/todo.txt):
+
+  (A) 2026-09-09 本文 +project @context dep:a3f9c1 see:docs/x.md id:7b2e04
+  x 2026-09-09 2026-09-08 完了した本文 id:7b2e04            ← done.txt
+
+  (A)..(Z)   任意・先頭のみ。重要度(進行中を表さない —— それは @wip)
+  +project   束ね。行にはその次の一手だけを書く
+  @context   要る状況(@device @user)。@wip は進行中の印
+  id:xxxxxx  add が採番する 6 桁の小文字 16 進。タスクを指す唯一の手段
+  dep:a,b    依存。指す先が done.txt に入るまで ready に出ない
+  key:value  自由。key も value も空白とコロンを含めない(URL は書けない)
+
+ID は id: の値。一意なら前方一致でよい (todo do a3f)。
+対象は $TODO_DIR/todo.txt と $TODO_DIR/done.txt (既定の TODO_DIR は ".")。
+対話しない。データは stdout、診断は stderr。
+
+終了コード:
+  0  成功
+  1  引数・状態の誤り(usage)
+  2  形式違反を見つけた(check)、または書けば増やすので書かなかった
+  3  ID が見つからない、または前方一致が曖昧
+
+テスト用の注入点: TODO_TODAY(日付を固定)/ TODO_FAKE_IDS(採番を固定)
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# awk 共通関数。各コマンドの awk の先頭に差し込む。
+# ---------------------------------------------------------------------------
+AWKLIB='
+function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+# 行から id:N の N を返す(無ければ "")。複数あれば最後のものを返す —— check が
+# 別途「id が複数」を見るので、ここでは黙って 1 つに決める。
+function lineid(s,   n, a, i, r) {
+	n = split(s, a, /[ \t]+/); r = ""
+	for (i = 1; i <= n; i++) if (a[i] ~ /^id:[0-9A-Za-z]+$/) r = substr(a[i], 4)
+	return r
+}
+function idcount(s,   n, a, i, c) {
+	n = split(s, a, /[ \t]+/); c = 0
+	for (i = 1; i <= n; i++) if (a[i] ~ /^id:/) c++
+	return c
+}
+function pri(s) { if (s ~ /^\([A-Z]\) /) return substr(s, 2, 1); return "" }
+function stripri(s) { if (s ~ /^\([A-Z]\) /) return substr(s, 5); return s }
+function isdate(s) { return s ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/ }
+# 優先度を除いた先頭が作成日ならそれを返す。
+function created(s,   t) {
+	t = stripri(s)
+	if (isdate(substr(t, 1, 10)) && (length(t) == 10 || substr(t, 11, 1) == " ")) return substr(t, 1, 10)
+	return ""
+}
+# 優先度と作成日を除いた本文。
+function body(s,   t, c) {
+	t = stripri(s); c = created(s)
+	if (c != "") t = trim(substr(t, 11))
+	return t
+}
+# dep: の値をカンマ区切りで連結して返す。
+function depstr(s,   n, a, i, r) {
+	n = split(s, a, /[ \t]+/); r = ""
+	for (i = 1; i <= n; i++) if (a[i] ~ /^dep:/) r = (r == "" ? substr(a[i], 5) : r "," substr(a[i], 5))
+	return r
+}
+# ソートキー: 優先度(無しは "~" = Z より後ろ)+ 出現順。
+# 第2キーが id ではなく出現順なのは、id が乱数になった時点で id 順に意味が
+# 無くなったから —— 同じ優先度の中はファイルに書いた順(= 足した順)が読みやすい。
+function sortkey(s, ord,   p) {
+	p = pri(s); if (p == "") p = "~"
+	return sprintf("%s%09d", p, ord)
+}
+# 進行中の印は @wip という context ひとつ。優先度は重要度のままにしておく。
+# 誰がやっているかは普通の context (@claude / @codex) を自分で足せばよく、
+# CLI の機能にはしない。
+function stripwip(s,   n, a, i, r) {
+	n = split(s, a, /[ \t]+/); r = ""
+	for (i = 1; i <= n; i++) {
+		if (a[i] == "@wip") continue
+		r = (r == "" ? a[i] : r " " a[i])
+	}
+	return r
+}
+function hastag(s, tag) { return index(" " s " ", " " tag " ") > 0 }
+'
+
+# 空行を落として open 行を出す。ファイルが無ければ何も出さない。
+open_lines() {
+	[ -f "$TODO_FILE" ] || return 0
+	awk 'NF { print }' "$TODO_FILE"
+}
+
+done_lines() {
+	[ -f "$DONE_FILE" ] || return 0
+	awk 'NF { print }' "$DONE_FILE"
+}
+
+# 引数の TEXT を検証する。id: の混入を拒むのは、採番の一意性を CLI 側でしか
+# 守れないため(人が書いた id: を受け入れると重複が静かに入る)。
+check_text() {
+	case $1 in
+	*"$NL"*) die "TEXT に改行がある。1 行 = 1 タスクなので改行は置けない。分けて 2 回呼ぶこと" ;;
+	esac
+	[ -n "$(printf '%s' "$1" | tr -d ' \t')" ] || die "TEXT が空。例: todo add \"送信バッファを A/B する +upload @device\""
+	case $1 in
+	*"id:"*) die "TEXT に id: がある。id は add が採番するので書かない。例: todo add \"次の一手 +upload dep:a3f9c1\"" ;;
+	esac
+}
+
+# 与えられた ID を完全な id へ解決する。完全一致を優先し、無ければ一意な前方一致
+# を認める(6 桁の 16 進を毎回全部打つのは無駄なので)。曖昧なら黙って選ばず落とす。
+resolve_id() {
+	case $1 in
+	'' | *[!0-9A-Za-z]*) die "ID '$1' に英数字以外がある。ID は id: の値。例: todo show a3f9c1" "$EX_NOID" ;;
+	esac
+	got=$( (open_lines; done_lines) | awk -v want="$1" "$AWKLIB"'
+		{
+			id = lineid($0)
+			if (id == "") next
+			if (id == want) exact = id
+			else if (substr(id, 1, length(want)) == want && !(id in pfx)) { pfx[id] = 1; np++ }
+		}
+		END {
+			if (exact != "") { print exact; exit 0 }
+			if (np == 1) { for (k in pfx) print k; exit 0 }
+			exit(np > 1 ? 2 : 1)
+		}')
+	rc=$?
+	[ "$rc" -eq 0 ] || {
+		[ "$rc" -eq 2 ] && die "ID '$1' が複数のタスクに前方一致する。桁を足して一意にすること(例: todo show a3f9c1)。候補は todo ls で見る" "$EX_NOID"
+		die "ID '$1' が todo.txt にも done.txt にも無い。todo ls で id を確かめること" "$EX_NOID"
+	}
+	printf '%s' "$got"
+}
+
+# id が既にどちらかのファイルにあるか。
+id_exists() {
+	(open_lines; done_lines) | awk -v want="$1" "$AWKLIB"'
+		lineid($0) == want { found = 1 } END { exit(found ? 0 : 1) }'
+}
+
+# 6 桁の小文字 16 進を採番する。衝突したら引き直す(状態ファイルを持たないので、
+# 一意性はここでの照合だけが担保する)。TODO_FAKE_IDS はテスト用の注入点 ——
+# 乱数のままでは「衝突したら引き直す」経路を一度も踏めない。
+gen_id() {
+	tries=0
+	while [ "$tries" -lt 100 ]; do
+		if [ -n "${TODO_FAKE_IDS:-}" ]; then
+			cand=${TODO_FAKE_IDS%% *}
+			case $TODO_FAKE_IDS in
+			*' '*) TODO_FAKE_IDS=${TODO_FAKE_IDS#* } ;;
+			*) TODO_FAKE_IDS='' ;;
+			esac
+			[ -n "$cand" ] || die "TODO_FAKE_IDS を使い切った"
+		else
+			cand=$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')
+		fi
+		case $cand in
+		'' | *[!0-9a-z]*) die "採番に失敗した(不正な id: '$cand')" ;;
+		esac
+		id_exists "$cand" || {
+			printf '%s' "$cand"
+			return 0
+		}
+		tries=$((tries + 1))
+	done
+	die "id を 100 回引いても衝突が解けない(ファイルが壊れている疑い)"
+}
+
+# 指定 ID の open 行を出す。無ければ非ゼロ。
+find_open() {
+	out=$(open_lines | awk -v want="$1" "$AWKLIB"' $0 != "" && lineid($0) == want { print; found++ } END { exit(found ? 0 : 1) }') || return 1
+	printf '%s\n' "$out"
+}
+
+# todo.txt を書き換える。awk に元の行を流し、出力で丸ごと置き換える。
+# 一時ファイル経由なのは、途中で失敗したときに元ファイルを壊さないためと、
+# 書き込む前に gate_write で検査できるようにするため。
+rewrite_todo() {
+	tmp="$TODO_FILE.$$"
+	if open_lines | "$@" >"$tmp"; then
+		gate_write "$tmp" "$DONE_FILE" "$OPNAME" || {
+			rm -f "$tmp"
+			return "$EX_FORMAT"
+		}
+		mv "$tmp" "$TODO_FILE"
+	else
+		rm -f "$tmp"
+		die "$OPNAME: 行の書き換え(awk)に失敗した"
+	fi
+}
+
+# ---------------------------------------------------------------------------
+cmd_add() {
+	[ $# -eq 1 ] || die "usage: todo add \"TEXT\"   (例: todo add \"送信バッファを A/B する +upload @device\")"
+	check_text "$1"
+	text=$(printf '%s' "$1" | awk "$AWKLIB"'{ print trim($0) }')
+
+	# 衝突照合は todo.txt と done.txt の両方に対して行う。done を見ないと、
+	# 完了済みの id を再利用してしまい、後続の dep: が別のタスクを指すようになる。
+	next=$(gen_id) || exit 1
+
+	# 優先度は仕様上「必ず先頭」。テキストが (A) で始まっていたら作成日はその後ろ。
+	prefix=''
+	case $text in
+	'('[A-Z]') '*)
+		prefix=$(printf '%s' "$text" | cut -c1-4)
+		text=$(printf '%s' "$text" | cut -c5-)
+		;;
+	esac
+
+	[ -f "$TODO_FILE" ] || : >"$TODO_FILE" || die "$TODO_FILE を作れない"
+	line="$prefix$TODAY $text id:$next"
+
+	# 追記も一旦候補ファイルを作って関門を通す。dep: のタイポ(宙吊り)や
+	# key:value の形式違反は、書いてしまってからでは静かに残る。
+	tmp="$TODO_FILE.$$"
+	{ cat "$TODO_FILE" && printf '%s\n' "$line"; } >"$tmp" || {
+		rm -f "$tmp"
+		die "$TODO_FILE へ書けない"
+	}
+	gate_write "$tmp" "$DONE_FILE" add || {
+		rm -f "$tmp"
+		exit "$EX_FORMAT"
+	}
+	mv "$tmp" "$TODO_FILE" || die "$TODO_FILE を置き換えられない"
+	printf '%s\n' "$line"
+}
+
+cmd_prepend() {
+	[ $# -eq 2 ] || die "usage: todo prepend ID \"TEXT\"   (例: todo prepend a3f9c1 \"先に\")"
+	check_text "$2"
+	resolve_open_set 1 "$1" || exit $?
+	text=$(printf '%s' "$2" | awk "$AWKLIB"'{ print trim($0) }')
+	# 挿す位置は優先度と作成日の**後ろ**。仕様上この 2 つより前には何も置けない。
+	rewrite_todo awk -v want="$resolved" -v text="$text" "$AWKLIB"'
+		{
+			if (lineid($0) != want) { print; next }
+			p = pri($0); c = created($0)
+			print (p == "" ? "" : "(" p ") ") (c == "" ? "" : c " ") text " " body($0)
+		}
+	' || exit $?
+	find_open "$resolved"
+}
+
+# 引数の ID 群を解決し、open のものを set_out(",a,b," 形式)と resolved
+# (空白区切り)に、既に done のものを settled に振り分ける。
+# 解決できない ID があれば何も書き換えずに落ちる —— 途中まで適用された状態を作らない。
+#
+# strict=1 なら「done にある」も誤りとして落とす(start/stop/pri など、完了済みの
+# 行に対して意味を持たない操作)。do だけは strict=0 —— 二度目の `do` はエラーでは
+# なく何もしないのが正しい(結果は同じ「done である」なので、冪等)。
+resolve_open_set() {
+	strict=$1
+	shift
+	set_out=','
+	resolved=''
+	settled=''
+	for a in "$@"; do
+		rid=$(resolve_id "$a") || return "$EX_NOID"
+		if find_open "$rid" >/dev/null; then
+			set_out="$set_out$rid,"
+			resolved="${resolved:+$resolved }$rid"
+		elif [ "$strict" -eq 1 ]; then
+			printf '%s: id:%s は done.txt にある。完了済みの行にこの操作はできない\n' "$PROG" "$rid" >&2
+			return "$EX_USAGE"
+		else
+			settled="${settled:+$settled }$rid"
+		fi
+	done
+}
+
+show_ids() {
+	for id in $1; do
+		(open_lines; done_lines) | awk -v want="$id" "$AWKLIB"'lineid($0) == want { print }'
+	done
+}
+
+cmd_do() {
+	[ $# -ge 1 ] || die "usage: todo do ID...   (例: todo do a3f9c1)"
+	resolve_open_set 0 "$@" || exit $?
+	ids=$set_out
+
+	# 既に done の ID しか無いなら、何も書かずに成功で返す(冪等)。
+	if [ -z "$resolved" ]; then
+		printf '%s: 指定された ID はすべて既に done.txt にある。何もしない\n' "$PROG" >&2
+		show_ids "$settled"
+		return 0
+	fi
+	[ -z "$settled" ] || printf '%s: id:%s は既に done.txt にある。飛ばす\n' "$PROG" "$settled" >&2
+
+	tmp_todo="$TODO_FILE.$$"
+	tmp_done="$DONE_FILE.$$"
+	: >"$tmp_todo" || die "$TODO_FILE を書き換えられない"
+	: >"$tmp_done" || { rm -f "$tmp_todo"; die "$DONE_FILE を書き換えられない"; }
+
+	# 完了行は仕様どおり `x <完了日> <作成日> <本文>`。優先度は多くのクライアントと
+	# 同じく落とす(残したければ pri:A を自分で書く)。id: は残す —— 後続の dep: が
+	# 「その id は done にあるか」で解決するので、消すと ready が壊れる。
+	# @wip は進行中の印なので、完了と同時に落とす。
+	open_lines | awk -v ids="$ids" -v today="$TODAY" -v dfile="$tmp_done" "$AWKLIB"'
+		{
+			id = lineid($0)
+			if (id != "" && index(ids, "," id ",") > 0) print "x " today " " stripwip(stripri($0)) >> dfile
+			else print
+		}' >"$tmp_todo" || {
+		rm -f "$tmp_todo" "$tmp_done"
+		die "書き換えに失敗した"
+	}
+
+	[ -f "$DONE_FILE" ] || : >"$DONE_FILE" || die "$DONE_FILE を作れない"
+
+	# 2 ファイルを同時に変えるので、関門にも 2 ファイルの候補を渡す。
+	tmp_full="$DONE_FILE.full.$$"
+	cat "$DONE_FILE" "$tmp_done" >"$tmp_full" || die "$DONE_FILE を組み立てられない"
+	gate_write "$tmp_todo" "$tmp_full" do || {
+		rm -f "$tmp_todo" "$tmp_done" "$tmp_full"
+		exit "$EX_FORMAT"
+	}
+	mv "$tmp_full" "$DONE_FILE" || die "$DONE_FILE を置き換えられない"
+	mv "$tmp_todo" "$TODO_FILE" || die "$TODO_FILE を置き換えられない"
+	cat "$tmp_done"
+	rm -f "$tmp_done"
+}
+
+cmd_pri() {
+	[ $# -eq 2 ] || die "usage: todo pri ID PRIORITY   (例: todo pri a3f9c1 A)"
+	case $2 in
+	[A-Z]) ;;
+	*) die "優先度は A-Z の 1 文字: $2" ;;
+	esac
+	resolve_open_set 1 "$1" || exit $?
+	rewrite_todo awk -v want="$resolved" -v p="$2" "$AWKLIB"'
+		{ if (lineid($0) == want) print "(" p ") " stripri($0); else print }
+	' || exit $?
+	find_open "$resolved"
+}
+
+cmd_depri() {
+	[ $# -ge 1 ] || die "usage: todo depri ID...   (例: todo depri a3f9c1)"
+	resolve_open_set 1 "$@" || exit $?
+	rewrite_todo awk -v ids="$set_out" "$AWKLIB"'
+		{ id = lineid($0); if (id != "" && index(ids, "," id ",") > 0) print stripri($0); else print }
+	' || exit $?
+	for id in $resolved; do find_open "$id"; done
+}
+
+# start / stop —— 「進行中」は優先度ではなく @wip という context ひとつで表す。
+# 優先度 (A)..(Z) は重要度・順序の意味のまま残す(混ぜると、着手した瞬間に
+# 重要度の情報が消える)。見るのは `todo ls @wip`。
+cmd_start() {
+	[ $# -ge 1 ] || die "usage: todo start ID...   (例: todo start a3f9c1)"
+	resolve_open_set 1 "$@" || exit $?
+	rewrite_todo awk -v ids="$set_out" "$AWKLIB"'
+		{
+			id = lineid($0)
+			if (id == "" || index(ids, "," id ",") == 0) { print; next }
+			print hastag($0, "@wip") ? $0 : $0 " @wip"
+		}
+	' || exit $?
+	for id in $resolved; do find_open "$id"; done
+}
+
+cmd_stop() {
+	[ $# -ge 1 ] || die "usage: todo stop ID...   (例: todo stop a3f9c1)"
+	resolve_open_set 1 "$@" || exit $?
+	rewrite_todo awk -v ids="$set_out" "$AWKLIB"'
+		{
+			id = lineid($0)
+			if (id != "" && index(ids, "," id ",") > 0) print stripwip($0)
+			else print
+		}
+	' || exit $?
+	for id in $resolved; do find_open "$id"; done
+}
+
+cmd_replace() {
+	[ $# -eq 2 ] || die "usage: todo replace ID \"TEXT\"   (例: todo replace a3f9c1 \"新しい本文 +upload\")"
+	check_text "$2"
+	resolve_open_set 1 "$1" || exit $?
+	text=$(printf '%s' "$2" | awk "$AWKLIB"'{ print trim($0) }')
+	# 新しい本文が (A) で始まっていたらそれを優先度として採る。無ければ元の優先度を
+	# 保つ —— replace は「本文の置き換え」であって、優先度と作成日と id は本文ではない。
+	rewrite_todo awk -v want="$resolved" -v text="$text" "$AWKLIB"'
+		{
+			if (lineid($0) != want) { print; next }
+			p = pri($0); c = created($0); t = text
+			if (t ~ /^\([A-Z]\) /) { p = substr(t, 2, 1); t = substr(t, 5) }
+			out = (p == "" ? "" : "(" p ") ") (c == "" ? "" : c " ") t " id:" want
+			print out
+		}
+	' || exit $?
+	find_open "$resolved"
+}
+
+cmd_append() {
+	[ $# -eq 2 ] || die "usage: todo append ID \"TEXT\"   (例: todo append a3f9c1 \"dep:9291ec\")"
+	check_text "$2"
+	resolve_open_set 1 "$1" || exit $?
+	text=$(printf '%s' "$2" | awk "$AWKLIB"'{ print trim($0) }')
+	rewrite_todo awk -v want="$resolved" -v text="$text" "$AWKLIB"'
+		{ if (lineid($0) == want) print $0 " " text; else print }
+	' || exit $?
+	find_open "$resolved"
+}
+
+# TERM を 1 変数にまとめて awk へ渡す。todo.sh と同じく AND、先頭 "-" で除外、
+# 大文字小文字は区別しない。
+#
+# 区切りが改行ではなく US (0x1f) なのは、awk のコマンドライン変数に生の改行を
+# 渡せない実装がある(macOS の awk は "newline in string" で落ちる)ため。
+# 渡し方も `var=value` オペランドではなく `-v` —— オペランドの代入は BEGIN の
+# **後**に処理されるので、BEGIN で terms を分解するこの実装では空に見える
+# (2026-09-09 実際にフィルタが素通りした)。
+US=$(printf '\037')
+terms_of() {
+	out=''
+	for t in "$@"; do
+		if [ -z "$out" ]; then out=$t; else out="$out$US$t"; fi
+	done
+	printf '%s' "$out"
+}
+
+FILTER='
+	BEGIN {
+		nt = split(terms, tt, sep)
+		for (i = 1; i <= nt; i++) if (tt[i] == "") tt[i] = "\001"  # 空要素は必ずマッチしない値へ
+	}
+	function matches(s,   i, t, neg, lo) {
+		lo = tolower(s)
+		for (i = 1; i <= nt; i++) {
+			t = tt[i]
+			if (t == "\001") continue
+			neg = 0
+			if (substr(t, 1, 1) == "-") { neg = 1; t = substr(t, 2) }
+			if (t == "") continue
+			if (neg == (index(lo, tolower(t)) > 0)) return 0
+		}
+		return 1
+	}
+'
+
+# 一覧の前に検査結果を出す。手で編集したファイルの壊れは、次に一覧を見た
+# ときに気づけないと直らない —— フックを置かない代わりに、必ず通る経路へ置く。
+# 一覧そのものは成功なので終了コードは 0 のまま(壊れを理由に一覧を隠さない)。
+show_findings() {
+	run_check "$TODO_FILE" "$DONE_FILE" | grep -v '^check: ' || true
+}
+
+cmd_ls() {
+	show_findings
+	terms=$(terms_of "$@")
+	open_lines | awk -v terms="$terms" -v sep="$US" "$AWKLIB$FILTER"'
+		matches($0) { printf "%s\t%s\n", sortkey($0, NR), $0 }
+	' | LC_ALL=C sort | cut -f2-
+}
+
+cmd_ready() {
+	show_findings
+	terms=$(terms_of "$@")
+	# dep: の解決は「その id が done.txt にあるか」だけで決める。
+	# done に無い id(= open のまま / そもそも存在しない)は解決しない = ready ではない。
+	# 宙吊り(どちらにも無い)は check が別途エラーとして名指しする —— ここで
+	# 「知らない id は無視して ready 扱い」にすると、タイポが黙って着手可能に化ける。
+	{
+		done_lines | sed 's/^/D /'
+		open_lines | sed 's/^/O /'
+	} | awk -v terms="$terms" -v sep="$US" "$AWKLIB$FILTER"'
+		{ tag = substr($0, 1, 1); line = substr($0, 3) }
+		tag == "D" { id = lineid(line); if (id != "") isdone[id] = 1; next }
+		{
+			if (!matches(line)) next
+			d = depstr(line)
+			if (d != "") {
+				n = split(d, a, ",")
+				for (i = 1; i <= n; i++) if (a[i] != "" && !(a[i] in isdone)) next
+			}
+			printf "%s\t%s\n", sortkey(line, NR), line
+		}
+	' | LC_ALL=C sort | cut -f2-
+}
+
+list_tokens() {
+	sigil=$1
+	shift
+	terms=$(terms_of "$@")
+	open_lines | awk -v terms="$terms" -v sep="$US" -v sig="$sigil" "$AWKLIB$FILTER"'
+		matches($0) {
+			n = split(body($0), a, /[ \t]+/)
+			for (i = 1; i <= n; i++) if (substr(a[i], 1, 1) == sig && length(a[i]) > 1) print a[i]
+		}
+	' | LC_ALL=C sort -u
+}
+
+cmd_show() {
+	[ $# -ge 1 ] || die "usage: todo show ID...   (例: todo show a3f9c1)"
+	missing=0
+	for a in "$@"; do
+		rid=$(resolve_id "$a") || {
+			missing=1
+			continue
+		}
+		(open_lines; done_lines) | awk -v want="$rid" "$AWKLIB"'lineid($0) == want { print }'
+	done
+	[ "$missing" -eq 0 ] || return "$EX_NOID"
+}
+
+# run_check <todo ファイル> <done ファイル>
+# ファイルを引数に取るのは、書き込み前の候補(一時ファイル)を同じ検査に
+# かけるため —— 検査の実装をコマンドごとに二重化しない。
+run_check() {
+	{
+		[ -f "$1" ] && awk 'NF { print "O " $0 }' "$1"
+		[ -f "$2" ] && awk 'NF { print "D " $0 }' "$2"
+	} | awk "$AWKLIB"'
+		{
+			tag = substr($0, 1, 1); line = substr($0, 3)
+			n++
+			where = (tag == "O" ? "todo.txt" : "done.txt")
+
+			# --- 形式 -----------------------------------------------------
+			if (tag == "O" && line ~ /^x /) {
+				err("todo.txt に完了行がある(done.txt へ移すこと)", line); next
+			}
+			if (tag == "D" && line !~ /^x /) {
+				err("done.txt に \"x \" で始まらない行がある", line); next
+			}
+			t = line
+			if (tag == "D") {
+				# x <完了日> [<作成日> ]<本文>
+				t = substr(line, 3)
+				if (!isdate(substr(t, 1, 10))) { err("完了日が YYYY-MM-DD でない", line); next }
+				t = trim(substr(t, 11))
+			}
+			if (tag == "O") {
+				if (created(t) == "") err("作成日 (YYYY-MM-DD) が無い", line)
+			}
+
+			# --- key:value ------------------------------------------------
+			# 仕様: key も value も空白とコロンを含まない。空白はトークン分割で
+			# 構造上入りようがないので、実質「1 トークンにコロンは 1 つまで」。
+			# これに引っかかる代表例が see:https://... —— URL は書けない。
+			nk = split(line, kv, /[ \t]+/)
+			for (ki = 1; ki <= nk; ki++) {
+				if (index(kv[ki], ":") == 0) continue
+				if (kv[ki] !~ /^[^: \t]+:[^: \t]+$/)
+					err("key:value の形式違反 (" kv[ki] ") —— key も value もコロンを含めない", line)
+			}
+
+			# --- id -------------------------------------------------------
+			c = idcount(line)
+			if (c == 0) { err("id: が無い(add 以外のコマンドはこの行を触れない)", line); next }
+			if (c > 1) { err("id: が 2 つ以上ある", line); next }
+			id = lineid(line)
+			if (id == "") { err("id: の値が英数字でない", line); next }
+			if (id in seen) err("id:" id " が重複している(先: " seen[id] ")", line)
+			else seen[id] = where
+			deps[id] = depstr(line)
+			owner[id] = where
+
+			# --- dep ------------------------------------------------------
+			if (deps[id] != "") {
+				m = split(deps[id], a, ",")
+				for (i = 1; i <= m; i++) {
+					if (a[i] !~ /^[0-9A-Za-z]+$/) { err("dep: の値が id の形をしていない (" a[i] ")", line); deps[id] = "" }
+					else if (a[i] == id) err("自分自身に dep している", line)
+				}
+			}
+		}
+		END {
+			# --- 宙吊り dep ------------------------------------------------
+			for (id in deps) {
+				if (deps[id] == "") continue
+				m = split(deps[id], a, ",")
+				for (i = 1; i <= m; i++) if (!(a[i] in owner)) {
+					err("dep:" a[i] " が todo.txt にも done.txt にも無い", "id:" id)
+					gsub("(^|,)" a[i] "(,|$)", ",", deps[id])  # 循環判定からは外す
+				}
+			}
+			# --- 循環 dep --------------------------------------------------
+			# Kahn 法: 依存がすべて解決した節点を落とし続け、落ちなかった節点が
+			# 循環(または循環に依存するもの)。宙吊りは上で外してあるので、ここに
+			# 残るのは本物の循環だけ。
+			for (id in owner) live[id] = 1
+			changed = 1
+			while (changed) {
+				changed = 0
+				# 走査は owner。live を回しながら live から delete するのは
+				# awk では未定義動作なので、別の配列を回す。
+				for (id in owner) {
+					if (!(id in live)) continue
+					ok = 1
+					if (deps[id] != "") {
+						m = split(deps[id], a, ",")
+						for (i = 1; i <= m; i++) if (a[i] != "" && (a[i] in live)) ok = 0
+					}
+					if (ok) { delete live[id]; changed = 1 }
+				}
+			}
+			for (id in live) { stuck = stuck (stuck == "" ? "" : ",") id }
+			if (stuck != "") {
+				m = split(stuck, a, ",")
+				# 出力順を安定させる(awk の for-in は順不同)。id は乱数なので
+				# 数値順に意味は無く、文字列順で十分。
+				for (i = 1; i <= m; i++) for (j = i + 1; j <= m; j++)
+					if (a[j] < a[i]) { s = a[i]; a[i] = a[j]; a[j] = s }
+				for (i = 1; i <= m; i++) err("dep が循環している", "id:" a[i])
+			}
+			if (nerr == 0) print "check: 問題なし (" n + 0 " 行)"
+			exit(nerr ? 2 : 0)
+		}
+		function err(msg, ctx) { nerr++; printf "✗ %s\n    %s\n", msg, ctx }
+	'
+}
+
+cmd_check() { run_check "$TODO_FILE" "$DONE_FILE"; }
+
+# 違反の件数だけ数える。「増えたか」で判定するので、絶対数は要らない。
+count_errs() { run_check "$1" "$2" | grep -c '^✗' || true; }
+
+# 書き込みの関門。候補ファイルの違反件数が現状より増えるなら書かない。
+#
+# 「0 件でなければ拒む」ではなく「増えるなら拒む」なのは、手で編集した結果
+# 既に違反がある状態から CLI で直せなくなるのを避けるため —— 仕様の第一目標は
+# 「テキストエディタで編集できること」なので、CLI が人の手を締め出してはいけない。
+#
+# フックは使わない。呼ばれる保証が無い場所へ検査を置くと、検査が黙って死ぬ。
+gate_write() { # gate_write <候補 todo> <候補 done> <操作名>
+	base=$(count_errs "$TODO_FILE" "$DONE_FILE")
+	after=$(count_errs "$1" "$2")
+	[ "$after" -le "$base" ] && return 0
+	printf '%s: %s は形式違反を %d → %d 件へ増やす。書き込まなかった。\n' \
+		"$PROG" "$3" "$base" "$after" >&2
+	run_check "$1" "$2" | grep -v '^check: ' >&2
+	return 1
+}
+
+# ---------------------------------------------------------------------------
+[ $# -ge 1 ] || {
+	usage >&2
+	exit 2
+}
+cmd=$1
+OPNAME=$cmd
+shift
+case $cmd in
+add | a) cmd_add "$@" ;;
+do) cmd_do "$@" ;;
+start) cmd_start "$@" ;;
+stop) cmd_stop "$@" ;;
+pri | p) cmd_pri "$@" ;;
+depri | dp) cmd_depri "$@" ;;
+replace) cmd_replace "$@" ;;
+append | app) cmd_append "$@" ;;
+prepend | prep) cmd_prepend "$@" ;;
+ls | list) cmd_ls "$@" ;;
+listproj | lsprj) list_tokens '+' "$@" ;;
+listcon | lsc) list_tokens '@' "$@" ;;
+ready) cmd_ready "$@" ;;
+show) cmd_show "$@" ;;
+check) cmd_check "$@" ;;
+help | -h | --help) usage ;;
+*)
+	printf '%s: 知らないコマンド: %s\n' "$PROG" "$cmd" >&2
+	usage >&2
+	exit 2
+	;;
+esac
