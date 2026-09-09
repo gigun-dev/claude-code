@@ -31,7 +31,9 @@ metadata:
 | `key:value` の形式違反 | 例: `see:https://…` は value にコロンが 2 つ目 |
 | `x ` 始まりが todo.txt にある | open として数え続ける |
 
-記法の意味が分からないときは `../todo/references/format.md` を読む。
+`id:` `dep:` `see:` `@wip` の定義は `../todo/SKILL.md` の「語彙」。
+**行が仕様上どう読まれるか分からないときだけ** `../todo/references/todo-txt-format.md`
+（上流の仕様そのまま）を読む。
 
 直し方は行を直接編集するか `todo replace` / `todo append`。**どちらでもよい** ——
 要求するのは、直したあとに `todo check` が通ることだけ。
