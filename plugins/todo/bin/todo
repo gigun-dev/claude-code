@@ -6,7 +6,7 @@
 # (todo.sh) から借りている。このスクリプトが足しているのは仕様の `key:value`
 # 拡張 2 つだけ:
 #
-#   id:NNNN … `add` が採番する連番(4 桁ゼロ詰め。adr プラグインの NNNN-slug.md と
+#   id:NNNN … `add` が採番する連番(4 桁ゼロ詰め。ADR の NNNN-slug.md と
 #            桁を揃えた)。行番号は編集とマージでずれるので、エージェントが
 #            タスクを指す手段が仕様の範囲内では他に無い。採番は todo.txt と
 #            **done.txt の両方**の max+1 —— done を数えないと、完了済みの id を
@@ -64,6 +64,7 @@ usage: todo <command> [args]      — リポジトリのタスクを todo.txt �
                        ADR があれば先頭に決定の索引を出す(題だけ。本文は出さない)
   ls [TERM...]         open を優先度順に。TERM は AND、先頭 - で除外、大小無視
   listproj [TERM...]   +project の一覧
+  projects             +project ごとの件数を多い順に(done.txt も数える)
   listcon [TERM...]    @context の一覧
   show ID...           1 行を出す(done.txt も見る)
   start ID...          @wip を付ける(着手した)。既に付いていれば何もしない
@@ -629,6 +630,36 @@ list_tokens() {
 	' | LC_ALL=C sort -u
 }
 
+# +project ごとの件数を多い順に出す。**todo.txt と done.txt の両方**を数える
+# —— open だけだと、終わった仕事の束が見えず、断片化の度合いを読み違える。
+#
+# これは書式を縛るための道具ではない(プロジェクト名も粒度も自由なまま)。
+# 断片化を**見えるようにする**ためのもの —— 28 行に 11 プロジェクト、うち 5 つが
+# 1 件しか持たない、という状態は 1 行ずつ読んでいる限り誰も気づかない。
+cmd_projects() {
+	[ $# -eq 0 ] || die "usage: todo projects   (引数は取らない。todo.txt と done.txt の両方を数える)"
+	out=$( (open_lines; done_lines) | awk "$AWKLIB"'
+		{
+			# 同じ行に同じ +project が 2 回書いてあっても 1 件。
+			split("", seen)
+			n = split($0, a, /[ \t]+/)
+			for (i = 1; i <= n; i++) {
+				p = a[i]
+				if (substr(p, 1, 1) != "+" || length(p) < 2) continue
+				if (p in seen) continue
+				seen[p] = 1
+				c[p]++
+			}
+		}
+		END { for (p in c) printf "%d %s\n", c[p], p }
+	' | LC_ALL=C sort -k1,1nr -k2,2)
+	if [ -z "$out" ]; then
+		printf '%s: +project の付いた行が 1 つも無い\n' "$PROG" >&2
+		return 0
+	fi
+	printf '%s\n' "$out"
+}
+
 cmd_show() {
 	[ $# -ge 1 ] || die "usage: todo show ID...   (例: todo show 3)"
 	missing=0
@@ -791,6 +822,7 @@ append | app) cmd_append "$@" ;;
 prepend | prep) cmd_prepend "$@" ;;
 ls | list) cmd_ls "$@" ;;
 listproj | lsprj) list_tokens '+' "$@" ;;
+projects | prj) cmd_projects "$@" ;;
 listcon | lsc) list_tokens '@' "$@" ;;
 ready) cmd_ready "$@" ;;
 show) cmd_show "$@" ;;

@@ -382,6 +382,33 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# projects — 断片化を見えるようにする
+# ---------------------------------------------------------------------------
+setup projects
+todo add "a +web" >/dev/null
+todo add "b +web" >/dev/null
+todo add "c +cli" >/dev/null
+todo add "d" >/dev/null
+t "件数の多い順、同数は名前順" "2 +web
+1 +cli" "$(todo projects)"
+todo do 1 >/dev/null
+t "done.txt も数える(完了した束が消えない)" "2 +web
+1 +cli" "$(todo projects)"
+t "projects は 0 で返る" "0" "$(todo projects >/dev/null 2>&1; echo $?)"
+t "projects は引数を取らない" "1" "$(todo projects +web >/dev/null 2>&1; echo $?)"
+
+setup projects_multi
+printf '2026-09-09 both +web +cli id:0001\n2026-09-09 twice +web +web id:0002\n' >"$TODO_DIR/todo.txt"
+t "1 行に 2 つ書いてあれば両方に数える" "2 +web
+1 +cli" "$(todo projects)"
+
+setup projects_none
+todo add "no project here" >/dev/null
+t "+project が 1 つも無ければ stdout には何も出さない" "" "$(todo projects 2>/dev/null)"
+t "無いことは stderr に言う" "1" "$(todo projects 2>&1 >/dev/null | grep -c '1 つも無い')"
+t "無くても 0 で返る" "0" "$(todo projects >/dev/null 2>&1; echo $?)"
+
+# ---------------------------------------------------------------------------
 # ready の先頭に出る決定の索引
 # ---------------------------------------------------------------------------
 # ADR の置き場は TODO_DIR からの探索で決まる(todo にとってのリポジトリは

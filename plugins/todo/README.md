@@ -75,6 +75,7 @@ todo pri ID A            # 優先度を付ける / todo depri ID で外す
 todo replace ID "text"   # 本文を置き換える(id: と作成日と優先度は保持)
 todo append ID "text"    # 行末に足す / todo prepend ID "text" は本文の先頭へ
 todo listproj / listcon  # +project / @context の一覧
+todo projects            # +project ごとの件数を多い順に(done.txt も数える)
 todo show ID...          # 1 行を出す(done.txt も見る)
 todo check               # 形式検査。違反があれば stdout に出して 2 で終わる
 todo id                  # id: の無い open 行すべてに id: を配る(冪等)
@@ -87,6 +88,9 @@ todo id                  # id: の無い open 行すべてに id: を配る(冪�
   新しい順に切ると、忘れやすい古い決定から先に隠れる。代わりに、行数が閾値
   (`bin/todo` の `ADR_INDEX_WARN_AT`、既定 30)を超えたら索引自身がそう報せる。
   `ls` には出さない —— 読む口は一つに保つ。
+- **`projects` は断片化を見えるようにするためのもの**(書式を縛るためではない)。
+  28 行に 11 プロジェクト、うち 5 つが 1 件しか持たない、という状態は 1 行ずつ
+  読んでいる限り誰も気づかない。
 - **ID は数値としての完全一致のみ。** ゼロ詰めは付けても付けなくてよい。
 - 対象は `$TODO_DIR/todo.txt` と `$TODO_DIR/done.txt`(既定は `.`)。
   環境変数名は todo.txt-cli と同じ `TODO_DIR`。
