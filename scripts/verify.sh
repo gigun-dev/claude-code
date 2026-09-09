@@ -87,7 +87,7 @@ overall_failed=0
 # -----------------------------------------------------------------------
 # (1) シェル構文チェック — 追跡対象の *.sh すべてに bash -n
 # -----------------------------------------------------------------------
-echo "=== [1/8] シェル構文チェック (bash -n) ==="
+echo "=== [1/9] シェル構文チェック (bash -n) ==="
 sh_failed=0
 # plugins/*/bin/* も対象に含める理由(2026-09-09 に追加):
 #   plugins/todo/bin/todo は拡張子を持たない実行ファイル(PATH に置かれて
@@ -124,7 +124,7 @@ fi
 # (2) JSON 妥当性チェック — 追跡対象の *.json すべてをパース
 # -----------------------------------------------------------------------
 echo ""
-echo "=== [2/8] JSON 妥当性チェック ==="
+echo "=== [2/9] JSON 妥当性チェック ==="
 json_failed=0
 if ! command -v python3 >/dev/null 2>&1; then
 	# python3 が無い環境で「JSON チェックを黙ってスキップし、結果として
@@ -173,7 +173,7 @@ fi
 # (3) 正典の書式チェック — docs/*/next-directions.md の「着手順」節
 # -----------------------------------------------------------------------
 echo ""
-echo "=== [3/8] 正典の書式チェック (nd-tasks.sh --lint) ==="
+echo "=== [3/9] 正典の書式チェック (nd-tasks.sh --lint) ==="
 lint_script="plugins/harness/skills/status/scripts/nd-tasks.sh"
 lint_failed=0
 if [ ! -f "$lint_script" ]; then
@@ -231,7 +231,7 @@ fi
 #   git ls-files で追跡有無を判定し、未追跡なら「対象外(片方しか無い)」と同じ扱いで
 #   黙って飛ばす。
 echo ""
-echo "=== [4/8] plugin.json 版数整合性チェック (.claude-plugin ⇔ .codex-plugin) ==="
+echo "=== [4/9] plugin.json 版数整合性チェック (.claude-plugin ⇔ .codex-plugin) ==="
 ver_failed=0
 if ! command -v python3 >/dev/null 2>&1; then
 	# (2) の JSON 妥当性チェックと同じ理由(原則4「検知器は黙って死ぬ前提で検証する」)。
@@ -334,7 +334,7 @@ fi
 #   「合格」として扱うと、パス指定のミスをそのまま見逃す最悪の壊れ方になる
 #   ((1)(2)(4) の 0件時の扱いと同じ規律 —— 原則4「検知器は黙って死ぬ前提で検証する」)。
 echo ""
-echo "=== [5/8] marketplace.json プラグイン一覧整合性チェック (.claude-plugin ⇔ .agents) ==="
+echo "=== [5/9] marketplace.json プラグイン一覧整合性チェック (.claude-plugin ⇔ .agents) ==="
 mp_failed=0
 claude_mp=".claude-plugin/marketplace.json"
 codex_mp=".agents/plugins/marketplace.json"
@@ -407,7 +407,7 @@ fi
 [ "$mp_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
-# [6/8] agy-mcp のパース回帰テスト(agy を呼ばない部分だけ)
+# [6/9] agy-mcp のパース回帰テスト(agy を呼ばない部分だけ)
 # -----------------------------------------------------------------------
 # 【なぜ smoke.sh 全体ではなく、この一部だけを呼ぶのか】
 #   smoke.sh には性質の違う2種類が同居している:
@@ -424,7 +424,7 @@ fi
 #   (2)(4)(5) と同じ理由。**未検査を合格扱いにしない。**
 #   agy-mcp が存在するのに検査できないなら、それは合格ではなく「検査できていない」。
 echo ""
-echo "=== [6/8] agy-mcp パース回帰テスト (--selftest-parse) ==="
+echo "=== [6/9] agy-mcp パース回帰テスト (--selftest-parse) ==="
 agy_failed=0
 agy_server="plugins/agy-mcp/server.py"
 if ! git ls-files --error-unmatch -- "$agy_server" >/dev/null 2>&1; then
@@ -447,7 +447,7 @@ fi
 [ "$agy_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
-# [7/8] log.md の索引の鮮度
+# [7/9] log.md の索引の鮮度
 # -----------------------------------------------------------------------
 # 【なぜ関門に入れるのか】
 #   log-index.sh --check は決定論的で 1 秒未満・ネットワーク不要 = CI 相当。
@@ -459,7 +459,7 @@ fi
 #   走るので、ここで書き込むと「push しようとしたらファイルが変わる」ことになる。
 #   直すのは tidy の仕事。
 echo ""
-echo "=== [7/8] log.md 索引の鮮度チェック (log-index.sh --check) ==="
+echo "=== [7/9] log.md 索引の鮮度チェック (log-index.sh --check) ==="
 idx_failed=0
 idx_script="plugins/harness/skills/tidy/scripts/log-index.sh"
 if ! git ls-files --error-unmatch -- "$idx_script" >/dev/null 2>&1; then
@@ -478,20 +478,20 @@ fi
 [ "$idx_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
-# [8/8] todo プラグインのテスト
+# [8/9] todo プラグインのテスト
 # -----------------------------------------------------------------------
 # 【なぜ関門に入れるのか】
 #   ヘッダの「これ以上テストやリンタを増やすな」は**投機的な検査**の禁止であって、
 #   配布物が自分で持っているテストを走らせないことの推奨ではない。
 #   plugins/todo/tests/run.sh は決定論的(日付は TODO_TODAY、採番は TODO_FAKE_IDS
-#   で固定)・ネットワーク不要・1秒未満 = [6/8] の --selftest-parse と同じ性質。
+#   で固定)・ネットワーク不要・1秒未満 = [6/9] の --selftest-parse と同じ性質。
 #   にもかかわらず、足した時点ではどこからも呼ばれておらず、人が思い出したときだけ
-#   走る状態だった —— [6/8] を足したときと同じ理由でここへ入れる。
+#   走る状態だった —— [6/9] を足したときと同じ理由でここへ入れる。
 #
 #   ⚠️ **ここに入れてよいのはこの性質のテストだけ。** ネットワーク・課金枠・実機に
 #   依存するテストを関門にすると「落ちても気にしない」に転んで、関門ごと死ぬ。
 echo ""
-echo "=== [8/8] todo プラグインのテスト (tests/run.sh) ==="
+echo "=== [8/9] todo プラグインのテスト (tests/run.sh) ==="
 todo_failed=0
 todo_tests="plugins/todo/tests/run.sh"
 if ! git ls-files --error-unmatch -- "$todo_tests" >/dev/null 2>&1; then
@@ -506,6 +506,30 @@ else
 	fi
 fi
 [ "$todo_failed" -ne 0 ] && overall_failed=1
+
+# -----------------------------------------------------------------------
+# [9/9] adr プラグインのテスト
+# -----------------------------------------------------------------------
+# 【なぜ関門に入れるのか】
+#   [8/9] の todo と同じ性質のテスト —— 決定論的(日付も採番も持たず、入力は
+#   テストが作る一時ディレクトリのファイルだけ)・ネットワーク不要・1秒未満。
+#   配布物が自分で持っているテストを走らせているだけで、投機的な検査の追加ではない。
+echo ""
+echo "=== [9/9] adr プラグインのテスト (tests/run.sh) ==="
+adr_failed=0
+adr_tests="plugins/adr/tests/run.sh"
+if ! git ls-files --error-unmatch -- "$adr_tests" >/dev/null 2>&1; then
+	echo "- $adr_tests が無いので検査しない(このリポジトリに adr プラグインは入っていない)"
+else
+	if adr_out=$(sh "$adr_tests" 2>&1); then
+		echo "✓ adr プラグイン: $(printf '%s\n' "$adr_out" | tail -1)"
+	else
+		echo "✗ adr プラグインのテストが失敗した"
+		printf '%s\n' "$adr_out" | tail -30 | sed 's/^/    /'
+		adr_failed=1
+	fi
+fi
+[ "$adr_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
 # まとめ

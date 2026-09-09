@@ -1,0 +1,328 @@
+#!/bin/sh
+# =============================================================================
+# adr — リポジトリの Architecture Decision Record を一覧し、検査する
+# =============================================================================
+# 書式の正は skills/adr/references/ADR-FORMAT.md(mattpocock/skills から逐語で
+# vendor。MIT)。このスクリプトは上流の書式をそのまま検査するだけで、独自の
+# 規則を足さない —— 足せば、上流を読んで書いた ADR が落ちる。
+#
+# コマンドは ls と check の 2 つだけ。ADR を**書く**のはエージェントの仕事で、
+# 雛形を吐く CLI は要らない(埋める欄があると、埋めるために創作が始まる)。
+# 番号を採るのも CLI の仕事にしない —— `ls` が最大値を見せれば足りる。
+#
+# POSIX sh + awk のみ。bash 固有機能・python・jq に依存しない。
+# =============================================================================
+
+set -u
+
+PROG=adr
+
+EX_USAGE=1  # 引数・状態の誤り
+EX_FORMAT=2 # 検査で指摘があった
+EX_NODIR=9  # ADR ディレクトリがまだ無い(内部用。外へは出さない)
+
+# 抽出結果の区切りは US (0x1f)。タブにすると `read` が空フィールドを潰す
+# —— IFS に入れたタブは POSIX 上「IFS 空白類」で、連続すると 1 個の区切りに
+# 畳まれる(題だけがある = 日付も status も空、が読めなくなる)。
+US=$(printf '\037')
+
+NL='
+'
+
+die() {
+	printf '%s: %s\n' "$PROG" "$1" >&2
+	exit "${2:-$EX_USAGE}"
+}
+
+usage() {
+	cat <<'EOF'
+usage: adr <command>      — Architecture Decision Record を一覧・検査する
+
+  ls        1 行 1 件で `<date> <slug> <status> <title>` を番号順に出す
+  check     書式を検査する。指摘があれば stdout に出して 2 で終わる
+
+ファイルの形 (正は skills/adr/references/ADR-FORMAT.md):
+
+  docs/adr/0003-use-manual-sql-instead-of-an-orm.md
+  ┌─────────────────────────────────────────────
+  │ # Use manual SQL instead of an ORM
+  │
+  │ 2026-09-10。<何が文脈で、何を決めて、なぜか。1〜3 文>
+  └─────────────────────────────────────────────
+
+  ファイル名  NNNN-<小文字ケバブの slug>.md。番号は 4 桁で、既存の最大値 + 1
+              (`adr ls` の一番下が最大値)。**採番後に改名しない**
+  題          1 行目の `# ...`
+  日付        YYYY-MM-DD。本文の書き出しか、`Date: 2026-09-10` の 1 行
+  Status:     任意。proposed | accepted | deprecated | superseded(既定は accepted)
+  Superseded by <slug>
+              差し替えられた ADR の先頭行。**受理済み ADR への編集はこれだけ**。
+              新しい決定は新しいファイルに書き、そこから古い方を名指しする。
+              この行があれば ls の status は superseded(Status: が優先)
+
+check が見るもの:
+  - ファイル名が NNNN-<小文字ケバブの slug>.md か
+  - 同じ番号を 2 つ以上のファイルが持っていないか(**改名はしない。指摘だけ**)
+  - 題(`# ...`)があるか
+  - 日付があり YYYY-MM-DD か
+  - `Superseded by <slug>` の指す先が実在するか
+  - Status: の語彙が proposed|accepted|deprecated|superseded のどれかか
+
+対象ディレクトリは $ADR_DIR。未指定なら docs/adr → docs/decisions → adr →
+decisions の順に最初に見つかったもの。どれも無ければ何もせず 0 で終わる。
+
+対話しない。データは stdout、診断は stderr。
+
+終了コード:
+  0  成功(check は指摘なし)
+  1  引数・状態の誤り(usage)
+  2  check が指摘を出した
+EOF
+}
+
+# ADR ディレクトリを決める。ADR_DIR があればそれだけを見る(明示された場所が
+# 無いのは誤りなので、黙って別の場所へ落ちない)。
+adr_dir() {
+	if [ -n "${ADR_DIR:-}" ]; then
+		[ -d "$ADR_DIR" ] || die "ADR_DIR='$ADR_DIR' が無い。ディレクトリを作るか ADR_DIR を直すこと"
+		printf '%s' "$ADR_DIR"
+		return 0
+	fi
+	for d in docs/adr docs/decisions adr decisions; do
+		[ -d "$d" ] && {
+			printf '%s' "$d"
+			return 0
+		}
+	done
+	# 「1 件も無い」は誤りではないので EX_USAGE と別の値で返す —— adr_dir は
+	# コマンド置換の中で呼ばれ、die の exit 1 はそこで捕まってしまう。同じ 1 だと
+	# 「ADR_DIR の指定が誤り」が「まだ 1 件も無い」に化けて 0 で成功してしまう。
+	return "$EX_NODIR"
+}
+
+# ディレクトリ直下の *.md を名前順に列挙する(サブディレクトリは見ない)。
+adr_files() {
+	find "$1" -maxdepth 1 -type f -name '*.md' 2>/dev/null | LC_ALL=C sort
+}
+
+slug_of() {
+	b=${1##*/}
+	printf '%s' "${b%.md}"
+}
+
+# 先頭の数字列(= 番号)。無ければ空。
+num_of() {
+	n=${1%%-*}
+	case $n in
+	'' | *[!0-9]*) printf '' ;;
+	*) printf '%s' "$n" ;;
+	esac
+}
+
+# 1 ファイルから title / date / status / superseded を取り出し、US 区切りの
+# 1 行で返す:  date US status US superseded US title
+# 見つからない項目は空。日付が YYYY-MM-DD でないときは頭に "!" を付けて返す。
+# 抽出は ls と check で共有する —— 二重化すると、check が通る書き方と ls が
+# 読める書き方がずれる。
+PARSE='
+function isdate(s,   m, d) {
+	if (s !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) return 0
+	m = substr(s, 6, 2) + 0; d = substr(s, 9, 2) + 0
+	return (m >= 1 && m <= 12 && d >= 1 && d <= 31)
+}
+{
+	line = $0
+	sub(/\r$/, "", line)
+
+	# --- frontmatter ------------------------------------------------------
+	# 1 行目が --- なら、次の --- までを frontmatter として status を拾う。
+	if (NR == 1 && line == "---") { fm = 1; next }
+	if (fm && line == "---") { fm = 0; next }
+	if (fm) {
+		if (tolower(line) ~ /^status:[ \t]*/) { sub(/^[^:]*:[ \t]*/, "", line); status = line }
+		next
+	}
+
+	# --- 題 ---------------------------------------------------------------
+	if (title == "" && line ~ /^#[ \t]+/) {
+		sub(/^#[ \t]+/, "", line); sub(/[ \t]+$/, "", line); title = line
+		next
+	}
+
+	# --- Superseded by <slug> ---------------------------------------------
+	if (super == "" && line ~ /^[ \t]*(\*\*)?[Ss]uperseded by[ \t]+/) {
+		sub(/^[ \t]*(\*\*)?[Ss]uperseded by[ \t]+/, "", line)
+		gsub(/[*`<>]/, "", line); sub(/[ \t.]+$/, "", line); sub(/\.md$/, "", line)
+		super = line
+		next
+	}
+
+	# --- Status: ----------------------------------------------------------
+	if (status == "" && line ~ /^[ \t]*(\*\*)?[Ss]tatus(\*\*)?:[ \t]*/) {
+		sub(/^[^:]*:[ \t]*/, "", line); gsub(/[*`]/, "", line); sub(/[ \t]+$/, "", line)
+		status = line
+		next
+	}
+
+	# --- 日付 -------------------------------------------------------------
+	# `Date:` の 1 行を優先し、無ければ本文に最初に出てくる YYYY-MM-DD を採る
+	# (書き出しの文に日付を置く書き方を認めるため)。
+	if (datefield == "" && line ~ /^[ \t]*(\*\*)?[Dd]ate(\*\*)?:[ \t]*/) {
+		sub(/^[^:]*:[ \t]*/, "", line); gsub(/[*`]/, "", line)
+		sub(/^[ \t]+/, "", line); sub(/[ \t.]+$/, "", line)
+		datefield = line
+		next
+	}
+	if (date == "") {
+		n = split(line, a, /[^0-9-]+/)
+		for (i = 1; i <= n; i++) if (isdate(a[i])) { date = a[i]; break }
+	}
+}
+END {
+	if (datefield != "") date = isdate(datefield) ? datefield : ("!" datefield)
+	printf "%s%s%s%s%s%s%s\n", date, us, status, us, super, us, title
+}
+'
+
+parse_file() { awk -v us="$US" "$PARSE" "$1"; }
+
+# ---------------------------------------------------------------------------
+cmd_ls() {
+	[ $# -eq 0 ] || die "usage: adr ls   (引数は取らない)"
+	dir=$(adr_dir)
+	rc=$?
+	[ "$rc" -eq "$EX_NODIR" ] && {
+		printf '%s: ADR ディレクトリが無い(docs/adr などを探した)。まだ 1 件も無い\n' "$PROG" >&2
+		return 0
+	}
+	[ "$rc" -eq 0 ] || exit "$rc" # die は既にメッセージを出している
+	adr_files "$dir" | while IFS= read -r f; do
+		slug=$(slug_of "$f")
+		IFS="$US" read -r date status super title <<EOF
+$(parse_file "$f")
+EOF
+		# 番号が読めないファイルも落とさずに出す —— 一覧から消えると、直す
+		# きっかけが check を走らせたときにしか無くなる。並びは末尾へ回る。
+		num=$(num_of "$slug")
+		[ -n "$num" ] || num=99999999
+		case $date in
+		'' | '!'*) date='????-??-??' ;;
+		esac
+		if [ -z "$status" ]; then
+			if [ -n "$super" ]; then status=superseded; else status=accepted; fi
+		fi
+		[ -n "$title" ] || title='(題が無い)'
+		printf '%08d\t%s %s %s %s\n' "$num" "$date" "$slug" "$status" "$title"
+	done | LC_ALL=C sort | cut -f2-
+}
+
+# 検査。指摘は stdout(データではなく結果そのものなので)、1 件 2 行で出す。
+cmd_check() {
+	[ $# -eq 0 ] || die "usage: adr check   (引数は取らない)"
+	dir=$(adr_dir)
+	rc=$?
+	[ "$rc" -eq "$EX_NODIR" ] && {
+		printf '%s: ADR ディレクトリが無い(docs/adr などを探した)。検査するものが無い\n' "$PROG" >&2
+		return 0
+	}
+	[ "$rc" -eq 0 ] || exit "$rc" # die は既にメッセージを出している
+
+	# slug の集合を先に作る。Superseded by の指す先を「同じディレクトリに実在
+	# するか」だけで判定するため —— 中身は見ない(古い方を読みに行かせない)。
+	slugs=','
+	n=0
+	while IFS= read -r f; do
+		[ -n "$f" ] || continue
+		slugs="$slugs$(slug_of "$f"),"
+		n=$((n + 1))
+	done <<EOF
+$(adr_files "$dir")
+EOF
+
+	# 同じ番号を持つファイルの一覧(番号だけを見る。改名はしない)。
+	dupnums=$(
+		while IFS= read -r f; do
+			[ -n "$f" ] || continue
+			num=$(num_of "$(slug_of "$f")")
+			[ -n "$num" ] && printf '%s\n' "$num"
+		done <<EOF
+$(adr_files "$dir")
+EOF
+	)
+	dupnums=$(printf '%s\n' "$dupnums" | LC_ALL=C sort | uniq -d)
+
+	out=$(
+		while IFS= read -r f; do
+			[ -n "$f" ] || continue
+			slug=$(slug_of "$f")
+			IFS="$US" read -r date status super title <<INNER
+$(parse_file "$f")
+INNER
+			num=${slug%%-*}
+			rest=${slug#*-}
+			badname=0
+			case $slug in
+			*-*) ;;
+			*) badname=1 ;;
+			esac
+			case $num in
+			[0-9][0-9][0-9][0-9]) ;;
+			*) badname=1 ;;
+			esac
+			case $rest in
+			'' | *[!a-z0-9-]* | -* | *- | *--*) badname=1 ;;
+			esac
+			[ "$badname" -eq 0 ] || printf '✗ %s\n    %s\n' \
+				"ファイル名が NNNN-<小文字ケバブの slug>.md でない(例: 0003-use-manual-sql-instead-of-an-orm.md)" "$f"
+
+			if [ "$badname" -eq 0 ]; then
+				case $NL$dupnums$NL in
+				*"$NL$num$NL"*) printf '✗ 番号 %s を 2 つ以上のファイルが持っている(改名はしない。次の空き番号で書き直すこと)\n    %s\n' "$num" "$f" ;;
+				esac
+			fi
+
+			[ -n "$title" ] || printf '✗ %s\n    %s\n' "題(1 行目の '# ...')が無い" "$f"
+			case $date in
+			'') printf '✗ %s\n    %s\n' \
+				"日付が無い。本文の書き出しか 'Date: YYYY-MM-DD' の 1 行に置くこと" "$f" ;;
+			'!'*) printf '✗ 日付 '\''%s'\'' が YYYY-MM-DD でない\n    %s\n' "${date#!}" "$f" ;;
+			esac
+			if [ -n "$super" ]; then
+				case $slugs in
+				*",$super,"*) ;;
+				*) printf '✗ '\''Superseded by %s'\'' の指す先が %s に無い\n    %s\n' "$super" "$dir" "$f" ;;
+				esac
+			fi
+			case $status in
+			'' | proposed | accepted | deprecated | superseded) ;;
+			*) printf '✗ Status: '\''%s'\'' は語彙外(proposed|accepted|deprecated|superseded)\n    %s\n' \
+				"$status" "$f" ;;
+			esac
+		done <<EOF
+$(adr_files "$dir")
+EOF
+	)
+	if [ -n "$out" ]; then
+		printf '%s\n' "$out"
+		return "$EX_FORMAT"
+	fi
+	printf 'check: 問題なし (%d 件)\n' "$n"
+}
+
+# ---------------------------------------------------------------------------
+[ $# -ge 1 ] || {
+	usage >&2
+	exit 2
+}
+cmd=$1
+shift
+case $cmd in
+ls | list) cmd_ls "$@" ;;
+check) cmd_check "$@" ;;
+help | -h | --help) usage ;;
+*)
+	printf '%s: 知らないコマンド: %s\n' "$PROG" "$cmd" >&2
+	usage >&2
+	exit 2
+	;;
+esac

@@ -71,6 +71,11 @@
       "description": "Repository tasks in todo.txt format: list what is ready (dependencies resolved), record every state change as it happens, install and check the files"
     },
     {
+      "name": "adr",
+      "source": "./plugins/adr",
+      "description": "Architecture Decision Records: see what is already decided before proposing a change, and record a decision the moment it is made (format and bar vendored from mattpocock/skills, MIT)"
+    },
+    {
       "name": "telemetry",
       "source": "./plugins/telemetry",
       "description": "Review your own Claude Code sessions from Langfuse traces and turn findings into config improvements"
