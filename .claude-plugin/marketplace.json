@@ -56,11 +56,6 @@
       "description": "iOS app icon authoring, Simulator control, physical-device builds, and App Store Connect uploads."
     },
     {
-      "name": "workers-fetch",
-      "source": "./plugins/workers-fetch",
-      "description": "Test Cloudflare Workers apps via workers-fetch CLI"
-    },
-    {
       "name": "harness",
       "source": "./plugins/harness",
       "description": "Deprecated: use `todo`. Scaffold session-handoff harness (init), check it against best practices (doctor), tidy up before closing a session (tidy)"
@@ -79,6 +74,11 @@
       "name": "telemetry",
       "source": "./plugins/telemetry",
       "description": "Review your own Claude Code sessions from Langfuse traces and turn findings into config improvements"
+    },
+    {
+      "name": "japanese-tech-writing",
+      "source": "./plugins/japanese-tech-writing",
+      "description": "Style rules for Japanese technical prose: paragraph structure, argument rigor, reader load, restraint in rhetoric, no LLM filler or translationese (vendored verbatim from a k16shikano gist, Unlicense)"
     }
   ]
 }
