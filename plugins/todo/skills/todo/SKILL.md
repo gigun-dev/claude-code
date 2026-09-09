@@ -4,13 +4,13 @@ description: >-
   Use at the start of work in a repository to see which tasks are ready to start, and
   whenever a task is finished, started, split, or reworded — including when the user
   never says "todo". Tasks live in this repository's todo.txt and done.txt, driven by
-  the `todo` CLI. Also on '/todo:todo'.
+  the `todo` CLI.
 metadata:
   version: "0.1.0"
 ---
 
 ```!
-todo ready
+"${CLAUDE_SKILL_DIR}/../../bin/todo" ready
 ```
 
 # todo:todo
@@ -44,6 +44,7 @@ todo replace <id> "…"   # 言い方・粒度を直す    todo pri <id> A / tod
 ```
 
 `todo --help` が正。終了コード: 0 成功 / 1 引数・状態 / 2 形式違反 / 3 ID 不明。
+`todo` が PATH に無ければ `${CLAUDE_SKILL_DIR}/../../bin/todo`。
 
 ## 規律
 

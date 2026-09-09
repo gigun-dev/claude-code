@@ -252,6 +252,17 @@ t "ls は一覧の前に検査結果を出す" "1" \
 t "ls 自体は成功で返る(壊れを理由に一覧を隠さない)" "0" \
 	"$(todo ls >/dev/null 2>&1; echo $?)"
 
+# 作成日は仕様上「任意」。手で書いた行を追い返す理由が仕様に無いので違反にしない。
+setup check_nodate
+printf 'no creation date id:aaa111\n' >"$TODO_DIR/todo.txt"
+t "作成日が無くても check は通る(仕様上 任意)" "0" \
+	"$(todo check >/dev/null 2>&1; echo $?)"
+
+setup check_donedate
+printf 'x なんとか id:aaa111\n' >"$TODO_DIR/done.txt"
+t "完了日は必須なので、無ければ check が落ちる" "2" \
+	"$(todo check >/dev/null 2>&1; echo $?)"
+
 setup check_dup
 printf '2026-09-09 one id:aaa111\n2026-09-09 two id:aaa111\n' >"$TODO_DIR/todo.txt"
 out=$(todo check 2>&1); rc=$?
@@ -296,6 +307,30 @@ t "check の key:value メッセージ" "1" \
 setup check_keyvalue_ok
 printf '2026-09-09 one id:aaa111 see:docs/x.md due:2026-09-30\n' >"$TODO_DIR/todo.txt"
 t "リポジトリ相対パスの see: は通る" "0" "$(todo check >/dev/null 2>&1; echo $?)"
+
+# ---------------------------------------------------------------------------
+# id — 手で足した行を CLI の操作対象へ引き上げる
+# ---------------------------------------------------------------------------
+setup idcmd
+printf '2026-09-09 hand written one\nhand written two\n2026-09-09 already has one id:aaa111\n' >"$TODO_DIR/todo.txt"
+export TODO_FAKE_IDS="bbb222 ccc333"
+out=$(todo id)
+t "id は id: の無い行だけに配る" \
+	"2026-09-09 hand written one id:bbb222
+hand written two id:ccc333" "$out"
+t "id は既に id: を持つ行を触らない" \
+	"2026-09-09 already has one id:aaa111" "$(todo show aaa111)"
+t "id を配れば check が通る" "0" "$(todo check >/dev/null 2>&1; echo $?)"
+unset TODO_FAKE_IDS
+t "二度目の id は何もしない(冪等)" "0" "$(todo id >/dev/null 2>&1; echo $?)"
+t "二度目の id は行を変えない" "3" "$(wc -l <"$TODO_DIR/todo.txt" | tr -d ' ')"
+
+# 1 回の実行で複数配るとき、書き込む前の同一実行内で同じ id を 2 回配らないこと。
+setup idcmd_unique
+printf 'a\nb\nc\n' >"$TODO_DIR/todo.txt"
+todo id >/dev/null
+t "id は 1 回の実行でも重複しない id を配る" "3" \
+	"$(sed 's/.* id://' "$TODO_DIR/todo.txt" | sort -u | wc -l | tr -d ' ')"
 
 # ---------------------------------------------------------------------------
 # 形式互換: 生成した todo.txt を todo.txt-cli の todo.sh が読めるか

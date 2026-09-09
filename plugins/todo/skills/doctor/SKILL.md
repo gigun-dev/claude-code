@@ -4,7 +4,7 @@ description: >-
   Use when asked to set up or check task tracking in a repository, or when there is no
   todo.txt yet, the agent instructions do not point at it, or `todo check` reports
   violations that need explaining. Diagnoses by default; creates files and edits
-  CLAUDE.md / AGENTS.md only after the user approves. Also on '/todo:doctor'.
+  CLAUDE.md / AGENTS.md only after the user approves.
 metadata:
   version: "0.1.0"
 ---
@@ -13,7 +13,7 @@ metadata:
      必ず成功するコマンドだけ。`check` は違反があると 2 で返る。 -->
 
 ```!
-todo check || true
+"${CLAUDE_SKILL_DIR}/../../bin/todo" check || true
 ```
 
 # todo:doctor
@@ -24,7 +24,7 @@ todo check || true
 
 | 違反 | 何が起きるか |
 |---|---|
-| `id:` が無い | `add` 以外のコマンドがその行を触れない |
+| `id:` が無い | `add` 以外のコマンドがその行を触れない。**`todo id` で付ける** |
 | `id:` の重複 | どちらを指しているか決まらない |
 | 宙吊り `dep:` | その行は永久に `ready` に出ない |
 | 循環 `dep:` | 輪の中の全員が永久に `ready` に出ない |
@@ -35,6 +35,7 @@ todo check || true
 
 直し方は行を直接編集するか `todo replace` / `todo append`。**どちらでもよい** ——
 要求するのは、直したあとに `todo check` が通ることだけ。
+`todo` が PATH に無ければ `${CLAUDE_SKILL_DIR}/../../bin/todo`。
 
 ## 導入（承認を得てから）
 

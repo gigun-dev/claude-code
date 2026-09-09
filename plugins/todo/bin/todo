@@ -61,6 +61,7 @@ usage: todo <command> [args]      — リポジトリのタスクを todo.txt �
   append ID "TEXT"     行末に足す
   prepend ID "TEXT"    本文の先頭に足す(優先度と作成日の後ろ)
   check                形式検査。違反があれば stdout に出して 2 で終わる
+  id                   id: の無い open 行すべてに id: を配る(冪等)
 
 行の形 (https://github.com/todotxt/todo.txt):
 
@@ -68,6 +69,7 @@ usage: todo <command> [args]      — リポジトリのタスクを todo.txt �
   x 2026-09-09 2026-09-08 完了した本文 id:7b2e04            ← done.txt
 
   (A)..(Z)   任意・先頭のみ。重要度(進行中を表さない —— それは @wip)
+  2026-09-09 作成日。任意(add は必ず付ける)。優先度があればその後ろ
   +project   束ね。行にはその次の一手だけを書く
   @context   要る状況(@device @user)。@wip は進行中の印
   id:xxxxxx  add が採番する 6 桁の小文字 16 進。タスクを指す唯一の手段
@@ -205,7 +207,12 @@ id_exists() {
 # 6 桁の小文字 16 進を採番する。衝突したら引き直す(状態ファイルを持たないので、
 # 一意性はここでの照合だけが担保する)。TODO_FAKE_IDS はテスト用の注入点 ——
 # 乱数のままでは「衝突したら引き直す」経路を一度も踏めない。
+#
+# $1(任意)は「まだファイルに書いていないが既に配った id」の空白区切り。
+# `id` が 1 回の実行で複数行に配るときに要る —— ファイルだけを見ていると、
+# 書き込む前の同一実行内で同じ id を 2 回配ってしまう。
 gen_id() {
+	taken=${1:-}
 	tries=0
 	while [ "$tries" -lt 100 ]; do
 		if [ -n "${TODO_FAKE_IDS:-}" ]; then
@@ -220,6 +227,9 @@ gen_id() {
 		fi
 		case $cand in
 		'' | *[!0-9a-z]*) die "採番に失敗した(不正な id: '$cand')" ;;
+		esac
+		case " $taken " in
+		*" $cand "*) tries=$((tries + 1)); continue ;;
 		esac
 		id_exists "$cand" || {
 			printf '%s' "$cand"
@@ -288,6 +298,30 @@ cmd_add() {
 	}
 	mv "$tmp" "$TODO_FILE" || die "$TODO_FILE を置き換えられない"
 	printf '%s\n' "$line"
+}
+
+# id: の無い open 行に id: を配る。手で足した行を CLI の操作対象に引き上げる唯一の
+# 手段 —— これが無いと「id が無い」という check の指摘に対して、利用者が乱数を
+# 自分で考えて書くしかない。冪等(id を持つ行には触らない)。
+cmd_id() {
+	[ $# -eq 0 ] || die "usage: todo id   (引数は取らない。id: の無い open 行すべてに配る)"
+	n=$(open_lines | awk "$AWKLIB"'lineid($0) == "" { c++ } END { print c + 0 }')
+	if [ "$n" -eq 0 ]; then
+		printf '%s: id: の無い open 行は無い。何もしない\n' "$PROG" >&2
+		return 0
+	fi
+	newids=''
+	i=0
+	while [ "$i" -lt "$n" ]; do
+		cand=$(gen_id "$newids") || exit 1
+		newids="${newids:+$newids }$cand"
+		i=$((i + 1))
+	done
+	rewrite_todo awk -v ids="$newids" "$AWKLIB"'
+		BEGIN { split(ids, a, " ") }
+		{ if (lineid($0) == "") { k++; print $0 " id:" a[k] } else print }
+	' || exit $?
+	for id in $newids; do find_open "$id"; done
 }
 
 cmd_prepend() {
@@ -588,15 +622,11 @@ run_check() {
 			if (tag == "D" && line !~ /^x /) {
 				err("done.txt に \"x \" で始まらない行がある", line); next
 			}
-			t = line
+			# 完了日は仕様上「必須」。作成日は「任意」なので、無くても違反にしない
+			# —— `add` は必ず付けるが、手で書いた行を追い返す理由が仕様に無い。
 			if (tag == "D") {
 				# x <完了日> [<作成日> ]<本文>
-				t = substr(line, 3)
-				if (!isdate(substr(t, 1, 10))) { err("完了日が YYYY-MM-DD でない", line); next }
-				t = trim(substr(t, 11))
-			}
-			if (tag == "O") {
-				if (created(t) == "") err("作成日 (YYYY-MM-DD) が無い", line)
+				if (!isdate(substr(line, 3, 10))) { err("完了日が YYYY-MM-DD でない (x の直後に必要)", line); next }
 			}
 
 			# --- key:value ------------------------------------------------
@@ -612,7 +642,7 @@ run_check() {
 
 			# --- id -------------------------------------------------------
 			c = idcount(line)
-			if (c == 0) { err("id: が無い(add 以外のコマンドはこの行を触れない)", line); next }
+			if (c == 0) { err("id: が無い —— `todo id` で付ける(無いと add 以外のコマンドがこの行を触れない)", line); next }
 			if (c > 1) { err("id: が 2 つ以上ある", line); next }
 			id = lineid(line)
 			if (id == "") { err("id: の値が英数字でない", line); next }
@@ -722,6 +752,7 @@ listcon | lsc) list_tokens '@' "$@" ;;
 ready) cmd_ready "$@" ;;
 show) cmd_show "$@" ;;
 check) cmd_check "$@" ;;
+id) cmd_id "$@" ;;
 help | -h | --help) usage ;;
 *)
 	printf '%s: 知らないコマンド: %s\n' "$PROG" "$cmd" >&2

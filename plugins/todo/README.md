@@ -29,6 +29,9 @@ x 2026-09-09 2026-09-08 完了した本文 +upload id:a3f9c1                    
 - `id:` は 6 桁の小文字 16 進。**エージェントがタスクを指す唯一の手段。**
 - `dep:` の指す先が `done.txt` に入るまで、その行は `ready` に出ない。
 - `see:` は**リポジトリ相対パス** —— URL は `key:value` の規則に反する。
+- **作成日は仕様上「任意」**。`add` は必ず付けるが、無い行を `check` は咎めない
+  —— 手で書いた行を追い返す理由が仕様に無い。`id:` が無いのは咎める(CLI が
+  触れなくなるため)が、**`todo id` で配れる**ので直し方は 1 コマンド。
 
 完了行でも `id:` は残す —— 後続の `dep:` が「その id は done にあるか」で解決するため。
 `done.txt` の行を消してよいのは、**その id を指す `dep:` がどこにも無いとき**だけ
@@ -54,6 +57,7 @@ todo append ID "text"    # 行末に足す / todo prepend ID "text" は本文の
 todo listproj / listcon  # +project / @context の一覧
 todo show ID...          # 1 行を出す(done.txt も見る)
 todo check               # 形式検査。違反があれば stdout に出して 2 で終わる
+todo id                  # id: の無い open 行すべてに id: を配る(冪等)
 ```
 
 **インターフェイスの正は `todo --help`。**ここは索引で、食い違ったら `--help` が正しい。
@@ -94,13 +98,18 @@ todo.txt の第一目標は「テキストエディタで編集できること�
 | `todo:todo` | セッション開始時と、タスクの状態が変わった**瞬間** | `ready` で「いま何が着手できるか」を見る。`start` / `stop` / `do` / `add` / `replace` をその場で走らせる。model-invocable |
 | `todo:doctor` | 導入時と、`check` が何か言っているとき | 診断のみが既定。ファイル作成と `CLAUDE.md`/`AGENTS.md` への 1 行追記は**承認後** |
 
+skill の `!` ブロックは `${CLAUDE_SKILL_DIR}/../../bin/todo` を直に呼ぶ。
+PATH に `todo` があるならそれでよい(本文のコマンド表はそう書いてある)が、
+**PATH 注入は未確認なので、必ず走る場所は確実な方に寄せている。**
+
 形式の詳細は `skills/todo/references/format.md` の 1 箇所だけ(doctor もそこを指す)。
 行が曖昧なとき・`check` の指摘が分からないときに読む。
 
 ## テスト
 
 ```sh
-sh plugins/todo/tests/run.sh
+sh plugins/todo/tests/run.sh          # 単体
+bash scripts/verify.sh                # pre-push と CI。[8/8] がこれを走らせる
 ```
 
 `add` の採番・`do` の移動・`ready` の依存解決・`replace` の保持・`check` の各検出に加え、
