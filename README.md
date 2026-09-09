@@ -55,7 +55,7 @@ MCPサーバーのコード・テスト・配布方法までこのリポジト�
 | `harness` | init, doctor, tidy, next | セッション引き継ぎハーネスの導入・点検・片付け・着手順の一覧 |
 | `telemetry` | review | Langfuse のトレースから自分のセッションを実測し、設定改善に回す |
 | `ios-skills` | ios-app-icon, ios-simulator, ios-device-build, appstoreconnect-upload | `.icon`生成・Simulator操作・実機build・App Store Connect upload |
-| `workers-fetch` | workers-fetch | workers-fetch CLIでのWorkers検証 |
+| `japanese-tech-writing` | japanese-tech-writing | 日本語の技術文書・書籍原稿を書く / 推敲するときの文章規範(上流のgistから逐語でvendor、Unlicense) |
 
 Supabase・Vercel など公式マーケットプレイスに既にMCP内包プラグインがあるものは重複させず、`claude-plugins-official` 側を使う方針。
 
