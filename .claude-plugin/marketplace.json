@@ -56,19 +56,9 @@
       "description": "iOS app icon authoring, Simulator control, physical-device builds, and App Store Connect uploads."
     },
     {
-      "name": "harness",
-      "source": "./plugins/harness",
-      "description": "Deprecated: use `todo`. Scaffold session-handoff harness (init), check it against best practices (doctor), tidy up before closing a session (tidy)"
-    },
-    {
       "name": "todo",
       "source": "./plugins/todo",
-      "description": "Repository tasks in todo.txt format: list what is ready (dependencies resolved), record every state change as it happens, install and check the files"
-    },
-    {
-      "name": "adr",
-      "source": "./plugins/adr",
-      "description": "Architecture Decision Records: see what is already decided before proposing a change, and record a decision the moment it is made (format and bar vendored from mattpocock/skills, MIT)"
+      "description": "Durable repository context an agent reads: tasks in todo.txt (list what is ready, record every state change) and decisions in docs/adr (read what is decided, record new ones)"
     },
     {
       "name": "telemetry",
@@ -79,6 +69,11 @@
       "name": "japanese-tech-writing",
       "source": "./plugins/japanese-tech-writing",
       "description": "Style rules for Japanese technical prose: paragraph structure, argument rigor, reader load, restraint in rhetoric, no LLM filler or translationese (vendored verbatim from a k16shikano gist, Unlicense)"
+    },
+    {
+      "name": "pre-push",
+      "source": "./plugins/pre-push",
+      "description": "Set up and inspect Git pre-push checks using the repository’s CI verification command. Preserve existing hook management; copied hooks run independently of the plugin."
     }
   ]
 }

@@ -1,9 +1,0 @@
-{
-  "name": "adr",
-  "version": "0.1.0",
-  "description": "Architecture Decision Records for agent-driven repositories: check what is already decided before proposing a change, and record a decision the moment it is made — only when it is hard to reverse, surprising without context, and the result of a real trade-off. Format and bar vendored from mattpocock/skills (MIT).",
-  "author": {
-    "name": "gigun",
-    "url": "https://github.com/gigun-dev"
-  }
-}

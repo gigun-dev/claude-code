@@ -1,7 +1,7 @@
 {
   "name": "todo",
-  "version": "0.1.0",
-  "description": "Project tasks in todo.txt format, two skills: see what is ready and record every state change as it happens (todo), and install or inspect the task list in a repository (doctor). Successor to `harness` — no bespoke format, no prose file that goes stale.",
+  "version": "0.2.0",
+  "description": "Durable repository context an agent reads: tasks in todo.txt and decisions in docs/adr. Three skills — see what is ready and record every state change as it happens (todo), record and check architecture decisions (adr), install or inspect either in a repository (doctor). Two bundled CLIs, bin/todo and bin/adr. Successor to `harness`; absorbed the separate `adr` plugin. ADR format and bar vendored from mattpocock/skills (MIT).",
   "author": {
     "name": "gigun",
     "url": "https://github.com/gigun-dev"

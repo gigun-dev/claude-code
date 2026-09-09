@@ -26,6 +26,21 @@ codex plugin marketplace add gigun-dev/claude-code
 codex plugin add <plugin>@gigun
 ```
 
+## Claude Code / Codex 共通の構成
+
+| 内容 | 置き場 | 扱い |
+| --- | --- | --- |
+| スキル本文・参照資料 | `plugins/<name>/skills/` | 両ホストで同じファイルを読む |
+| 実行する CLI | `plugins/<name>/bin/` | スキルの配置場所から解決し、対象リポジトリで実行する |
+| Claude 向け登録 | `.claude-plugin/plugin.json` | Claude 固有の定義 |
+| Codex 向け登録 | `.codex-plugin/plugin.json` | Codex 固有の定義 |
+| MCP 接続定義 | `plugins/<name>/.mcp.json` | 共通の正典。Claude 側の定義は生成して照合する |
+
+共通スキルはホスト固有の環境変数・自動コマンド展開・PATH 注入を前提にしない。
+ホスト別のスキル本文や CLI を複製せず、登録形式の差だけを各 manifest に置く。
+導入時の指示ファイルは対象が使う `AGENTS.md` / `CLAUDE.md` に合わせる。
+todo・adr の実行依存は POSIX sh と awk。harness やホスト専用ランタイムには依存しない。
+
 ## 外部MCPラッパー
 
 既存の外部MCPを配布・有効化するための薄いパッケージです。実装本体は持たず、manifestと `.mcp.json` のみを正典とします。
@@ -52,46 +67,26 @@ MCPサーバーのコード・テスト・配布方法までこのリポジト�
 
 | プラグイン | スキル | 用途 |
 |---|---|---|
-| `harness` | init, doctor, tidy, next | セッション引き継ぎハーネスの導入・点検・片付け・着手順の一覧 |
+| `todo` | todo, adr, doctor | todo.txt でタスクと依存関係を、docs/adr/ で決定を管理 |
+| `pre-push` | pre-push | Git の push 前検証の導入・点検 |
 | `telemetry` | review | Langfuse のトレースから自分のセッションを実測し、設定改善に回す |
 | `ios-skills` | ios-app-icon, ios-simulator, ios-device-build, appstoreconnect-upload | `.icon`生成・Simulator操作・実機build・App Store Connect upload |
 | `japanese-tech-writing` | japanese-tech-writing | 日本語の技術文書・書籍原稿を書く / 推敲するときの文章規範(上流のgistから逐語でvendor、Unlicense) |
 
 Supabase・Vercel など公式マーケットプレイスに既にMCP内包プラグインがあるものは重複させず、`claude-plugins-official` 側を使う方針。
 
-### harness — セッションの引き継ぎを腐らせない
+### harness から todo・ADR へ移行
 
-エージェントのセッションは前回を覚えていない。harness は「現在地と次の作業」の正典を
-リポジトリ内のファイル(`docs/next-directions.md`)に置き、セッション開始時に**その頭だけ**を
-自動注入する。そのうえで、正典が腐ったことを機械が検知する。
+harness の配布を終了し、タスク管理と決定の記録は [todo](plugins/todo/README.md)
+プラグインに切り替えました(adr は 2026-09-10 に todo へ統合)。
+経緯はコミットメッセージ、知識は docs に置きます。
+このリポジトリのタスクは `todo.txt`、決定は `docs/adr/` にあります。
 
-**なぜ書式ではなく仕組みなのか。** 同じ形式の引き継ぎ文書を複数のリポジトリで運用していて、
-caldav と swift-mcp-app では機能していたのに、cf-asc-dashbord のものは1ヶ月放置で腐っていた。
-差は書式ではなく、**更新ルールが明文化されていたか**と**腐敗を機械が検知していたか**だった。
-テンプレート化したのは書式ではなく、後者を含む一式。
-
-配布物は caldav / swift-mcp-app で実証済みの形が原型で、導入後は対象リポジトリ内で完結する
-(このプラグインへのランタイム依存が無い)。Codex は `.codex/` アダプタで**同じフック
-スクリプトを共有する**。pre-push をサーバー側の branch protection に頼らずローカルで止めて
-いるのは、個人開発では admin が bypass できて実効的でないから。
-
-| スキル | 何をするか |
-|---|---|
-| `/harness:doctor` | 一式(正典テンプレ・SessionStart 頭注入フック・パススコープ付き rules・pre-push ゲート・AGENTS.md/Codex 配線)を対象リポジトリへ導入する。冪等なので新版の配布にも同じコマンドを使う |
-| `/harness:doctor` | 設定がベストプラクティスを守れているかの静的検査。CLAUDE.md の肥大化、rules の `paths` 不一致(**エラーを出さずに無効化される**)、配線漏れを指摘する |
-| `/harness:tidy` | セッションを畳む。正典の更新・コミット・push・log への追記と索引の再生成まで片付ける |
-| `/harness:status` | 正典の「着手順」節をリポジトリ横断で一覧化。注入される頭のバイト数(10KB 超で無言に切り詰められる)も出す |
-
-**設計原則(ハーネスに何かを足す/変える前に採点する「7原則」)はここには載せない。**圧縮版が
-[`.claude/rules/harness.md`](.claude/rules/harness.md)(`plugins/harness/**` を触ると自動で届く)、
-全文と根拠が [`docs/harness/next-directions.md`](docs/harness/next-directions.md) のカタログ部にある。
-3箇所目を作ると必ずドリフトする(原則7)。
-
-**個人リポジトリ前提。** チーム共有リポでは `.claude/settings.json` + フック `.sh` のコミットが
-「clone した全員のセッション開始時に実行されるコード」になる。
+導入済みのプロジェクトにはコピー済みのフックが残るため、プラグインを外すだけでは移行できません。
+[移行手順と旧タスクの対応](docs/harness/migration.md)を参照してください。
 
 ### telemetry — 自分の使い方を実測する
 
 `/telemetry:review` は Langfuse のトレースからツール別の時間・失敗・サブエージェントを集計する。
-`/harness:doctor` が「設定が正しいか」を静的に見るのに対し、こちらは**実際にどう使われたか**。
+セッションで**実際にどう使われたか**を確認します。
 作った直後に自分のフックのバグを2つ暴いた(サブエージェント span の duration が 0、型名が空)。

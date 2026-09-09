@@ -1,6 +1,12 @@
-# todo — リポジトリのタスクを todo.txt 形式で持つ
+# todo — リポジトリの持続的な文脈をタスクと決定で持つ
 
-`harness` の後継。守るものは 3 つだけ:
+エージェントが読む文脈を、リポジトリのファイルに置く 1 つの配布単位。
+**これからやることは `todo.txt`、覆しにくい決まりごとは `docs/adr/`。**
+CLI は `bin/todo` と `bin/adr` の 2 本、skill は `todo` / `adr` / `doctor` の 3 つ。
+(`adr` は 2026-09-10 まで別プラグインだった。統合の理由は
+`docs/adr/0005-merge-adr-into-the-todo-plugin.md`。)
+
+タスク側は `harness` の後継。守るものは 3 つだけ:
 
 - **枯れた慣行に乗る。** 形式は [todo.txt](https://github.com/todotxt/todo.txt) そのもの。
   語彙は [todo.txt-cli](https://github.com/todotxt/todo.txt-cli) から借りる。
@@ -14,7 +20,7 @@
 `id:` と `dep:` は、エージェントがタスクを指し・順序を判断するための最小の拡張。
 仕様の `key:value` の範囲内で、todo.sh から見ればただの語として素通りする。
 
-## 行の形
+## todo.txt の行の形
 
 ```
 (A) 2026-09-10 iPhone 相手で送信バッファを A/B する +upload @device dep:0001 see:docs/x.md id:0002
@@ -43,7 +49,7 @@ x 2026-09-10 2026-09-08 完了した本文 +upload id:0001                      
 ### 採番
 
 `add` と `todo id` は **`todo.txt` と `done.txt` の両方**の max+1 を、
-4 桁ゼロ詰め(`id:0001`)で書く。桁は adr プラグインの `NNNN-slug.md` と揃えてある
+4 桁ゼロ詰め(`id:0001`)で書く。桁は ADR の `NNNN-slug.md` と揃えてある
 —— 同じリポジトリに 2 種類の採番が並ぶので、見た目が同じ方が読み違えない。
 9999 を超えたら 5 桁になるだけで、特別扱いはしない。
 
@@ -56,7 +62,7 @@ worktree の implementer は報告するに留める(`skills/todo/SKILL.md` の�
 `id:0012` と `id:12` が両方あるのは同じ番号の重複なので、`check` が名指しし、
 どちらを指すか決められないコマンドは落ちる。
 
-## コマンド
+## todo のコマンド
 
 ```sh
 todo add "text"          # 作成日と id: を付けて追記(+proj @ctx key:value は text にそのまま書く)
@@ -88,8 +94,9 @@ todo id                  # id: の無い open 行すべてに id: を配る(冪�
 `bin/todo` は単一の POSIX sh + awk。bash 固有機能・python・jq に依存しない
 —— Nix 環境の外や sandbox でも動く必要があるため。
 
-置き場が `bin/` なのは、Claude Code がプラグインの `bin/` を Bash の PATH に
-足すから —— skill から `todo ready` とだけ書ける。
+CLI はプラグイン内の `bin/` に同梱する。Claude / Codex とも、skill の実パスから
+同梱 CLI の絶対パスを解決して実行する。PATH の自動追加には依存しない。
+対象データは作業中のリポジトリにあるため、CLI を呼ぶときにプラグイン側へ移動しない。
 
 ### 手で編集してよい
 
@@ -104,16 +111,75 @@ todo.txt の第一目標は「テキストエディタで編集できること�
 「増えるなら拒む」にしてある。フックは置かない —— 呼ばれる保証の無い場所へ検査を
 置くと、検査が黙って死ぬ。
 
+## ADR のファイルの形
+
+決定の側で守るのは 2 つ:
+
+- **書式も採否の基準も自作しない。** [mattpocock/skills](https://github.com/mattpocock/skills)
+  の `ADR-FORMAT.md` を**逐語で** vendor してある(MIT。同じディレクトリの
+  `LICENSE-mattpocock-skills` がそのライセンス)。置き場は
+  `skills/adr/references/ADR-FORMAT.md`。**編集しない** —— 更新は上流から取り直す。
+- **書く前に読む。** ADR の一番の値打ちは「もう決まっている」を先に知ること。
+  `todo ready` は出力の先頭に決定の索引を出し、`adr` skill は最初に `adr ls` を指示する。
+
+書くのはエージェントで、CLI は一覧と検査だけを持つ。雛形を吐くコマンドは置かない
+—— 埋める欄があると、埋めるために創作が始まる。
+
+```
+docs/adr/0003-use-manual-sql-instead-of-an-orm.md
+
+  # Use manual SQL instead of an ORM
+
+  2026-09-10 に決めた。<何が文脈で、何を決めて、なぜか。1〜3 文>
+```
+
+- ファイル名は `NNNN-<小文字ケバブの slug>.md`。番号は 4 桁で、既存の最大値 + 1
+  (`adr ls` の一番下が最大値)。**採番後に改名しない。**
+- 日付は `YYYY-MM-DD`。書き出しの文の中か、`Date:` の 1 行。
+- `Status:` / Considered Options / Consequences は**値打ちがあるときだけ**。
+  ほとんどの ADR は題 + 1 段落で終わる。
+- **受理済みの ADR は編集しない。**差し替えは新しいファイルに書き、その中で古い方を
+  名指しする。古い方に許される編集は先頭行 `Superseded by <slug>` だけ。
+
+三重関門(覆すのが高い / 文脈が無いと驚く / 本物の取引の結果)と「何が該当するか」は
+上流の `ADR-FORMAT.md` が正。**ここには複製しない**(複製すると必ずドリフトする)。
+
+## adr のコマンド
+
+```sh
+adr ls        # <date> <slug> <status> <title> を番号順に 1 行 1 件
+adr check     # 書式検査。指摘があれば stdout に出して 2 で終わる
+```
+
+**インターフェイスの正は `adr --help`。**ここは索引で、食い違ったら `--help` が正しい。
+
+- 対象は `$ADR_DIR`。未指定なら `docs/adr` → `docs/decisions` → `adr` →
+  `decisions` の順に最初に見つかったもの。どれも無ければ何もせず 0 で終わる。
+  **この解決は `lib/adr-dir.sh` の 1 箇所**で、`bin/adr` と `bin/todo` の両方が
+  読み込む —— 2 つ持つと片方だけ直されてずれる。
+- `check` が見るのは、ファイル名 / 番号の重複 / 題 / 日付 / `Superseded by` の
+  指す先の実在 / `Status:` の語彙。**改名も書き換えもしない** —— 番号が重複していても
+  指摘だけを出す(上流が「改名しない」と言う以上、直すのは人の判断)。
+- `Superseded by` があり `Status:` が無ければ、`ls` の status は `superseded`。
+- 対話しない。データは stdout、診断は stderr。終了コード: **0** 成功 /
+  **1** 引数・状態の誤り / **2** `check` が指摘を出した。
+
+`bin/adr` も単一の POSIX sh + awk。フックは置かない —— 呼ばれる保証の無い場所へ
+検査を置くと、検査が黙って死ぬ。
+
+決定が仕事を生んだら、その仕事は ADR ではなく `todo` の 1 行にする
+(`see:docs/adr/<slug>.md` で根拠を指す)。
+
 ## skills
 
 | skill | いつ | 何を |
 |---|---|---|
 | `todo:todo` | セッション開始時と、タスクの状態が変わった**瞬間** | `ready` で「いま何が着手できるか」を見る。`start` / `stop` / `do` / `add` / `replace` をその場で走らせる。model-invocable |
-| `todo:doctor` | 導入時と、`check` が何か言っているとき | 診断のみが既定。ファイル作成と `CLAUDE.md`/`AGENTS.md` への 1 行追記は**承認後** |
+| `todo:adr` | 覆しにくい決定が下りた**瞬間**、利用者が裁定したとき、測定が案を否定したとき、「なぜこうなっている」と訊かれたとき、既に決まっていそうな領域へ変更を提案する前 | `ls` で既存の決定を見て、三重関門にかけ、通れば確定した内容を書く。落ちれば勧退してコミットメッセージを勧める。model-invocable |
+| `todo:doctor` | 導入時と、`check` が何か言っているとき | 診断のみが既定。導入・移行を依頼されたらファイルと指示の入口を用意する |
 
-skill の `!` ブロックは `${CLAUDE_SKILL_DIR}/../../bin/todo` を直に呼ぶ。
-PATH に `todo` があるならそれでよい(本文のコマンド表はそう書いてある)が、
-**PATH 注入は未確認なので、必ず走る場所は確実な方に寄せている。**
+skill は最初のコマンドを本文で明示する。Claude 専用の自動実行記法や
+`CLAUDE_SKILL_DIR` を必要とせず、Codex でも同じ本文を使う。
 
 拡張の定義は `skills/todo/SKILL.md` の「語彙」1 箇所(doctor もそこを指す)。
 上流の仕様は `skills/todo/references/todo-txt-format.md` に逐語で入れてあり、
@@ -126,8 +192,33 @@ sh plugins/todo/tests/run.sh          # 単体
 bash scripts/verify.sh                # pre-push と CI。この中からも走る
 ```
 
-`add` の採番・`do` の移動・`ready` の依存解決・`replace` の保持・`check` の各検出に加え、
-**生成した `todo.txt` を todo.txt-cli の `todo.sh` に読ませる互換テスト**を含む
-(自分の検査だけでは自作自演になる)。`todo.sh` が無い環境ではそのテストだけ skip する。
-`TODO_SH` で場所を指定できる。日付だけ `TODO_TODAY` で固定する —— 採番は連番なので、
-空のディレクトリから始めれば `id:0001` から決まり、注入点が要らない。
+実行口は `tests/run.sh` の 1 つ。todo の分をそこで走らせ、続けて `tests/adr.sh` を
+呼んで件数を合算する。ファイルが 2 つなのは作業場の作り方が違うから ——
+todo は `TODO_DIR` を渡し、adr は**カレントディレクトリからの探索**で置き場を
+決めるので `cd` したサブシェルから呼ぶ。
+
+todo 側は `add` の採番・`do` の移動・`ready` の依存解決と決定の索引・`replace` の保持・
+`check` の各検出・`projects` の集計に加え、**生成した `todo.txt` を todo.txt-cli の
+`todo.sh` に読ませる互換テスト**を含む(自分の検査だけでは自作自演になる)。
+`todo.sh` が無い環境ではそのテストだけ skip する。`TODO_SH` で場所を指定できる。
+日付だけ `TODO_TODAY` で固定する —— 採番は連番なので、空のディレクトリから
+始めれば `id:0001` から決まり、注入点が要らない。
+
+adr 側は `ls` の並び(番号順であって日付順でも文字列順でもない)・status の 4 つの
+出どころ・`check` の各指摘・ディレクトリの探索順・`ADR_DIR` の上書きを見る。
+
+テストは `sh "$ADRBIN"` ではなく**実行ファイルとして直に呼ぶ**。前者だと PATH 上の
+新しい shell で走り、shebang が指す `/bin/sh` —— macOS では **bash 3.2** ——
+で一度も走らない。2026-09-10 に実際そうなった: `$( … )` の中の `case` を
+bash 3.2 が解析できず `adr` は起動すらできないのに、テストは 39 件すべて緑だった。
+**`$( … )` の中に `case` を書かないこと**(括弧付きパターンで逃げると、次に触る人が
+普通の書き方へ戻した瞬間に再発する)。`/bin/sh` で `--help` / `ls` / `check` を
+叩くテストが番人。
+
+## 導入
+
+Codex: `codex plugin add todo@gigun`。Claude Code: `claude plugin install todo@gigun`。
+タスクと決定は同じ 1 つの配布単位なので、`adr@gigun` は無い(2026-09-10 に統合した)。
+導入後、doctor スキルに対象リポジトリへの導入を依頼する。
+プラグインのインストールと、各リポジトリのデータ・フックの移行は別の作業。
+`docs/adr/` は最初の決定を記録するときに作り、空のテンプレートを先に増やさない。
