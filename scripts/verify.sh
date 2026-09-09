@@ -20,10 +20,35 @@ cd "$repo_root" || exit 1
 
 overall_failed=0
 
+# 検査の名前と順序をここ1箇所だけに持つ。[n/N] は手で書かず、この一覧から
+# 数える(check_header)。検査を足す・消すときはこの一覧と対応する呼び出し
+# 箇所だけを直せばよく、他の項目の番号は自動で追随する —— 以前は検査を
+# 1つ消すたびに残り8箇所の番号を手で書き換える羽目になっていた
+# (番号そのものは情報を持たない。進捗は節の名前と最後の合否で分かる)。
+# bash 3.2(macOS の /bin/bash)には連想配列(declare -A)が無いので、
+# 素朴な添字配列と、呼ばれた回数を数えるだけのカウンタで済ませる。
+CHECK_NAMES=(
+	"シェル構文チェック (bash -n)"
+	"JSON 妥当性チェック"
+	"todo.txt の形式チェック"
+	"plugin.json 版数整合性チェック (.claude-plugin ⇔ .codex-plugin)"
+	"marketplace.json プラグイン一覧整合性チェック (.claude-plugin ⇔ .agents)"
+	"agy-mcp パース回帰テスト (--selftest-parse)"
+	"ADR の形式チェック"
+	"todo プラグインのテスト (tests/run.sh)"
+	"pre-push プラグインの実 push テスト"
+)
+check_total=${#CHECK_NAMES[@]}
+check_n=0
+check_header() {
+	check_n=$((check_n + 1))
+	echo "=== [$check_n/$check_total] ${CHECK_NAMES[$((check_n - 1))]} ==="
+}
+
 # -----------------------------------------------------------------------
 # (1) シェル構文チェック — 追跡対象の *.sh すべてに bash -n
 # -----------------------------------------------------------------------
-echo "=== [1/9] シェル構文チェック (bash -n) ==="
+check_header
 sh_failed=0
 # plugins/*/bin/* も対象に含める理由(2026-09-09 に追加):
 #   plugins/todo/bin/todo は拡張子を持たない実行ファイル(PATH に置かれて
@@ -60,7 +85,7 @@ fi
 # (2) JSON 妥当性チェック — 追跡対象の *.json すべてをパース
 # -----------------------------------------------------------------------
 echo ""
-echo "=== [2/9] JSON 妥当性チェック ==="
+check_header
 json_failed=0
 if ! command -v python3 >/dev/null 2>&1; then
 	# python3 が無い環境で「JSON チェックを黙ってスキップし、結果として
@@ -107,7 +132,7 @@ fi
 
 # タスクの単体テストだけでは、このリポジトリ自身のデータ破損を検出できない。
 echo ""
-echo "=== [3/9] todo.txt の形式チェック ==="
+check_header
 if [ ! -f todo.txt ] || [ ! -f done.txt ]; then
     echo "✗ todo.txt または done.txt が見つからない"
     overall_failed=1
@@ -160,7 +185,7 @@ fi
 #   git ls-files で追跡有無を判定し、未追跡なら「対象外(片方しか無い)」と同じ扱いで
 #   黙って飛ばす。
 echo ""
-echo "=== [4/9] plugin.json 版数整合性チェック (.claude-plugin ⇔ .codex-plugin) ==="
+check_header
 ver_failed=0
 if ! command -v python3 >/dev/null 2>&1; then
 	# (2) の JSON 妥当性チェックと同じ理由(原則4「検知器は黙って死ぬ前提で検証する」)。
@@ -263,7 +288,7 @@ fi
 #   「合格」として扱うと、パス指定のミスをそのまま見逃す最悪の壊れ方になる
 #   ((1)(2)(4) の 0件時の扱いと同じ規律 —— 原則4「検知器は黙って死ぬ前提で検証する」)。
 echo ""
-echo "=== [5/9] marketplace.json プラグイン一覧整合性チェック (.claude-plugin ⇔ .agents) ==="
+check_header
 mp_failed=0
 claude_mp=".claude-plugin/marketplace.json"
 codex_mp=".agents/plugins/marketplace.json"
@@ -353,7 +378,7 @@ fi
 #   (2)(4)(5) と同じ理由。**未検査を合格扱いにしない。**
 #   agy-mcp が存在するのに検査できないなら、それは合格ではなく「検査できていない」。
 echo ""
-echo "=== [6/9] agy-mcp パース回帰テスト (--selftest-parse) ==="
+check_header
 agy_failed=0
 agy_server="plugins/agy-mcp/server.py"
 if ! git ls-files --error-unmatch -- "$agy_server" >/dev/null 2>&1; then
@@ -377,7 +402,7 @@ fi
 
 # ADR の単体テストに加え、リポジトリ自身の決定を検査する。
 echo ""
-echo "=== [7/9] ADR の形式チェック ==="
+check_header
 if [ ! -d docs/adr ]; then
     echo "✗ docs/adr が見つからない"
     overall_failed=1
@@ -402,7 +427,7 @@ fi
 #   ⚠️ **ここに入れてよいのはこの性質のテストだけ。** ネットワーク・課金枠・実機に
 #   依存するテストを関門にすると「落ちても気にしない」に転んで、関門ごと死ぬ。
 echo ""
-echo "=== [8/9] todo プラグインのテスト (tests/run.sh) ==="
+check_header
 todo_failed=0
 todo_tests="plugins/todo/tests/run.sh"
 if ! git ls-files --error-unmatch -- "$todo_tests" >/dev/null 2>&1; then
@@ -423,7 +448,7 @@ fi
 # -----------------------------------------------------------------------
 # ローカルの bare リポジトリで、配布する Git フックの実際の成否を検証する。
 echo ""
-echo "=== [9/9] pre-push プラグインの実 push テスト ==="
+check_header
 if prepush_out=$(python3 plugins/pre-push/tests/test_pre_push.py 2>&1); then
     printf '%s\n' "$prepush_out" | tail -4
 else
