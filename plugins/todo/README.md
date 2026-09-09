@@ -2,9 +2,13 @@
 
 エージェントが読む文脈を、リポジトリのファイルに置く 1 つの配布単位。
 **これからやることは `todo.txt`、覆しにくい決まりごとは `docs/adr/`。**
-CLI は `bin/todo` と `bin/adr` の 2 本、skill は `todo` / `adr` / `doctor` の 3 つ。
+CLI は `bin/todo`・`bin/adr`・`bin/doctor` の 3 本、skill は `todo` / `adr` / `doctor` の 3 つ。
 (`adr` は 2026-09-10 まで別プラグインだった。統合の理由は
 `docs/adr/0005-merge-adr-into-the-todo-plugin.md`。)
+`bin/doctor` は指示(`CLAUDE.md` / `AGENTS.md`)と実体の食い違いだけを見る。
+`todo check` / `adr check` が形式を見るのに対し、こちらは決定の置き場の有無・
+指示からの紐付け・「正典」と名指しされた実在しないファイル・登録されていない
+フックのパスを見る(詳細は `skills/doctor/SKILL.md`)。
 
 タスク側は `harness` の後継。守るものは 3 つだけ:
 
@@ -202,10 +206,10 @@ sh plugins/todo/tests/run.sh          # 単体
 bash scripts/verify.sh                # pre-push と CI。この中からも走る
 ```
 
-実行口は `tests/run.sh` の 1 つ。todo の分をそこで走らせ、続けて `tests/adr.sh` を
-呼んで件数を合算する。ファイルが 2 つなのは作業場の作り方が違うから ——
-todo は `TODO_DIR` を渡し、adr は**カレントディレクトリからの探索**で置き場を
-決めるので `cd` したサブシェルから呼ぶ。
+実行口は `tests/run.sh` の 1 つ。todo の分をそこで走らせ、続けて `tests/adr.sh` と
+`tests/doctor.sh` を呼んで件数を合算する。ファイルが分かれているのは作業場の
+作り方が違うから —— todo は `TODO_DIR` を渡し、adr と doctor は**カレントディレクトリ
+からの探索**で置き場を決めるので `cd` したサブシェルから呼ぶ。
 
 todo 側は `add` の採番・`do` の移動・`ready` の依存解決と決定の索引・`replace` の保持・
 `check` の各検出・`projects` の集計に加え、**生成した `todo.txt` を todo.txt-cli の
@@ -216,6 +220,10 @@ todo 側は `add` の採番・`do` の移動・`ready` の依存解決と決定�
 
 adr 側は `ls` の並び(番号順であって日付順でも文字列順でもない)・status の 4 つの
 出どころ・`check` の各指摘・ディレクトリの探索順・`ADR_DIR` の上書きを見る。
+
+doctor 側は決定の置き場の有無と紐付け・「正典」と名指しされた実在しないファイル・
+実在しない/未登録のフックのパス・**誤検知しないこと**(健全なリポジトリで指摘 0 件)
+・`check` が書き込みをしないことを見る。
 
 テストは `sh "$ADRBIN"` ではなく**実行ファイルとして直に呼ぶ**。前者だと PATH 上の
 新しい shell で走り、shebang が指す `/bin/sh` —— macOS では **bash 3.2** ——
