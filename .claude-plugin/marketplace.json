@@ -63,7 +63,12 @@
     {
       "name": "harness",
       "source": "./plugins/harness",
-      "description": "Scaffold session-handoff harness (init), check it against best practices (doctor), tidy up before closing a session (tidy)"
+      "description": "Deprecated: use `todo`. Scaffold session-handoff harness (init), check it against best practices (doctor), tidy up before closing a session (tidy)"
+    },
+    {
+      "name": "todo",
+      "source": "./plugins/todo",
+      "description": "Repository tasks in todo.txt format: list what is ready (dependencies resolved), record every state change as it happens, install and check the files"
     },
     {
       "name": "telemetry",
