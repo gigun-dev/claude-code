@@ -16,24 +16,12 @@ compatibility: >-
 
 素材と最終renderは別物。作成 → `ictool` render → 実サイズ比較のloopを必ず回す。
 
-## Operating Posture
-
-iOS 26のホーム画面に並べて古く見えないかだけを見る、目の厳しいアイコンデザイナーとして振る舞う。
-既定は通さないこと —— 素材を描く前に下のゲートで落とす。**モチーフを振り直す判断だけで終えてよく、
-PNGが0枚でも失敗ではない。**
-
-失敗モードは3つ。**上ほど重い。**
-
-1. **一世代前の設計言語のまま作り切る。** 手順は全部通り6 appearanceも出るのに、ホーム画面へ
-   置くと古い。手順の中では検出できないので、**描く前のゲートだけが止められる場所**になる。
-2. **はみ出しと潰れを目で判断する。** 回転は外接矩形を対角へ膨らませるため見積もれず、実地では
-   右端1024pxまで溢れたまま**3世代連続で見落とした**。bboxを実測する。
-3. **素材の見た目で採否を決める。** `_composite.png`とictool通過後は別物で、1024pxで成立して
-   いても80ptで潰れる。
-
 ## 描く前のゲート
 
 素材を1枚でも描く前に通す。**該当したらモチーフを振り直す**(根拠は`references/design-rules.md`)。
+一世代前の設計言語で作り切ったアイコンは、手順が全部通って6 appearanceも出るのに、ホーム画面へ
+置くと古い。手順の途中では検出できないので、止められるのはここだけになる。モチーフを振り直す
+判断でこのスキルを終えてよく、PNGが0枚でも失敗ではない。
 
 | 該当 | 直し方 |
 |---|---|
@@ -62,6 +50,8 @@ PNGが0枚でも失敗ではない。**
 
    - 基本図形とpathで速く構図を作る: `scripts/draw_layers.swift <spec.json> <outDir>`。
      bbox実測とautofitを使えるが、余白が構図の一部なら`"autofit": false`も比較する。
+     はみ出しは目で判断せずbboxを実測する。回転は外接矩形を対角へ膨らませるので見積もれず、
+     右端1024pxまで溢れたまま3世代連続で見落とした実例がある。
    - gradient、mask、blur、blendが必要: 1つのSVGへ`data-layer`付きgroupを書き、
      `scripts/render_svg.swift <icon.svg> <outDir> --size 1024`で同一座標系のPNGへ分解する。
    - どちらも中央約81%の安全域を守る。SVG pathやJSON schemaの詳細はreferencesへ進む。
@@ -85,8 +75,9 @@ PNGが0枚でも失敗ではない。**
    ```
 
    Default / Dark / Clear Light / Clear Dark / Tinted Light / Tinted Darkの6種を確認する。
-   3〜6案を並べ、120ptと80ptで潰れる案を落とす。render scriptが非0なら、一部画像があっても
-   成功扱いにしない。
+   3〜6案を並べ、120ptと80ptで潰れる案を落とす。採否は`_composite.png`の見た目では決めない
+   —— ictool通過後とは別物で、1024pxで成立していても80ptで潰れる。render scriptが非0なら、
+   一部画像があっても成功扱いにしない。
 
 5. Xcodeへ組み込み、build productを検証する。XcodeGenでは`.icon`を単一fileとして扱う設定が必要。
    `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`、`Assets.car`、`CFBundleIconName`、actool warningを確認する。
