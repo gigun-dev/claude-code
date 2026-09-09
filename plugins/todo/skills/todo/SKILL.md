@@ -6,12 +6,12 @@ description: >-
   including when the user never says "todo". Tasks live in this repository's todo.txt
   and done.txt, driven by the `todo` CLI. Also on '/todo:todo'.
 metadata:
-  version: "0.1.3"
+  version: "0.1.4"
 ---
 
 このスキルのディレクトリから `../../bin/todo` を絶対パスに解決し、対象リポジトリのルートで `ready` を実行する。以下の `todo` は、その同梱 CLI を引用符で囲んだ絶対パスで呼ぶことを指す。作業ディレクトリは対象リポジトリに保つ。
 
-`ready` に並ぶのが、依存の解けた open な行、つまりいま着手できるものだ。並列に投げられるのもこの中から選ぶ。先頭に `✗` が出ていればファイルが壊れているので、一覧を読む前にそれを直す。
+`ready` に並ぶのが、依存の解けた open な行、つまりいま着手できるものだ。並列に投げられるのもこの中から選ぶ。行の手前に決定の索引（`docs/adr/` にある題の一覧）が出ることがある。触れる領域がそこに当たるなら、従うか、新しい ADR で覆すことを提案する。題だけなので、当たるものがあれば本体を読む。`✗` が出ていればファイルが壊れているので、一覧を読む前にそれを直す。
 
 行の読み方は todo.txt の仕様のとおりで、`(A)` から `(Z)` が重要度（行頭のみ。進行中の意味は持たない）、その次が作成日、`+project` が束ね、`@context` がその作業に要る状況（`@device` `@user` `@unattended`）。このプラグインはそこに四つを足している。
 
@@ -22,6 +22,8 @@ metadata:
 | `see:docs/x.md` | 根拠の置き場。リポジトリ相対パスに限る。URL は value にコロンが二つ目に入るので形式違反になる |
 | `id:0001` | `add` が付ける連番。4 桁ゼロ詰め、done.txt も数えた最大値に 1 を足す。タスクを指す唯一の手段で、行番号は編集とマージでずれるので使わない。指すときのゼロ詰めは省略できる（`todo do 12`）。手で足した行には `todo id` が配る |
 
+タスクに言及するときは id だけで済ませず、「main.c の送信経路の切り出し（`id:0007`）」のように中身を先に置く。読む側が todo.txt を開いているとは限らず、`id:0007` とだけ言われるとそのたびに引きに行くことになる。一覧をそのまま貼るときは別で、そこは id が並んでいてよい。
+
 `ls` と `ready` は重要度の順に並び、同じ重要度の中はファイルに書かれた順になる。行が仕様上どう読まれるか分からないときだけ `references/todo-txt-format.md`（上流の仕様そのまま）を読む。
 
 ```sh
@@ -30,6 +32,7 @@ todo ls +project        # その塊の残り          todo show <id>   # done �
 todo start <id>         # 着手した              todo stop <id>   # 未完のまま置いた
 todo do <id>            # 検証まで終わった      todo add "<次の一手>"
 todo replace <id> "…"   # 言い方・粒度を直す    todo pri <id> A / todo depri <id>
+todo projects           # 束ごとの件数（断片化）
 ```
 
 `todo --help` が正で、終了コードは 0 成功、1 引数や状態の誤り、2 形式違反、3 ID 不明。
