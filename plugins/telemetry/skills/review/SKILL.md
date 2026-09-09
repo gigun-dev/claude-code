@@ -26,7 +26,7 @@ bash "${CLAUDE_SKILL_DIR}/scripts/summary.sh" 7
    - 同じ外部リクエストを繰り返している → 手順を skill 化して固定する
    - 特定操作が毎回遅い → コマンドを変える、キャッシュする、subagent に逃がす
    - 権限プロンプトで止まっている → `/fewer-permission-prompts` で allowlist を整える
-   - 設定そのものの健全性は `/harness:doctor`、使われ方の実測は `/cclens:doctor`
+   - 使われ方の実測は `/cclens:doctor`
 
 送信側の仕組み(hook と observation の対応、generation を transcript から復元している理由)は
 `plugins/telemetry/README.md`。
