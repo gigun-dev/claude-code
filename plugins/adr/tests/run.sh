@@ -36,7 +36,13 @@ t() { # t <name> <expected> <actual>
 }
 
 # 作業場から呼ぶ。ADR_DIR は環境から引き継ぐ(上書きテスト用)。
-adr() { (cd "$W" && sh "$ADRBIN" "$@"); }
+#
+# ⚠️ `sh "$ADRBIN"` ではなく**実行ファイルとして直に呼ぶ**。前者は PATH 上の sh
+# (このリポジトリでは Nix の新しい shell)で走ってしまい、shebang が指す
+# /bin/sh —— macOS では bash 3.2 —— で一度も走らない。2026-09-10 に実際、
+# `$( … )` の中の heredoc を bash 3.2 が誤解して構文エラーになるのに、テストは
+# 39 件すべて緑だった。テストは配布物の入口をそのまま叩くこと。
+adr() { (cd "$W" && "$ADRBIN" "$@"); }
 
 # 1 件書く。write <相対パス> <中身...>
 write() {
@@ -208,6 +214,22 @@ setup help
 t "--help は 0 で返る" "0" "$(adr --help >/dev/null 2>&1; echo $?)"
 t "引数なしは usage を stderr に出して 2" "2" "$(adr >/dev/null 2>&1; echo $?)"
 t "知らないコマンドは 2" "2" "$(adr nope >/dev/null 2>&1; echo $?)"
+
+# ---------------------------------------------------------------------------
+# 素の /bin/sh — macOS ではこれが bash 3.2 で、新しい shell が通す書き方を落とす
+# ---------------------------------------------------------------------------
+setup binsh
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10'
+if [ -x /bin/sh ]; then
+	t "/bin/sh で読める(構文エラーが無い)" "0" \
+		"$( (cd "$W" && /bin/sh "$ADRBIN" --help >/dev/null 2>&1); echo $?)"
+	t "/bin/sh でも check が走る" "check: 問題なし (1 件)" \
+		"$(cd "$W" && /bin/sh "$ADRBIN" check 2>&1)"
+	t "/bin/sh でも ls が走る" "2026-09-10 0001-a accepted A" \
+		"$(cd "$W" && /bin/sh "$ADRBIN" ls 2>&1)"
+else
+	printf 'skip: /bin/sh が無い\n'
+fi
 
 # ---------------------------------------------------------------------------
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

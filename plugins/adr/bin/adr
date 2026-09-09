@@ -186,6 +186,30 @@ END {
 
 parse_file() { awk -v us="$US" "$PARSE" "$1"; }
 
+# parse_file の結果を date / status / super / title へ展開する(呼び出し側の
+# 変数に置く。sh に局所変数は無いので、そのまま呼び出し側から見える)。
+#
+# ⚠️ ここで `read ... <<EOF` を使わないこと。macOS の /bin/sh は bash 3.2 で、
+# `$( … )` の中に heredoc があると構文解析を誤る —— 2026-09-10 に実測した:
+# `/bin/sh plugins/adr/bin/adr check` が「line 265: syntax error near
+# unexpected token ';;'」で落ちた(テストが `sh` = Nix の新しい shell で
+# 呼んでいたため気づけなかった)。読むのは 4 フィールドだけなので、
+# `set --` による POSIX の分割で足りる。
+set_fields() { # set_fields <ファイル>
+	_parsed=$(parse_file "$1")
+	_oldifs=$IFS
+	set -f # 題に * が入っていてもパス名展開させない
+	IFS=$US
+	# shellcheck disable=SC2086
+	set -- $_parsed
+	IFS=$_oldifs
+	set +f
+	date=${1:-}
+	status=${2:-}
+	super=${3:-}
+	title=${4:-}
+}
+
 # ---------------------------------------------------------------------------
 cmd_ls() {
 	[ $# -eq 0 ] || die "usage: adr ls   (引数は取らない)"
@@ -198,9 +222,7 @@ cmd_ls() {
 	[ "$rc" -eq 0 ] || exit "$rc" # die は既にメッセージを出している
 	adr_files "$dir" | while IFS= read -r f; do
 		slug=$(slug_of "$f")
-		IFS="$US" read -r date status super title <<EOF
-$(parse_file "$f")
-EOF
+		set_fields "$f"
 		# 番号が読めないファイルも落とさずに出す —— 一覧から消えると、直す
 		# きっかけが check を走らせたときにしか無くなる。並びは末尾へ回る。
 		num=$(num_of "$slug")
@@ -229,35 +251,30 @@ cmd_check() {
 
 	# slug の集合を先に作る。Superseded by の指す先を「同じディレクトリに実在
 	# するか」だけで判定するため —— 中身は見ない(古い方を読みに行かせない)。
-	slugs=','
-	n=0
-	while IFS= read -r f; do
-		[ -n "$f" ] || continue
-		slugs="$slugs$(slug_of "$f"),"
-		n=$((n + 1))
-	done <<EOF
-$(adr_files "$dir")
-EOF
+	# ループを回さず awk で組むのは、シェル変数を跨いで持ち出す必要があるから
+	# (パイプの while はサブシェルで、抜けた後に値が残らない)。
+	slugs=,$(adr_files "$dir" | awk '{ sub(/.*\//, ""); sub(/\.md$/, ""); printf "%s,", $0 }')
+	n=$(adr_files "$dir" | awk 'END { print NR + 0 }')
 
 	# 同じ番号を持つファイルの一覧(番号だけを見る。改名はしない)。
-	dupnums=$(
-		while IFS= read -r f; do
-			[ -n "$f" ] || continue
-			num=$(num_of "$(slug_of "$f")")
-			[ -n "$num" ] && printf '%s\n' "$num"
-		done <<EOF
-$(adr_files "$dir")
-EOF
-	)
-	dupnums=$(printf '%s\n' "$dupnums" | LC_ALL=C sort | uniq -d)
+	dupnums=$(adr_files "$dir" |
+		awk '{ sub(/.*\//, ""); if (match($0, /^[0-9]+-/)) print substr($0, 1, RLENGTH - 1) }' |
+		LC_ALL=C sort | uniq -d)
 
-	out=$(
-		while IFS= read -r f; do
-			[ -n "$f" ] || continue
+	# 指摘は一時ファイルへ書いてから読む。**`$( … )` の中に `case` を書かないこと**
+	# —— macOS の /bin/sh は bash 3.2 で、コマンド置換の中の `case` を
+	# `(パターン)` と括弧で始めない限り構文解析に失敗する(2026-09-10 実測。
+	# `case ab in a) echo one ;; esac` を `$( )` に入れるだけで
+	# 「syntax error near unexpected token ';;'」。bash 4 で直った既知の欠陥)。
+	# 括弧付きパターンで逃げると、次に触る人が普通の書き方へ戻した瞬間に再発する。
+	# 呼ぶ側を `$( )` から出しておけば、中は普通の sh のままでよい。
+	tmpf=${TMPDIR:-/tmp}/adr-check.$$
+	trap 'rm -f "$tmpf"' EXIT INT TERM
+	: >"$tmpf" || die "一時ファイル $tmpf を作れない"
+	{
+		adr_files "$dir" | while IFS= read -r f; do
 			slug=$(slug_of "$f")
-			IFS="$US" read -r date status super title <<INNER
-$(parse_file "$f")
-INNER
+			set_fields "$f"
 			num=${slug%%-*}
 			rest=${slug#*-}
 			badname=0
@@ -298,12 +315,10 @@ INNER
 			*) printf '✗ Status: '\''%s'\'' は語彙外(proposed|accepted|deprecated|superseded)\n    %s\n' \
 				"$status" "$f" ;;
 			esac
-		done <<EOF
-$(adr_files "$dir")
-EOF
-	)
-	if [ -n "$out" ]; then
-		printf '%s\n' "$out"
+		done
+	} >"$tmpf"
+	if [ -s "$tmpf" ]; then
+		cat "$tmpf"
 		return "$EX_FORMAT"
 	fi
 	printf 'check: 問題なし (%d 件)\n' "$n"
