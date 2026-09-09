@@ -501,16 +501,16 @@ unset ADR_DIR
 setup adr_index_threshold
 todo add "work on it" >/dev/null
 i=1
-while [ "$i" -le 30 ]; do
+while [ "$i" -le 20 ]; do
 	adrfile "$(printf 'docs/adr/%04d-decision.md' "$i")" "Decision $i"
 	i=$((i + 1))
 done
-t "30 件では警告を出さない" "決定(docs/adr/、30 件)—— 触れるなら従うか、新しい ADR で覆すことを提案する" \
+t "20 件では警告を出さない" "決定(docs/adr/、20 件)—— 触れるなら従うか、新しい ADR で覆すことを提案する" \
 	"$(todo ready | head -1)"
-adrfile docs/adr/0031-decision.md 'Decision 31'
-t "31 件で索引の直前に 1 行足す" "1" \
-	"$(todo ready | head -1 | grep -c '索引が 31 行ある(閾値 30)')"
-t "警告を出しても truncate はしない(31 件すべて出す)" "31" \
+adrfile docs/adr/0021-decision.md 'Decision 21'
+t "21 件で索引の直前に 1 行足す" "1" \
+	"$(todo ready | head -1 | grep -c '索引が 21 行ある(閾値 20)')"
+t "警告を出しても truncate はしない(21 件すべて出す)" "21" \
 	"$(todo ready | grep -c '^  00')"
 
 # ---------------------------------------------------------------------------
