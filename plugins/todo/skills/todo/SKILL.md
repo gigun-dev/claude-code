@@ -1,19 +1,16 @@
 ---
 name: todo
 description: >-
-  Use at the start of work in a repository to see which tasks are ready to start, and
-  whenever a task is finished, started, split, or reworded — including when the user
-  never says "todo". Tasks live in this repository's todo.txt and done.txt, driven by
-  the `todo` CLI.
+  Manage repository tasks in todo.txt: read ready work at session start and update
+  tasks when work starts, finishes, splits, or changes. Use for repository task
+  tracking, including implicit state changes.
 metadata:
-  version: "0.1.0"
+  version: "0.1.2"
 ---
 
-```!
-"${CLAUDE_SKILL_DIR}/../../bin/todo" ready
-```
+このスキルのディレクトリから `../../bin/todo` を絶対パスに解決し、対象リポジトリのルートで `ready` を実行する。以下の `todo` は、その同梱 CLI を引用符で囲んだ絶対パスで呼ぶことを指す。作業ディレクトリは対象リポジトリに保つ。
 
-上に並ぶのが、依存の解けた open な行、つまりいま着手できるものだ。並列に投げられるのもこの中から選ぶ。先頭に `✗` が出ていればファイルが壊れているので、一覧を読む前にそれを直す。
+`ready` に並ぶのが、依存の解けた open な行、つまりいま着手できるものだ。並列に投げられるのもこの中から選ぶ。先頭に `✗` が出ていればファイルが壊れているので、一覧を読む前にそれを直す。
 
 行の読み方は todo.txt の仕様のとおりで、`(A)` から `(Z)` が重要度（行頭のみ。進行中の意味は持たない）、その次が作成日、`+project` が束ね、`@context` がその作業に要る状況（`@device` `@user` `@unattended`）。このプラグインはそこに四つを足している。
 
@@ -34,8 +31,10 @@ todo do <id>            # 検証まで終わった      todo add "<次の一手>
 todo replace <id> "…"   # 言い方・粒度を直す    todo pri <id> A / todo depri <id>
 ```
 
-`todo --help` が正で、終了コードは 0 成功、1 引数や状態の誤り、2 形式違反、3 ID 不明。`todo` が PATH に無ければ `${CLAUDE_SKILL_DIR}/../../bin/todo` を使う。
+`todo --help` が正で、終了コードは 0 成功、1 引数や状態の誤り、2 形式違反、3 ID 不明。
 
-todo.txt を更新するのは本線で、worktree で実装する側は結果を報告するだけにする。`do` を打てるのは検証した者で、根拠になるコミットと同時に打つ。それ以外のコマンドは、状態が変わったその瞬間に走らせる。コミットの区切りまで溜めない。
+todo.txt を更新するのは本線で、worktree で実装する側は結果を報告するだけにする。`do` は完了条件を検証した時点で打つ。タスクの更新だけを理由にコミット・push しない。それ以外のコマンドは、状態が変わったその瞬間に走らせる。コミットの区切りまで溜めない。
 
 一行に書くのは、終わったと言える具体的な次の一手だけにする。終わりを言えないなら割る。学んだことや撤回や経緯は書かず、docs とコミットメッセージに回す。todo.txt が持つのはこれからやることだけで、行を直接編集してもよく、壊れていれば次の `ls` か `ready` が教える。
+
+`todo.txt` が無ければ未導入と伝える。空の一覧を「仕事が無い」と解釈せず、導入を求められた場合は隣の `../doctor/SKILL.md` を読む。
