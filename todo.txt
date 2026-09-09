@@ -10,3 +10,5 @@
 2026-09-10 skill-creator の eval ループで pre-push と todo の発火率を測る +plugins id:0011
 (A) 2026-09-10 pre-push の description が明示依頼でしか発火しない(push が弾かれた/新規 repo/ローカルは通るのに CI で落ちる、が抜けている) +plugins id:0012
 (A) 2026-09-10 installed cache と repo の SKILL.md が乖離している原因を特定する(cache の adr 0.1.1 の description は repo 履歴に無い) +plugins id:0013
+2026-09-10 verify.sh の [n/9] を手書きでやめる(検査を名前の配列にしてループで回し、番号を導出する)。検査の増減で 9 箇所を直していた +plugins @unattended id:0014
+2026-09-10 tools/idf-board.sh の「上N個と同じく」18 箇所から数を落とす(既に 611 行と 625 行が両方 25 でずれている。数は文の意味に要らない) +refactor @unattended id:0015
