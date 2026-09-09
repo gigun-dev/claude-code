@@ -4,8 +4,8 @@
 
 | | 何か | 腐るか |
 |---|---|---|
-| `docs/*/next-directions.md` | **現在地** — 何をするか | 腐る(維持義務あり) |
-| `docs/*/log.md` | **経緯** — 何があったか | 腐らない(時点記録) |
+| `todo.txt` / `done.txt` | **タスク** — 何をするか・完了したか | 状態が変わるたびに更新 |
+| `docs/adr/` / git のコミットメッセージ | **決定と経緯** | 時点記録 |
 | **このファイル** | **判断規則** — どう決めるか | ほぼ腐らない |
 
 ## このファイル自身の編集規約
@@ -32,7 +32,7 @@
 
 **harness 固有の「7原則」(何かを足す/変える前に採点する判断基準)は
 `docs/harness/next-directions.md` のカタログ部が正典**
-(根拠テーブルつき)。圧縮版が `.claude/rules/harness.md`。ここには複製しない。
+(根拠テーブルつき)。旧規約の参照記録であり、現行の運用には適用しない。
 
 
 ---
@@ -144,19 +144,8 @@
 
 ### 集合の定義は、その集合を既に使っている機構から取る
 
-**「コンポーネントとは何か」を別に宣言しない。**リポジトリが複数プロダクトを抱えるとき、
-`components.json` のようなレジストリを足したくなるが、**既存機構がもう定義を持っている:**
-
-**コンポーネント = `docs/<name>/next-directions.md` を持つディレクトリ。**
-SessionStart フック・`/harness:status`・`/harness:tidy` の3つが既にこの glob で動いている。
-**ディレクトリの実在そのものが宣言**なので、レジストリを足すと正典が2箇所になり必ずドリフトする
-(原則6「新機構の前に既存機構で届くか見る」+ 原則7「正典は1箇所」)。
-
-名前は `docs/<n>/` ↔ `plugins/<n>/` ↔ `.claude/rules/<n>.md` の3つ組を結ぶが、
-**一致は規約でしか担保されない。**外れると規約がそのコンポーネントに届かず、しかも静かに失敗する
-—— **だから宣言ではなく検知器で守る**(原則5「強制は最小、検知は最大」)。
-ND を持たないもの(薄い MCP ラッパー等)は規約の対象外でよい。維持義務のある現在地を持たせる
-中身が無いため。
+配布するプラグインの一覧は marketplace.json にある。
+作業の分類は `todo.txt` の `+project` を使い、別のコンポーネント台帳は作らない。
 
 ## 5. 名前は、借りた期待も一緒に運ぶ
 
@@ -315,7 +304,8 @@ skill listing の予算 = contextWindow × 4 × skillListingBudgetFraction
 - https://code.claude.com/docs/en/skills — `skillOverrides`、予算超過時の挙動
 - https://claude.com/blog/steering-claude-code-skills-hooks-rules-subagents-and-more
 
-事実表は `plugins/harness/skills/doctor/references/context-mechanics.md`。
+旧事実表は移行前コミットの `plugins/harness/skills/doctor/references/context-mechanics.md`
+（復元方法は `docs/harness/migration.md`）。
 **Claude 専用の知識なので、エージェント非依存の配布物の中核には置かない。**
 ⚠️ 同ファイルは 2026-08-08 に**公式との突き合わせで6件の事実誤りが見つかっている**
 (「賞味期限が短い」とそこに書きながら、再検証手順が一度も実行されていなかった)。

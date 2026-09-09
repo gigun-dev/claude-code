@@ -1,0 +1,20 @@
+#!/bin/sh
+# この例は main への更新だけを検証する。対象は各リポジトリの方針に合わせる。
+checked_ref=refs/heads/main
+run_check=0
+
+# Git は複数 ref を一度に渡す。削除は検証せず、対象の更新があれば一度だけ実行する。
+while read -r local_ref local_oid remote_ref remote_oid; do
+    case "$local_oid" in
+        *[!0]*) ;;
+        *) continue ;;
+    esac
+    if [ "$remote_ref" = "$checked_ref" ]; then
+        run_check=1
+    fi
+done
+
+[ "$run_check" -eq 1 ] || exit 0
+printf '%s\n' "pre-push: $checked_ref の更新前に検証します" >&2
+# CI と共通の検証へ置き換える。exec で失敗をそのまま Git へ返す。
+exec ./scripts/verify.sh

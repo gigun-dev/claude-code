@@ -1,70 +1,6 @@
 #!/usr/bin/env bash
-# =============================================================================
-# scripts/verify.sh — このリポジトリの「CI 相当の検証」を1本にまとめたもの
-# =============================================================================
-# 【なぜこの5つだけか】
-#   harness の原則5「強制は最小、検知は最大。落とすのは CI 相当の検証だけ」
-#   (docs/principles.md 判断規則 / .claude/rules/harness.md 参照)に従い、
-#   pre-push で落とす検査は意図的に最小限へ絞っている。
-#   このリポジトリの中身はほぼ Markdown・シェル・JSON で、コンパイルも
-#   ユニットテストも存在しない。「壊れたものを事故で main へ push する」を
-#   防ぐために必要十分な最小集合は次の5つになる:
-#
-#     1. シェル構文 — plugins/*/scripts/*.sh はそのまま配布物として
-#        各リポジトリへコピーされる。構文エラーのまま push すると
-#        配布先のフック・スクリプトがそのまま壊れる。
-#     2. JSON 妥当性 — marketplace.json / plugin.json が壊れると
-#        マーケットプレイス自体がロードできなくなる(影響範囲が最大)。
-#     3. 正典の書式(nd-tasks.sh --lint) — docs/*/next-directions.md の
-#        「着手順」節は /harness:status が機械的に読む唯一の節。
-#        書式が壊れると読み取りが誤動作する。
-#     4. plugin.json の版数整合性(.claude-plugin ⇔ .codex-plugin) —
-#        2026-08-08 の敵対的検証で実際にズレていたのを発見した
-#        (plugins/harness: .claude-plugin は 0.15.0、.codex-plugin だけ
-#        0.14.0 のまま。同じプラグインの同じ世代を指す2つのマニフェストの
-#        片方だけを上げる操作が過去に起きた実例)。1つ2つに片方だけ手で
-#        直しても、次に version を上げる誰か(モデルでも人でも)が
-#        もう一方を上げ忘れる経路は塞がっていない。「揃える」だけでは
-#        同じ壊れ方が再発するので、再発防止を機械へ足す。
-#     5. marketplace.json のプラグイン一覧整合性(.claude-plugin ⇔ .agents) —
-#        .claude-plugin/marketplace.json(Claude 向け)と
-#        .agents/plugins/marketplace.json(Codex 向け)は、スキーマこそ
-#        違う(source が文字列 vs policy/category 付きオブジェクト)が、
-#        「配布するプラグインの集合」という同じ事実を二重管理している点で
-#        4番目の .claude-plugin ⇔ .codex-plugin と同じ構造的リスクを持つ。
-#        4番目で実際にズレた実例が出た以上、同種の二重管理を持つ組を
-#        1つ発見してから初めて検査対象にする、が再発防止の一貫した基準。
-#        現状は2ファイルとも12件で一致しているが、"ある方にだけプラグインを
-#        1つ足して他方を更新し忘れる" 操作を JSON 妥当性チェック(2番目)は
-#        検知できない(両方とも文法として正しい JSON のままになるため)。
-#        比較できるのはスキーマ差のせいで名前の集合のみ(値の中身は比較不可)。
-#
-#   これ以上テストやリンタを増やす方向へ育てないこと。
-#   （原則2b: 散文とコードは別の物差しで採点する。コードは「散文を何行
-#   消しているか」で採点する — ここに検査を足すなら、それが代替する
-#   散文の説明がどこにあるかを先に説明できること。行数の多寡や
-#   「あると安心」という理由だけでは足さない。上の4番目は「あると安心」
-#   ではなく「実際にズレた事実がある」ことを根拠に足した例外
-#   —— 起きてもいない不整合を投機で先回りして検査に足すことは、
-#   この4番目を足した後も引き続き禁止(docs/principles.md 規則2)。
-#   5番目は 4番目と**全く同じ形の二重管理**(同じプラグイン集合を指す
-#   2つのマニフェストが、揃える手段を機械に持たず人手だけに依存している)
-#   への横展開であり、新種の不整合を先回りしているわけではない —— この
-#   2つを除き、新しいマニフェストの組(例: 将来別のアダプタが増える)が
-#   実際にズレるまでは、それ用の検査を先回りで足さないこと）。
-#
-# 【対象の列挙に git ls-files を使う理由】
-#   find 等でファイルシステムを直接漁ると、未追跡の作業ファイルや
-#   scratchpad まで検査対象に巻き込んでしまう。実際このリポジトリには
-#   未追跡の scripts/sync_mcp_wrappers.py や .agents/ が存在し、これらの
-#   構文都合で push が止まるのは理不尽な事故になる。
-#   「push されるもの = git が追跡しているもの」を検査対象の定義にする。
-#
-# 【失敗の扱い: 4つとも走らせてから落ちる】
-#   1つでも失敗したら非ゼロで終了するが、最初の失敗で打ち切らない
-#   （set -e を使わない)。1回の実行で全種類の問題を出し切ることで、
-#   「直して再実行」を4往復させないようにする。
-# =============================================================================
+# pre-push と CI は同じ検証を呼ぶ。全項目を実行してから失敗を返す。
+# git ls-files で追跡対象を列挙し、未追跡の作業ファイルを混ぜない。
 
 set -u
 # ⚠️ set -e はあえて使わない。4検査すべてを走らせてから落ちる設計なので、
@@ -98,7 +34,7 @@ sh_failed=0
 sh_files=$(git ls-files '*.sh' 'plugins/*/bin/*')
 if [ -z "$sh_files" ]; then
 	# 0件は「対象が無いので合格」ではなく「収集自体が壊れた疑い」として扱う。
-	# このリポジトリには plugins/harness/skills/status/scripts/nd-tasks.sh 等、
+	# このリポジトリには plugins/todo/tests/run.sh 等、
 	# 追跡対象の *.sh が常に複数存在するため、0件は git ls-files や
 	# 実行ディレクトリの取り違えを疑うべき異常値。
 	# 「検査できなかった」と「合格した」を混同しないために失敗扱いにする。
@@ -131,7 +67,7 @@ if ! command -v python3 >/dev/null 2>&1; then
 	# verify.sh 全体が rc=0 で成功扱いになる」のを最も避けたい。
 	# 「検査できなかった」と「検査して合格した」は意味が違うのに、
 	# 前者を後者として握りつぶす検知器は最悪の壊れ方をする
-	# （.claude/rules/harness.md 原則4「検知器は黙って死ぬ前提で検証する」）。
+	# （検知器が動かなかった場合を成功扱いしない）。
 	# だから python3 が無い場合は明示的に失敗させる。
 	#
 	# ボツ案（Why not）: 「python3 が無ければ JSON チェックをスキップして
@@ -169,24 +105,17 @@ if [ "$json_failed" -eq 0 ]; then
 fi
 [ "$json_failed" -ne 0 ] && overall_failed=1
 
-# -----------------------------------------------------------------------
-# (3) 正典の書式チェック — docs/*/next-directions.md の「着手順」節
-# -----------------------------------------------------------------------
+# タスクの単体テストだけでは、このリポジトリ自身のデータ破損を検出できない。
 echo ""
-echo "=== [3/9] 正典の書式チェック (nd-tasks.sh --lint) ==="
-lint_script="plugins/harness/skills/status/scripts/nd-tasks.sh"
-lint_failed=0
-if [ ! -f "$lint_script" ]; then
-	# こちらも「対象が無いから合格」にしない。このリポジトリは harness
-	# プラグイン自身の配布元なので nd-tasks.sh は常に存在するはず。
-	echo "✗ $lint_script が見つからない — harness プラグインの配置が壊れている可能性"
-	lint_failed=1
+echo "=== [3/9] todo.txt の形式チェック ==="
+if [ ! -f todo.txt ] || [ ! -f done.txt ]; then
+    echo "✗ todo.txt または done.txt が見つからない"
+    overall_failed=1
+elif plugins/todo/bin/todo check; then
+    echo "✓ todo.txt: 問題なし"
 else
-	if ! bash "$lint_script" --lint; then
-		lint_failed=1
-	fi
+    overall_failed=1
 fi
-[ "$lint_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
 # (4) plugin.json 版数整合性チェック — .claude-plugin ⇔ .codex-plugin
@@ -213,7 +142,7 @@ fi
 #   Codex 未対応のプラグインが .claude-plugin だけを持つのは異常ではない
 #   (このリポジトリは Claude 専用プラグインも配布している)。比較できるのは
 #   両方が揃っているペアだけなので、片方しか無いものは黙って対象から外す。
-#   ただし**ペアが1件も無い**のは別の話 —— このリポジトリには harness を含め
+#   ただし**ペアが1件も無い**のは別の話 —— このリポジトリには todo を含め
 #   両方を持つプラグインが常に複数存在するため、0件は (1)(2) と同様「対象が
 #   無いから合格」ではなく「収集自体が壊れた疑い」として失敗扱いにする。
 #
@@ -446,36 +375,17 @@ else
 fi
 [ "$agy_failed" -ne 0 ] && overall_failed=1
 
-# -----------------------------------------------------------------------
-# [7/9] log.md の索引の鮮度
-# -----------------------------------------------------------------------
-# 【なぜ関門に入れるのか】
-#   log-index.sh --check は決定論的で 1 秒未満・ネットワーク不要 = CI 相当。
-#   にもかかわらず **tidy からしか呼ばれておらず**、tidy を回さずに push すれば
-#   索引が古いまま通っていた。索引は「この案は前に検討したか」を日付を知らずに
-#   辿るための唯一の経路なので、古いまま気づかない状態は高くつく。
-#
-#   ⚠️ **--check は書き換えない**(読むだけ)。verify.sh は pre-push と CI から
-#   走るので、ここで書き込むと「push しようとしたらファイルが変わる」ことになる。
-#   直すのは tidy の仕事。
+# ADR の単体テストに加え、リポジトリ自身の決定を検査する。
 echo ""
-echo "=== [7/9] log.md 索引の鮮度チェック (log-index.sh --check) ==="
-idx_failed=0
-idx_script="plugins/harness/skills/tidy/scripts/log-index.sh"
-if ! git ls-files --error-unmatch -- "$idx_script" >/dev/null 2>&1; then
-	echo "- $idx_script が無いので検査しない(このリポジトリに harness の tidy skill は入っていない)"
+echo "=== [7/9] ADR の形式チェック ==="
+if [ ! -d docs/adr ]; then
+    echo "✗ docs/adr が見つからない"
+    overall_failed=1
+elif plugins/todo/bin/adr check; then
+    echo "✓ ADR: 問題なし"
 else
-	if idx_out=$(bash "$idx_script" --check 2>&1); then
-		echo "✓ log.md 索引: 最新"
-		# 警告(同じ却下 ID が複数行にある等)は rc=0 でも出るので、拾って見せる。
-		printf '%s\n' "$idx_out" | grep '⚠️' | sed 's/^/    /' || true
-	else
-		echo "✗ log.md の索引が古い —— /harness:tidy か log-index.sh の実行で再生成すること"
-		printf '%s\n' "$idx_out" | tail -20 | sed 's/^/    /'
-		idx_failed=1
-	fi
+    overall_failed=1
 fi
-[ "$idx_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
 # [8/9] todo プラグインのテスト
@@ -509,28 +419,17 @@ fi
 [ "$todo_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
-# [9/9] adr プラグインのテスト
+# [9/9] pre-push プラグインの実 push テスト
 # -----------------------------------------------------------------------
-# 【なぜ関門に入れるのか】
-#   [8/9] の todo と同じ性質のテスト —— 決定論的(日付も採番も持たず、入力は
-#   テストが作る一時ディレクトリのファイルだけ)・ネットワーク不要・1秒未満。
-#   配布物が自分で持っているテストを走らせているだけで、投機的な検査の追加ではない。
+# ローカルの bare リポジトリで、配布する Git フックの実際の成否を検証する。
 echo ""
-echo "=== [9/9] adr プラグインのテスト (tests/run.sh) ==="
-adr_failed=0
-adr_tests="plugins/adr/tests/run.sh"
-if ! git ls-files --error-unmatch -- "$adr_tests" >/dev/null 2>&1; then
-	echo "- $adr_tests が無いので検査しない(このリポジトリに adr プラグインは入っていない)"
+echo "=== [9/9] pre-push プラグインの実 push テスト ==="
+if prepush_out=$(python3 plugins/pre-push/tests/test_pre_push.py 2>&1); then
+    printf '%s\n' "$prepush_out" | tail -4
 else
-	if adr_out=$(sh "$adr_tests" 2>&1); then
-		echo "✓ adr プラグイン: $(printf '%s\n' "$adr_out" | tail -1)"
-	else
-		echo "✗ adr プラグインのテストが失敗した"
-		printf '%s\n' "$adr_out" | tail -30 | sed 's/^/    /'
-		adr_failed=1
-	fi
+    printf '%s\n' "$prepush_out"
+    overall_failed=1
 fi
-[ "$adr_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
 # まとめ

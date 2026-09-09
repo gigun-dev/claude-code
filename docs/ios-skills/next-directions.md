@@ -1,3 +1,6 @@
+> 2026-09-10: 移行前の参照記録。以下の更新指示・未完了一覧は現行の運用ではない。
+> 現行タスクは `todo.txt`、移行対応は [migration.md](../harness/migration.md)。本文は保存し、更新しない。
+
 # ios-skills の現在地・次の作業
 
 **正典。作業の区切りごとに必ず更新する。** 書式の規約は `.claude/rules/ios-skills.md`

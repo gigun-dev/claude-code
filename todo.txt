@@ -1,0 +1,12 @@
+2026-09-10 ios-simulator を改善し、既存端末を使わない動画ケースで baseline 比較と利用者の A/B 判定を記録する +ios-skills @user see:docs/ios-skills/next-directions.md id:0001
+2026-09-10 human-icon-design にラウンド数・累積トークン・所要時間を加え、同一 brief で採用までの old/new コストを比較する +ios-skills @user see:docs/ios-skills/next-directions.md id:0002
+2026-09-10 procedural-icon-safe-build の評価基準を修正し、再測定した old/new の値を記録する +ios-skills see:docs/ios-skills/next-directions.md id:0003
+2026-09-10 build-ios-apps 条件を含め routing 6ケースと比較対象2ケースを実走して結果を記録する +ios-skills see:docs/ios-skills/next-directions.md id:0004
+2026-09-10 旧版が苦手な領域を実環境の評価ケースにして実走し、新旧の優劣を判定する +ios-skills see:docs/ios-skills/next-directions.md id:0005
+2026-09-10 git 履歴の個人端末名を残すか利用者に判断を求め、対応範囲を確定する +ios-skills @user see:docs/ios-skills/next-directions.md id:0006
+2026-09-10 plugin-fresh-session-exposure の Agent 制約について、ケース文言修正か別ケース追加かを決めて完了条件を定義する +ios-skills see:docs/ios-skills/next-directions.md id:0007
+2026-09-10 自作プラグインの SKILL.md に metadata.version を全部持たせる(ios-skills と japanese-tech-writing が持っていない) +plugins id:0009
+2026-09-10 スキルの description と本文を英語に統一する +plugins id:0010
+2026-09-10 skill-creator の eval ループで pre-push と todo の発火率を測る +plugins id:0011
+(A) 2026-09-10 pre-push の description が明示依頼でしか発火しない(push が弾かれた/新規 repo/ローカルは通るのに CI で落ちる、が抜けている) +plugins id:0012
+(A) 2026-09-10 installed cache と repo の SKILL.md が乖離している原因を特定する(cache の adr 0.1.1 の description は repo 履歴に無い) +plugins id:0013

@@ -1,0 +1,9 @@
+{
+  "name": "pre-push",
+  "version": "0.1.0",
+  "description": "Set up and inspect Git pre-push checks using the repository’s CI verification command. Preserve existing hook management; copied hooks run independently of the plugin.",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  }
+}

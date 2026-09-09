@@ -1,18 +1,17 @@
-<!-- harness-template v0.2.0 (配布元: gigun-dev/claude-code plugins/harness) -->
 # claude-code — gigun の Claude Code プラグイン集
 
 <!-- ここに足すときの判定: その一文はエージェントの行動を変えるか(プラスにもマイナスにも)。
      変えないなら書かない —— 全行が毎セッションのコストで、サブエージェントにも継承される。
      技術スタックや概観は README、手順は skill、ファイル限定の制約は .claude/rules/ へ。
-     却下の記録はここに置かない(注入されない場所=正典の詳細部か log.md が正しい置き場)。 -->
+     却下の記録はここに置かない(docs/adr/ かコミットメッセージが置き場)。 -->
 
-harness / ios-skills / 各種 MCP をプラグインとして配布するモノレポ。
+todo / adr / ios-skills / 各種 MCP をプラグインとして配布するモノレポ。
 
 ## 主要コマンド
 
 - 検証: `bash scripts/verify.sh`(pre-push と CI が同じものを走らせる)
-- 次にやること: `/harness:status`
-- セッションを畳む: `/harness:tidy`
+- 次にやること: `plugins/todo/bin/todo ready`
+- 既存の決定: `plugins/todo/bin/adr ls`
 
 ## 報告するとき
 
@@ -43,20 +42,16 @@ harness / ios-skills / 各種 MCP をプラグインとして配布するモノ�
 - **1コミット = 1論理変更。**
 - **短命ブランチ = 着手順の1項目。** 依存を跨がせない(A が B を待つなら1本にしない)。
 - **並行するなら worktree。** 同じ作業ツリーで2つ動かさない。
-- **push 前に `/harness:tidy`。**
+- **push 前に `bash scripts/verify.sh`。**
 - **他人(他セッション)の未コミットの変更が混ざっていたら、自分の変更と分けてコミットする。**
 
 ## 情報の書き分け
 
 - **コード = How** / **テスト = What** / **コミットログ = Why** / **コメント = Why not**
-- **コメントはコードと同量レベルで書く。** 詳細は `.claude/rules/comments.md`(自動ロード)
 
-## 現在地・次の作業
+## タスクと決定
 
-- 正典は **`docs/<component>/next-directions.md`**(このリポジトリはコンポーネント別に持つ)。
-  冒頭(`session-head-end` マーカーまで)がセッション開始時に読み込まれる。
-  **10,000字を超えると無言で切り詰められる。**
-- 時系列の記録は **`docs/<component>/log.md`**(追記専用)。
-  **却下には `R-n` を付ける** —— 索引から「この案は前に検討したか」を辿れるのはその行だけ。
-- **`## 着手順` を書き換えてよいのは `nd-tasks.sh` だけ**(`/harness:status` が同梱。
-  `--add` / `--done` / `--note` / `--rewrite` / `--archive`)。手で編集しない。
+Tasks live in todo.txt; use the todo skills.
+決定は `docs/adr/`、知識は `docs/`、経緯はコミットメッセージに置く。
+旧 `docs/<component>/next-directions.md` と `log.md` は移行前の参照記録。更新しない。
+ios-skills と評価の作業では `.claude/rules/ios-skills.md` も読む。
