@@ -6,12 +6,13 @@
 # (todo.sh) から借りている。このスクリプトが足しているのは仕様の `key:value`
 # 拡張 2 つだけ:
 #
-#   id:xxxxxx … `add` が採番する 6 桁の小文字 16 進(/dev/urandom の 3 バイト)。
-#            行番号は編集とマージでずれるので、エージェントがタスクを指す手段が
-#            仕様の範囲内では他に無い。**連番にしない** —— 並行 worktree や別
-#            ブランチで足したタスクが同じ番号を取り、マージで衝突するため。
-#            採番に状態ファイルもカウンタも要らないのが乱数の利点。
-#   dep:xxxxxx … 依存。カンマ区切りで複数(値に空白・コロンを含まないので仕様内)。
+#   id:NNNN … `add` が採番する連番(4 桁ゼロ詰め。adr プラグインの NNNN-slug.md と
+#            桁を揃えた)。行番号は編集とマージでずれるので、エージェントが
+#            タスクを指す手段が仕様の範囲内では他に無い。採番は todo.txt と
+#            **done.txt の両方**の max+1 —— done を数えないと、完了済みの id を
+#            再利用してしまい、後続の dep: が別のタスクを指すようになる。
+#   dep:N  … 依存。カンマ区切りで複数(値に空白・コロンを含まないので仕様内)。
+#            ゼロ詰めの有無は問わず、数値として突き合わせる。
 #            `ready` はこれを解決して「いま着手できる行」だけを出す。
 #
 # POSIX sh + awk のみ。bash 固有機能・python・jq に依存しない —— このスクリプトは
@@ -34,7 +35,7 @@ NL='
 # 終了コードは --help が正。ここを増やすなら --help も直すこと。
 EX_USAGE=1  # 引数・状態の誤り
 EX_FORMAT=2 # 形式違反を見つけた / 書けば増やすので書かなかった
-EX_NOID=3   # ID が見つからない・曖昧
+EX_NOID=3   # ID が見つからない
 
 # 診断は必ず stderr。データ(行)だけが stdout に出る。
 die() {
@@ -65,18 +66,19 @@ usage: todo <command> [args]      — リポジトリのタスクを todo.txt �
 
 行の形 (https://github.com/todotxt/todo.txt):
 
-  (A) 2026-09-09 本文 +project @context dep:a3f9c1 see:docs/x.md id:7b2e04
-  x 2026-09-09 2026-09-08 完了した本文 id:7b2e04            ← done.txt
+  (A) 2026-09-10 本文 +project @context dep:0001 see:docs/x.md id:0002
+  x 2026-09-10 2026-09-08 完了した本文 id:0001              ← done.txt
 
   (A)..(Z)   任意・先頭のみ。重要度(進行中を表さない —— それは @wip)
-  2026-09-09 作成日。任意(add は必ず付ける)。優先度があればその後ろ
+  2026-09-10 作成日。任意(add は必ず付ける)。優先度があればその後ろ
   +project   束ね。行にはその次の一手だけを書く
   @context   要る状況(@device @user)。@wip は進行中の印
-  id:xxxxxx  add が採番する 6 桁の小文字 16 進。タスクを指す唯一の手段
-  dep:a,b    依存。指す先が done.txt に入るまで ready に出ない
+  id:NNNN    add が採番する連番(4 桁ゼロ詰め)。タスクを指す唯一の手段
+  dep:N,M    依存。指す先が done.txt に入るまで ready に出ない
   key:value  自由。key も value も空白とコロンを含めない(URL は書けない)
 
-ID は id: の値。一意なら前方一致でよい (todo do a3f)。
+ID は id: の値。ゼロ詰めは付けても付けなくてよい (todo do 12 = todo do 0012)。
+数値としての完全一致のみ —— 3 は 30 に当たらない。
 対象は $TODO_DIR/todo.txt と $TODO_DIR/done.txt (既定の TODO_DIR は ".")。
 対話しない。データは stdout、診断は stderr。
 
@@ -84,9 +86,9 @@ ID は id: の値。一意なら前方一致でよい (todo do a3f)。
   0  成功
   1  引数・状態の誤り(usage)
   2  形式違反を見つけた(check)、または書けば増やすので書かなかった
-  3  ID が見つからない、または前方一致が曖昧
+  3  ID が見つからない
 
-テスト用の注入点: TODO_TODAY(日付を固定)/ TODO_FAKE_IDS(採番を固定)
+テスト用の注入点: TODO_TODAY(日付を固定)
 EOF
 }
 
@@ -129,8 +131,9 @@ function depstr(s,   n, a, i, r) {
 	return r
 }
 # ソートキー: 優先度(無しは "~" = Z より後ろ)+ 出現順。
-# 第2キーが id ではなく出現順なのは、id が乱数になった時点で id 順に意味が
-# 無くなったから —— 同じ優先度の中はファイルに書いた順(= 足した順)が読みやすい。
+# 第2キーを id ではなく出現順にしているのは、行を手で並べ替えたときにその順が
+# 保たれるようにするため —— id 順に固定すると、ファイルを読みやすく並べ直す
+# 編集が一覧に反映されない。
 function sortkey(s, ord,   p) {
 	p = pri(s); if (p == "") p = "~"
 	return sprintf("%s%09d", p, ord)
@@ -147,6 +150,12 @@ function stripwip(s,   n, a, i, r) {
 	return r
 }
 function hastag(s, tag) { return index(" " s " ", " " tag " ") > 0 }
+# id の比較キー。**数字なら数値として**比較する —— 保存形は 4 桁ゼロ詰め
+# (id:0012)だが、手で書いた id:12 は同じタスクを指しているつもりのはず。
+# 文字列で比べると別物になり、dep:12 が id:0012 に届かず永久に ready へ出ない。
+# 数字でないもの(手書きの英字 id)は文字列のまま。接頭辞で名前空間を分けるのは、
+# "#12" と "$12" のような衝突を避けるため。
+function idkey(v) { return (v ~ /^[0-9]+$/) ? "#" (v + 0) : "$" v }
 '
 
 # 空行を落として open 行を出す。ファイルが無ければ何も出さない。
@@ -168,76 +177,54 @@ check_text() {
 	esac
 	[ -n "$(printf '%s' "$1" | tr -d ' \t')" ] || die "TEXT が空。例: todo add \"送信バッファを A/B する +upload @device\""
 	case $1 in
-	*"id:"*) die "TEXT に id: がある。id は add が採番するので書かない。例: todo add \"次の一手 +upload dep:a3f9c1\"" ;;
+	*"id:"*) die "TEXT に id: がある。id は add が採番するので書かない。例: todo add \"次の一手 +upload dep:0003\"" ;;
 	esac
 }
 
-# 与えられた ID を完全な id へ解決する。完全一致を優先し、無ければ一意な前方一致
-# を認める(6 桁の 16 進を毎回全部打つのは無駄なので)。曖昧なら黙って選ばず落とす。
+# 与えられた ID を、ファイルに保存されている形へ解決する。
+# **数値としての完全一致のみ**(前方一致は認めない。連番では `3` が 3 にも 30 にも
+# 300 にも当たり、どれを指したのか決まらない)。ゼロ詰めの有無は問わないので
+# `todo do 12` は id:0012 に当たる。
+#
+# 同じ番号が違う書き方(id:0012 と id:12)で 2 行にある場合は、どちらを指すか
+# 決めずに落とす —— check がその 2 行を重複として名指しするので、直してから来る。
 resolve_id() {
 	case $1 in
-	'' | *[!0-9A-Za-z]*) die "ID '$1' に英数字以外がある。ID は id: の値。例: todo show a3f9c1" "$EX_NOID" ;;
+	'' | *[!0-9A-Za-z]*) die "ID '$1' に英数字以外がある。ID は id: の値。例: todo show 3" "$EX_NOID" ;;
 	esac
 	got=$( (open_lines; done_lines) | awk -v want="$1" "$AWKLIB"'
 		{
 			id = lineid($0)
-			if (id == "") next
-			if (id == want) exact = id
-			else if (substr(id, 1, length(want)) == want && !(id in pfx)) { pfx[id] = 1; np++ }
+			if (id != "" && idkey(id) == idkey(want) && !(id in seen)) { seen[id] = 1; hit[++n] = id }
 		}
 		END {
-			if (exact != "") { print exact; exit 0 }
-			if (np == 1) { for (k in pfx) print k; exit 0 }
-			exit(np > 1 ? 2 : 1)
+			if (n == 1) { print hit[1]; exit 0 }
+			if (n > 1) { printf "id:%s と id:%s", hit[1], hit[2]; exit 2 }
+			exit 1
 		}')
 	rc=$?
 	[ "$rc" -eq 0 ] || {
-		[ "$rc" -eq 2 ] && die "ID '$1' が複数のタスクに前方一致する。桁を足して一意にすること(例: todo show a3f9c1)。候補は todo ls で見る" "$EX_NOID"
+		[ "$rc" -eq 2 ] && die "$got が同じ番号を別の書き方で指している。todo check の指摘に従って片方を直すこと" "$EX_NOID"
 		die "ID '$1' が todo.txt にも done.txt にも無い。todo ls で id を確かめること" "$EX_NOID"
 	}
 	printf '%s' "$got"
 }
 
-# id が既にどちらかのファイルにあるか。
-id_exists() {
-	(open_lines; done_lines) | awk -v want="$1" "$AWKLIB"'
-		lineid($0) == want { found = 1 } END { exit(found ? 0 : 1) }'
-}
+# 保存形は 4 桁ゼロ詰め(id:0001)。adr プラグインの NNNN-slug.md と桁を揃えてある
+# —— 同じリポジトリで 2 種類の採番が並ぶので、見た目が同じ方が読み違えない。
+# 9999 を超えたら 5 桁になるだけで、特別扱いはしない。
+fmt_id() { printf '%04d' "$1"; }
 
-# 6 桁の小文字 16 進を採番する。衝突したら引き直す(状態ファイルを持たないので、
-# 一意性はここでの照合だけが担保する)。TODO_FAKE_IDS はテスト用の注入点 ——
-# 乱数のままでは「衝突したら引き直す」経路を一度も踏めない。
+# 次の連番を返す(ゼロ詰めしない生の数)。max は todo.txt と done.txt の**両方**から
+# 取る —— done を数えないと、完了済みの id を再利用してしまい、後続の dep: が
+# 別のタスクを指すようになる。逆に言えば、done.txt からその行を消すまで id は
+# 解放されない。ゼロ詰めの有無に関わらず数値として比べる。
 #
-# $1(任意)は「まだファイルに書いていないが既に配った id」の空白区切り。
-# `id` が 1 回の実行で複数行に配るときに要る —— ファイルだけを見ていると、
-# 書き込む前の同一実行内で同じ id を 2 回配ってしまう。
-gen_id() {
-	taken=${1:-}
-	tries=0
-	while [ "$tries" -lt 100 ]; do
-		if [ -n "${TODO_FAKE_IDS:-}" ]; then
-			cand=${TODO_FAKE_IDS%% *}
-			case $TODO_FAKE_IDS in
-			*' '*) TODO_FAKE_IDS=${TODO_FAKE_IDS#* } ;;
-			*) TODO_FAKE_IDS='' ;;
-			esac
-			[ -n "$cand" ] || die "TODO_FAKE_IDS を使い切った"
-		else
-			cand=$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')
-		fi
-		case $cand in
-		'' | *[!0-9a-z]*) die "採番に失敗した(不正な id: '$cand')" ;;
-		esac
-		case " $taken " in
-		*" $cand "*) tries=$((tries + 1)); continue ;;
-		esac
-		id_exists "$cand" || {
-			printf '%s' "$cand"
-			return 0
-		}
-		tries=$((tries + 1))
-	done
-	die "id を 100 回引いても衝突が解けない(ファイルが壊れている疑い)"
+# 複数配るとき(`id`)は、この値を起点に +1 していけばよい。状態は持たない。
+next_id() {
+	(open_lines; done_lines) | awk "$AWKLIB"'
+		{ id = lineid($0); if (id ~ /^[0-9]+$/ && id + 0 > max) max = id + 0 }
+		END { print max + 1 }'
 }
 
 # 指定 ID の open 行を出す。無ければ非ゼロ。
@@ -269,9 +256,7 @@ cmd_add() {
 	check_text "$1"
 	text=$(printf '%s' "$1" | awk "$AWKLIB"'{ print trim($0) }')
 
-	# 衝突照合は todo.txt と done.txt の両方に対して行う。done を見ないと、
-	# 完了済みの id を再利用してしまい、後続の dep: が別のタスクを指すようになる。
-	next=$(gen_id) || exit 1
+	next=$(fmt_id "$(next_id)") || exit 1
 
 	# 優先度は仕様上「必ず先頭」。テキストが (A) で始まっていたら作成日はその後ろ。
 	prefix=''
@@ -301,8 +286,8 @@ cmd_add() {
 }
 
 # id: の無い open 行に id: を配る。手で足した行を CLI の操作対象に引き上げる唯一の
-# 手段 —— これが無いと「id が無い」という check の指摘に対して、利用者が乱数を
-# 自分で考えて書くしかない。冪等(id を持つ行には触らない)。
+# 手段 —— これが無いと「id が無い」という check の指摘に対して、利用者が次の番号を
+# 自分で数えて書くしかない。冪等(id を持つ行には触らない)。
 cmd_id() {
 	[ $# -eq 0 ] || die "usage: todo id   (引数は取らない。id: の無い open 行すべてに配る)"
 	n=$(open_lines | awk "$AWKLIB"'lineid($0) == "" { c++ } END { print c + 0 }')
@@ -310,22 +295,19 @@ cmd_id() {
 		printf '%s: id: の無い open 行は無い。何もしない\n' "$PROG" >&2
 		return 0
 	fi
-	newids=''
+	base=$(next_id) || exit 1
+	rewrite_todo awk -v base="$base" "$AWKLIB"'
+		{ if (lineid($0) == "") { printf "%s id:%04d\n", $0, base + k; k++ } else print }
+	' || exit $?
 	i=0
 	while [ "$i" -lt "$n" ]; do
-		cand=$(gen_id "$newids") || exit 1
-		newids="${newids:+$newids }$cand"
+		find_open "$(fmt_id $((base + i)))"
 		i=$((i + 1))
 	done
-	rewrite_todo awk -v ids="$newids" "$AWKLIB"'
-		BEGIN { split(ids, a, " ") }
-		{ if (lineid($0) == "") { k++; print $0 " id:" a[k] } else print }
-	' || exit $?
-	for id in $newids; do find_open "$id"; done
 }
 
 cmd_prepend() {
-	[ $# -eq 2 ] || die "usage: todo prepend ID \"TEXT\"   (例: todo prepend a3f9c1 \"先に\")"
+	[ $# -eq 2 ] || die "usage: todo prepend ID \"TEXT\"   (例: todo prepend 3 \"先に\")"
 	check_text "$2"
 	resolve_open_set 1 "$1" || exit $?
 	text=$(printf '%s' "$2" | awk "$AWKLIB"'{ print trim($0) }')
@@ -374,7 +356,7 @@ show_ids() {
 }
 
 cmd_do() {
-	[ $# -ge 1 ] || die "usage: todo do ID...   (例: todo do a3f9c1)"
+	[ $# -ge 1 ] || die "usage: todo do ID...   (例: todo do 3)"
 	resolve_open_set 0 "$@" || exit $?
 	ids=$set_out
 
@@ -421,7 +403,7 @@ cmd_do() {
 }
 
 cmd_pri() {
-	[ $# -eq 2 ] || die "usage: todo pri ID PRIORITY   (例: todo pri a3f9c1 A)"
+	[ $# -eq 2 ] || die "usage: todo pri ID PRIORITY   (例: todo pri 3 A)"
 	case $2 in
 	[A-Z]) ;;
 	*) die "優先度は A-Z の 1 文字: $2" ;;
@@ -434,7 +416,7 @@ cmd_pri() {
 }
 
 cmd_depri() {
-	[ $# -ge 1 ] || die "usage: todo depri ID...   (例: todo depri a3f9c1)"
+	[ $# -ge 1 ] || die "usage: todo depri ID...   (例: todo depri 3)"
 	resolve_open_set 1 "$@" || exit $?
 	rewrite_todo awk -v ids="$set_out" "$AWKLIB"'
 		{ id = lineid($0); if (id != "" && index(ids, "," id ",") > 0) print stripri($0); else print }
@@ -446,7 +428,7 @@ cmd_depri() {
 # 優先度 (A)..(Z) は重要度・順序の意味のまま残す(混ぜると、着手した瞬間に
 # 重要度の情報が消える)。見るのは `todo ls @wip`。
 cmd_start() {
-	[ $# -ge 1 ] || die "usage: todo start ID...   (例: todo start a3f9c1)"
+	[ $# -ge 1 ] || die "usage: todo start ID...   (例: todo start 3)"
 	resolve_open_set 1 "$@" || exit $?
 	rewrite_todo awk -v ids="$set_out" "$AWKLIB"'
 		{
@@ -459,7 +441,7 @@ cmd_start() {
 }
 
 cmd_stop() {
-	[ $# -ge 1 ] || die "usage: todo stop ID...   (例: todo stop a3f9c1)"
+	[ $# -ge 1 ] || die "usage: todo stop ID...   (例: todo stop 3)"
 	resolve_open_set 1 "$@" || exit $?
 	rewrite_todo awk -v ids="$set_out" "$AWKLIB"'
 		{
@@ -472,7 +454,7 @@ cmd_stop() {
 }
 
 cmd_replace() {
-	[ $# -eq 2 ] || die "usage: todo replace ID \"TEXT\"   (例: todo replace a3f9c1 \"新しい本文 +upload\")"
+	[ $# -eq 2 ] || die "usage: todo replace ID \"TEXT\"   (例: todo replace 3 \"新しい本文 +upload\")"
 	check_text "$2"
 	resolve_open_set 1 "$1" || exit $?
 	text=$(printf '%s' "$2" | awk "$AWKLIB"'{ print trim($0) }')
@@ -491,7 +473,7 @@ cmd_replace() {
 }
 
 cmd_append() {
-	[ $# -eq 2 ] || die "usage: todo append ID \"TEXT\"   (例: todo append a3f9c1 \"dep:9291ec\")"
+	[ $# -eq 2 ] || die "usage: todo append ID \"TEXT\"   (例: todo append 3 \"dep:0001\")"
 	check_text "$2"
 	resolve_open_set 1 "$1" || exit $?
 	text=$(printf '%s' "$2" | awk "$AWKLIB"'{ print trim($0) }')
@@ -564,13 +546,13 @@ cmd_ready() {
 		open_lines | sed 's/^/O /'
 	} | awk -v terms="$terms" -v sep="$US" "$AWKLIB$FILTER"'
 		{ tag = substr($0, 1, 1); line = substr($0, 3) }
-		tag == "D" { id = lineid(line); if (id != "") isdone[id] = 1; next }
+		tag == "D" { id = lineid(line); if (id != "") isdone[idkey(id)] = 1; next }
 		{
 			if (!matches(line)) next
 			d = depstr(line)
 			if (d != "") {
 				n = split(d, a, ",")
-				for (i = 1; i <= n; i++) if (a[i] != "" && !(a[i] in isdone)) next
+				for (i = 1; i <= n; i++) if (a[i] != "" && !(idkey(a[i]) in isdone)) next
 			}
 			printf "%s\t%s\n", sortkey(line, NR), line
 		}
@@ -590,7 +572,7 @@ list_tokens() {
 }
 
 cmd_show() {
-	[ $# -ge 1 ] || die "usage: todo show ID...   (例: todo show a3f9c1)"
+	[ $# -ge 1 ] || die "usage: todo show ID...   (例: todo show 3)"
 	missing=0
 	for a in "$@"; do
 		rid=$(resolve_id "$a") || {
@@ -646,57 +628,60 @@ run_check() {
 			if (c > 1) { err("id: が 2 つ以上ある", line); next }
 			id = lineid(line)
 			if (id == "") { err("id: の値が英数字でない", line); next }
-			if (id in seen) err("id:" id " が重複している(先: " seen[id] ")", line)
-			else seen[id] = where
-			deps[id] = depstr(line)
-			owner[id] = where
+			# 突き合わせは idkey(数字なら数値)。id:0012 と id:12 は同じ番号を
+			# 指しているので、書き方が違っても重複として拾う。
+			k = idkey(id)
+			if (k in seen) err("id:" id " は id:" disp[k] " (" seen[k] ") と同じ番号を指している", line)
+			else { seen[k] = where; disp[k] = id }
+			deps[k] = depstr(line)
+			owner[k] = where
+			if (!(k in disp)) disp[k] = id
 
 			# --- dep ------------------------------------------------------
-			if (deps[id] != "") {
-				m = split(deps[id], a, ",")
+			if (deps[k] != "") {
+				m = split(deps[k], a, ",")
 				for (i = 1; i <= m; i++) {
-					if (a[i] !~ /^[0-9A-Za-z]+$/) { err("dep: の値が id の形をしていない (" a[i] ")", line); deps[id] = "" }
-					else if (a[i] == id) err("自分自身に dep している", line)
+					if (a[i] !~ /^[0-9A-Za-z]+$/) { err("dep: の値が id の形をしていない (" a[i] ")", line); deps[k] = "" }
+					else if (idkey(a[i]) == k) err("自分自身に dep している", line)
 				}
 			}
 		}
 		END {
 			# --- 宙吊り dep ------------------------------------------------
-			for (id in deps) {
-				if (deps[id] == "") continue
-				m = split(deps[id], a, ",")
-				for (i = 1; i <= m; i++) if (!(a[i] in owner)) {
-					err("dep:" a[i] " が todo.txt にも done.txt にも無い", "id:" id)
-					gsub("(^|,)" a[i] "(,|$)", ",", deps[id])  # 循環判定からは外す
+			for (k in deps) {
+				if (deps[k] == "") continue
+				m = split(deps[k], a, ",")
+				for (i = 1; i <= m; i++) if (!(idkey(a[i]) in owner)) {
+					err("dep:" a[i] " が todo.txt にも done.txt にも無い", "id:" disp[k])
+					gsub("(^|,)" a[i] "(,|$)", ",", deps[k])  # 循環判定からは外す
 				}
 			}
 			# --- 循環 dep --------------------------------------------------
 			# Kahn 法: 依存がすべて解決した節点を落とし続け、落ちなかった節点が
 			# 循環(または循環に依存するもの)。宙吊りは上で外してあるので、ここに
 			# 残るのは本物の循環だけ。
-			for (id in owner) live[id] = 1
+			for (k in owner) live[k] = 1
 			changed = 1
 			while (changed) {
 				changed = 0
 				# 走査は owner。live を回しながら live から delete するのは
 				# awk では未定義動作なので、別の配列を回す。
-				for (id in owner) {
-					if (!(id in live)) continue
+				for (k in owner) {
+					if (!(k in live)) continue
 					ok = 1
-					if (deps[id] != "") {
-						m = split(deps[id], a, ",")
-						for (i = 1; i <= m; i++) if (a[i] != "" && (a[i] in live)) ok = 0
+					if (deps[k] != "") {
+						m = split(deps[k], a, ",")
+						for (i = 1; i <= m; i++) if (a[i] != "" && (idkey(a[i]) in live)) ok = 0
 					}
-					if (ok) { delete live[id]; changed = 1 }
+					if (ok) { delete live[k]; changed = 1 }
 				}
 			}
-			for (id in live) { stuck = stuck (stuck == "" ? "" : ",") id }
+			for (k in live) { stuck = stuck (stuck == "" ? "" : ",") disp[k] }
 			if (stuck != "") {
 				m = split(stuck, a, ",")
-				# 出力順を安定させる(awk の for-in は順不同)。id は乱数なので
-				# 数値順に意味は無く、文字列順で十分。
+				# 出力順を安定させる(awk の for-in は順不同)。
 				for (i = 1; i <= m; i++) for (j = i + 1; j <= m; j++)
-					if (a[j] < a[i]) { s = a[i]; a[i] = a[j]; a[j] = s }
+					if (a[j] + 0 < a[i] + 0) { s = a[i]; a[i] = a[j]; a[j] = s }
 				for (i = 1; i <= m; i++) err("dep が循環している", "id:" a[i])
 			}
 			if (nerr == 0) print "check: 問題なし (" n + 0 " 行)"
