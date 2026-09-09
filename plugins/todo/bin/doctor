@@ -1,0 +1,235 @@
+#!/bin/sh
+# =============================================================================
+# doctor — リポジトリの指示（CLAUDE.md / AGENTS.md）と実体の食い違いを検査する
+# =============================================================================
+# コマンドは check の 1 つだけ。ここが見るのは 2 つ:
+#
+#   (1) 決定の置き場（docs/adr など）が無い、または指示がそこを指していない
+#       —— 探索は bin/adr と同じ lib/adr-dir.sh を使う(2 箇所に持つと
+#       片方だけ直されてずれる。plugins/todo/tests/adr.sh の
+#       single_source が固定している前提と同じ理由)。
+#
+#   (2) 指示と実体の矛盾。特定の過去の仕組みを名指しせず、一般的な形で検出する:
+#         - 指示が「正典」として名指ししているファイルが実在しない
+#         - 指示が挙げるフックのパス(.claude/hooks/ .codex/hooks/ .githooks/
+#           .git/hooks/ の配下)が実在しない、または設定に登録されていない
+#
+#       誤検知を避けるため、対象は極めて狭い: (1) は行に「正典」という語が
+#       あるときだけ、(2) はパスが上記 4 つのフック用ディレクトリの配下に
+#       一致するときだけ。ただ「見出しがある」「文書を参照している」だけの
+#       行は対象にしない —— 直し方は決めず、矛盾を指摘するだけに留める。
+#
+# 導入(ファイルを書く・指示行を足す)はこの CLI の仕事にしない。書き方の
+# 規律は skills/doctor/SKILL.md が持つ(todo.txt / docs/adr と同じ作法)。
+#
+# POSIX sh + awk のみ。bash 固有機能・python・jq に依存しない。
+# =============================================================================
+
+set -u
+
+PROG=doctor
+
+EX_USAGE=1  # 引数・状態の誤り
+EX_FORMAT=2 # 検査で指摘があった
+
+ADRLIB=$(dirname "$0")/../lib/adr-dir.sh
+[ -r "$ADRLIB" ] || {
+	printf '%s: %s が読めない。プラグインの配置が壊れている\n' "$PROG" "$ADRLIB" >&2
+	exit 1
+}
+. "$ADRLIB"
+
+die() {
+	printf '%s: %s\n' "$PROG" "$1" >&2
+	exit "${2:-$EX_USAGE}"
+}
+
+usage() {
+	cat <<'EOF'
+usage: doctor <command>   — 指示(CLAUDE.md / AGENTS.md)と実体の食い違いを検査する
+
+  check     決定の置き場の有無・指示の紐付け・指示と実体の矛盾を検査する。
+            指摘があれば stdout に出して 2 で終わる
+
+見るもの:
+  - docs/adr(または ADR_DIR)が無い
+  - ADR ディレクトリはあるのに、CLAUDE.md / AGENTS.md のどちらもそこを指していない
+  - 「正典」という語がある行が、実在しないファイルを名指ししている
+  - .claude/hooks/ .codex/hooks/ .githooks/ .git/hooks/ 配下のパスを指示が挙げて
+    いるが、そのパスが実在しない、または設定(core.hooksPath / .claude/settings.json /
+    .codex/config.toml・.codex/hooks.json)に登録されていない
+
+todo.txt の有無・指示との紐付けはここでは見ない(todo:doctor の既存の診断と
+重複させない)。
+
+対象は $DOCTOR_DIR(既定 "."）直下の CLAUDE.md / AGENTS.md。対話しない。
+データは stdout、診断は stderr。
+
+終了コード:
+  0  成功(check は指摘なし)
+  1  引数・状態の誤り(usage)
+  2  check が指摘を出した
+EOF
+}
+
+DOCTOR_DIR=${DOCTOR_DIR:-.}
+
+# repo-relative path (base からの相対) を実在確認する。末尾 "/" ならディレクトリ扱い。
+path_exists() { # path_exists <path>
+	p=$1
+	case $DOCTOR_DIR in
+	.) full=$p ;;
+	*/) full="$DOCTOR_DIR$p" ;;
+	*) full="$DOCTOR_DIR/$p" ;;
+	esac
+	case $p in
+	*/) [ -d "$full" ] ;;
+	*) [ -e "$full" ] ;;
+	esac
+}
+
+# 指示ファイル 1 つを読み、条件(cond)に合う行からバッククォート区切りのパスを
+# 「行番号<TAB>パス」で列挙する。cond は "canon"(行に「正典」を含む)か
+# "hookpath"(パスがフック用ディレクトリの配下)。
+extract_paths() { # extract_paths <file> <canon|hookpath>
+	awk -v mode="$2" '
+	{
+		line = $0
+		if (mode == "canon" && index(line, "正典") == 0) next
+		n = split(line, parts, "`")
+		for (i = 2; i <= n; i += 2) {
+			path = parts[i]
+			if (path == "" || path ~ /^https?:\/\//) continue
+			if (mode == "hookpath") {
+				if (path !~ /(^|\/)\.claude\/hooks\// && \
+				    path !~ /(^|\/)\.codex\/hooks\// && \
+				    path !~ /(^|\/)\.githooks\// && \
+				    path !~ /(^|\/)\.git\/hooks\//) continue
+			}
+			printf "%d\t%s\n", NR, path
+		}
+	}' "$1"
+}
+
+# フックのパスが設定に登録されているかを見る。登録先はパスの置かれ方で決まる
+# —— ホスト固有の記法を前提にしないため、判定は各ホストの設定ファイルの実在と
+# その中にパスの文字列があるかだけで行う(中身の意味までは解釈しない)。
+hook_registered() { # hook_registered <path>
+	p=$1
+	case $DOCTOR_DIR in
+	.) base=. prefix='' ;;
+	*/) base=$DOCTOR_DIR prefix=$DOCTOR_DIR ;;
+	*) base="$DOCTOR_DIR" prefix="$DOCTOR_DIR/" ;;
+	esac
+	case $p in
+	*.githooks/* | *.git/hooks/* | .githooks/* | .git/hooks/*)
+		dirof=${p%/*}
+		hookspath=$(cd "$base" 2>/dev/null && git config --get core.hooksPath 2>/dev/null || true)
+		hookspath=${hookspath%/}
+		if [ -z "$hookspath" ]; then
+			[ "$dirof" = ".git/hooks" ]
+		else
+			[ "$hookspath" = "$dirof" ]
+		fi
+		;;
+	*.claude/hooks/* | .claude/hooks/*)
+		_hrf="${prefix}.claude/settings.json"
+		[ -f "$_hrf" ] && grep -qF "$p" "$_hrf" 2>/dev/null
+		;;
+	*.codex/hooks/* | .codex/hooks/*)
+		found=1
+		for _hrf in "${prefix}.codex/config.toml" "${prefix}.codex/hooks.json"; do
+			[ -f "$_hrf" ] && grep -qF "$p" "$_hrf" 2>/dev/null && found=0
+		done
+		[ "$found" -eq 0 ]
+		;;
+	*)
+		return 0 # 未知のパターンは対象外(extract_paths で既に絞ってあるので届かない)
+		;;
+	esac
+}
+
+# 決定の置き場の有無と、指示からの紐付けを見る。
+check_adr_pointer() { # check_adr_pointer <tmpfile> <instruction files...>
+	tmpf=$1
+	shift
+	dir=$(adr_resolve_dir "$DOCTOR_DIR")
+	rc=$?
+	if [ "$rc" -eq "$ADR_EX_NODIR" ]; then
+		printf '✗ 決定の置き場(docs/adr など)が無い\n' >>"$tmpf"
+		return
+	fi
+	[ "$rc" -eq 0 ] || return # ADR_DIR が実在しない等は bin/adr 自身が言う
+
+	pointed=0
+	for f in "$@"; do
+		grep -qF "$dir" "$f" 2>/dev/null && pointed=1
+	done
+	if [ "$pointed" -eq 0 ]; then
+		printf '✗ 決定の置き場(%s)はあるが、指示(CLAUDE.md / AGENTS.md)がどちらもそこを指していない\n' "$dir" >>"$tmpf"
+	fi
+}
+
+check_contradictions() { # check_contradictions <tmpfile> <file>
+	tmpf=$1
+	f=$2
+
+	extract_paths "$f" canon | while IFS="$(printf '\t')" read -r ln path; do
+		path_exists "$path" || printf '✗ 指示が正典として名指ししているファイルが無い: %s\n    %s:%s\n' "$path" "$f" "$ln" >>"$tmpf"
+	done
+
+	extract_paths "$f" hookpath | while IFS="$(printf '\t')" read -r ln path; do
+		if ! path_exists "$path"; then
+			printf '✗ 指示が前提にしているフックのパスが無い: %s\n    %s:%s\n' "$path" "$f" "$ln" >>"$tmpf"
+		elif ! hook_registered "$path"; then
+			printf '✗ 指示が前提にしているフックが設定に登録されていない: %s\n    %s:%s\n' "$path" "$f" "$ln" >>"$tmpf"
+		fi
+	done
+}
+
+cmd_check() {
+	[ $# -eq 0 ] || die "usage: doctor check   (引数は取らない)"
+
+	files=''
+	for name in CLAUDE.md AGENTS.md; do
+		case $DOCTOR_DIR in
+		.) f=$name ;;
+		*/) f="$DOCTOR_DIR$name" ;;
+		*) f="$DOCTOR_DIR/$name" ;;
+		esac
+		[ -f "$f" ] && files="${files:+$files }$f"
+	done
+
+	tmpf=${TMPDIR:-/tmp}/doctor-check.$$
+	trap 'rm -f "$tmpf"' EXIT INT TERM
+	: >"$tmpf" || die "一時ファイル $tmpf を作れない"
+
+	# shellcheck disable=SC2086
+	check_adr_pointer "$tmpf" $files
+	for f in $files; do
+		check_contradictions "$tmpf" "$f"
+	done
+
+	if [ -s "$tmpf" ]; then
+		cat "$tmpf"
+		return "$EX_FORMAT"
+	fi
+	printf 'check: 問題なし\n'
+}
+
+# ---------------------------------------------------------------------------
+[ $# -ge 1 ] || {
+	usage >&2
+	exit 2
+}
+cmd=$1
+shift
+case $cmd in
+check) cmd_check "$@" ;;
+help | -h | --help) usage ;;
+*)
+	printf '%s: 知らないコマンド: %s\n' "$PROG" "$cmd" >&2
+	usage >&2
+	exit 2
+	;;
+esac

@@ -516,10 +516,10 @@ t "警告を出しても truncate はしない(21 件すべて出す)" "21" \
 # ---------------------------------------------------------------------------
 # adr の分 — 実行口はこのファイル 1 つに保つ
 # ---------------------------------------------------------------------------
-# ファイルが 2 つに分かれているのは作業場の作り方が違うから: todo は TODO_DIR を
-# 渡すが、adr は**カレントディレクトリからの探索**で ADR の置き場を決めるので、
-# cd したサブシェルから呼ぶ必要がある。実行口まで 2 つにすると、関門
-# (scripts/verify.sh)が片方だけを呼んでいても気づけない —— ここから呼んで
+# ファイルが分かれているのは作業場の作り方が違うから: todo は TODO_DIR を
+# 渡すが、adr と doctor は**カレントディレクトリからの探索**でリポジトリを見るので、
+# cd したサブシェルから呼ぶ必要がある。実行口まで分けると、関門
+# (scripts/verify.sh)が一部だけを呼んでいても気づけない —— ここから呼んで
 # 件数を合算する。
 adr_out=$(sh "$here/adr.sh" 2>&1)
 adr_rc=$?
@@ -536,5 +536,20 @@ pass=$((pass + adr_pass))
 fail=$((fail + adr_fail))
 
 # ---------------------------------------------------------------------------
-printf '\n%d passed, %d failed (todo + adr)\n' "$pass" "$fail"
+# doctor の分 — 実行口はこのファイル 1 つに保つ(adr と同じ理由)
+# ---------------------------------------------------------------------------
+doctor_out=$(sh "$here/doctor.sh" 2>&1)
+doctor_rc=$?
+printf '%s\n' "$doctor_out" | sed '$d' | sed '/^$/d'
+doctor_pass=$(printf '%s\n' "$doctor_out" | tail -1 | awk '{ print $1 + 0 }')
+doctor_fail=$(printf '%s\n' "$doctor_out" | tail -1 | awk '{ print $3 + 0 }')
+if [ "$doctor_rc" -ne 0 ] && [ "$doctor_fail" -eq 0 ]; then
+	printf '✗ doctor.sh が %d で終わった(集計行が読めない)\n' "$doctor_rc"
+	doctor_fail=1
+fi
+pass=$((pass + doctor_pass))
+fail=$((fail + doctor_fail))
+
+# ---------------------------------------------------------------------------
+printf '\n%d passed, %d failed (todo + adr + doctor)\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
