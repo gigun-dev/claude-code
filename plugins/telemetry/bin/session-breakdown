@@ -1,0 +1,518 @@
+#!/usr/bin/env python3
+# =============================================================================
+# session-breakdown — Claude Code のセッションログから、体ごとの時間の内訳を出す
+# =============================================================================
+# 同じ plugin の `/telemetry:review` は Langfuse を読む。こちらは資格情報も
+# ネットワークも要らず、`~/.claude/projects/**.jsonl`(transcript)だけを読む。
+# 送る側(hook)が落ちていた区間や、Langfuse を設定していない環境でも走る。
+#
+# 数え方(この道具が「実時間」と呼ぶもの):
+#
+#   実時間  = その体の transcript の最初の message 行の timestamp と
+#             最後の message 行の timestamp の差。開始は最初の user プロンプト、
+#             終了は最後の assistant 応答なので、**投げてから戻るまで**ではなく
+#             **走り始めてから最後に喋るまで**である。
+#   Bash 所要 = tool_use ブロックを持つ assistant 行の timestamp と、その
+#             tool_use_id を持つ tool_result 行の timestamp の差。ツール結果に
+#             実行時間のフィールドは無いので、**タイムスタンプの差**しか出せない。
+#             この差には権限プロンプトの待ち時間も含まれる(ログからは分離できない)。
+#   トークン = usage を 2 通りで出す。peak は 1 リクエストの
+#             input+cache_read+cache_creation+output の最大値(= 文脈の最大長)。
+#             cumulative は全リクエストの合計(= 課金される量)。両者は数倍違う。
+#
+# ログに無いので出さないもの:
+#   - モデルの思考時間とツール実行時間の切り分け(行が立つのは応答の完了時だけ)。
+#   - 本線が利用者の入力を待っていた時間(待機と思考が同じ空白に見える)。
+#   - subagent を投げてから起動するまでの遅延(background 起動なので Task の
+#     tool_result は起動の受領であって完了ではない)。
+#   - worktree が後片付けされたかどうか(ログは実行時の姿しか持たない)。
+# =============================================================================
+
+import argparse
+import datetime as dt
+import glob
+import json
+import os
+import re
+import sys
+from collections import Counter, defaultdict
+
+# --- Bash の分類規則 ------------------------------------------------------
+# 上から順に、コマンド文字列全体に対して最初に当たった規則の名前を採る。
+# 複合コマンド(`A && B`)は 1 件として先に当たった側に数える。規則は出力にも
+# 印字する —— 分類を変えたときに、過去の数字と比べられなくなるのを避けるため。
+BASH_RULES = [
+    ("test", r"tools/test\.sh|(^|\s)(pytest|ctest)\b|python3? -m (unittest|pytest)|npm (run )?test\b|(go|cargo|swift) test\b|tests/run\.sh|verify\.sh"),
+    ("build", r"idf-board\.sh\s+\S+\s+(build|flash)|idf\.py\b|(^|\s)(cmake|make|xcodebuild|ninja)\b|(cargo|go) build\b|npm run build\b|(^|\s)(cc|gcc|clang|clang\+\+|g\+\+)\s+-"),
+    ("git", r"(^|\s|\|)git\s"),
+    ("wait", r"(^|\s|;)sleep\s|while .*(sleep|-lt)"),
+    ("read", r"(^|\s|\||;|\()(grep|rg|find|ls|cat|head|tail|sed|awk|wc|diff|pwd|stat|file|du|nl|jq|test\s+-)\b"),
+    ("write-file", r"(^|\s|;)(mkdir|cp|mv|rm|touch|chmod|tee)\b|>\s*\S"),
+]
+BASH_RULES_C = [(n, re.compile(p)) for n, p in BASH_RULES]
+
+
+def classify(cmd):
+    for name, rx in BASH_RULES_C:
+        if rx.search(cmd):
+            return name
+    return "other"
+
+
+def parse_ts(s):
+    return dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
+def iter_lines(path):
+    with open(path, errors="replace") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                yield json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+
+class Body:
+    """1 体(本線 1 セッション、または subagent 1 体)の集計。"""
+
+    def __init__(self, kind, ident, path, meta=None):
+        self.kind = kind
+        self.id = ident
+        self.path = path
+        self.meta = meta or {}
+        self.first = None
+        self.last = None
+        self.tools = Counter()
+        self.bash_secs = defaultdict(float)
+        self.bash_n = Counter()
+        self.bash_cmds = Counter()
+        self.bash_slow = []          # (秒, コマンド)
+        self.tool_ivals = []         # (開始, 終了) すべてのツール。並列呼び出しがあるので合計は取らず union を取る
+        self.tool_secs = Counter()   # ツール名ごとの合計(並列分は重複して数える)
+        self.tok_peak = 0
+        self.tok_out = 0
+        self.tok_cc = 0
+        self.tok_cr = 0
+        self.requests = 0
+        self.cwds = Counter()
+        self.models = Counter()
+        self.paths_touched = Counter()   # Edit/Write の宛先ディレクトリ判定用
+        self.outside_reads = Counter()
+        self.outside_writes = Counter()
+        self.gaps = []
+        self.last_write = None       # 最後の Edit/Write の時刻
+
+    # --- 収集 --------------------------------------------------------
+    def feed(self, path):
+        pending = {}
+        prev_ts = None
+        for d in iter_lines(path):
+            if d.get("type") not in ("assistant", "user"):
+                continue
+            ts_raw = d.get("timestamp")
+            if not ts_raw:
+                continue
+            ts = parse_ts(ts_raw)
+            if self.first is None or ts < self.first:
+                self.first = ts
+            if self.last is None or ts > self.last:
+                self.last = ts
+            if prev_ts is not None:
+                self.gaps.append(((ts - prev_ts).total_seconds(), prev_ts))
+            prev_ts = ts
+            if d.get("cwd"):
+                self.cwds[d["cwd"]] += 1
+            msg = d.get("message")
+            if not isinstance(msg, dict):
+                continue
+            if d["type"] == "assistant":
+                self.requests += 1
+                u = msg.get("usage") or {}
+                tot = (u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0)
+                       + u.get("cache_creation_input_tokens", 0) + u.get("output_tokens", 0))
+                self.tok_peak = max(self.tok_peak, tot)
+                self.tok_out += u.get("output_tokens", 0)
+                self.tok_cc += u.get("cache_creation_input_tokens", 0)
+                self.tok_cr += u.get("cache_read_input_tokens", 0)
+                if msg.get("model"):
+                    self.models[msg["model"]] += 1
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+            for b in content:
+                if b.get("type") == "tool_use":
+                    name = b.get("name", "?")
+                    self.tools[name] += 1
+                    inp = b.get("input") or {}
+                    pending[b["id"]] = (ts, name, inp.get("command", ""))
+                    if name in ("Edit", "Write", "NotebookEdit"):
+                        self.last_write = ts
+                    for key in ("file_path", "path", "notebook_path"):
+                        if isinstance(inp.get(key), str):
+                            self.paths_touched[(name, inp[key])] += 1
+                elif b.get("type") == "tool_result":
+                    got = pending.pop(b.get("tool_use_id"), None)
+                    if got:
+                        t0, tname, cmd = got
+                        secs = (ts - t0).total_seconds()
+                        self.tool_ivals.append((t0, ts))
+                        self.tool_secs[tname] += secs
+                        if tname == "Bash":
+                            cat = classify(cmd)
+                            self.bash_secs[cat] += secs
+                            self.bash_n[cat] += 1
+                            self.bash_cmds[" ".join(cmd.split())] += 1
+                            self.bash_slow.append((secs, cmd))
+
+    # --- 導出 --------------------------------------------------------
+    @property
+    def wall(self):
+        if self.first is None or self.last is None:
+            return 0.0
+        return (self.last - self.first).total_seconds()
+
+    @property
+    def bash_total(self):
+        return sum(self.bash_secs.values())
+
+    @property
+    def tool_union(self):
+        """全ツールの所要の和集合。1 つの assistant 応答が複数ツールを並列に
+        呼ぶので、単純合計だと実時間を超える。"""
+        if not self.tool_ivals:
+            return 0.0
+        ivals = sorted(self.tool_ivals)
+        total = 0.0
+        cur_s, cur_e = ivals[0]
+        for s, e in ivals[1:]:
+            if s > cur_e:
+                total += (cur_e - cur_s).total_seconds()
+                cur_s, cur_e = s, e
+            else:
+                cur_e = max(cur_e, e)
+        return total + (cur_e - cur_s).total_seconds()
+
+    @property
+    def model_time(self):
+        """実時間からツールの和集合を引いた残り。モデルの応答生成と、ログから
+        分離できない待ち(本線なら利用者の入力待ち)がここに入る。"""
+        return max(0.0, self.wall - self.tool_union)
+
+    @property
+    def tail_after_write(self):
+        """最後にファイルを書いてから終わるまでの時間。何に使ったかまでは
+        ログから決まらない(最終確認かもしれないし、済んだ仕事の続きかもしれない)。
+        1 文字も書かなかった体では None。"""
+        if not self.last_write or not self.last:
+            return None
+        return (self.last - self.last_write).total_seconds()
+
+    @property
+    def worktree(self):
+        """worktree のパス。meta.json が正だが、meta が欠けている体もあるので
+        cwd が `.claude/worktrees/<id>` を指していればそれを採る。"""
+        if self.meta.get("worktreePath"):
+            return self.meta["worktreePath"]
+        for cwd, _ in self.cwds.most_common():
+            m = re.match(r"(.*/\.claude/worktrees/[^/]+)", cwd)
+            if m:
+                return m.group(1)
+        return None
+
+    def outside_worktree(self):
+        """worktree を与えられた体が、worktree の外の path を触った件数。"""
+        wt = self.worktree
+        if not wt:
+            return {}
+        out = Counter()
+        for (tool, p), n in self.paths_touched.items():
+            if p.startswith("/") and not p.startswith(wt) and not p.startswith("/private/tmp") and not p.startswith("/tmp"):
+                kind = "write" if tool in ("Edit", "Write", "NotebookEdit") else "read"
+                out[kind] += n
+        for cmd, n in self.bash_cmds.items():
+            for m in re.finditer(r"(/Users/[^\s\"';|)]+)", cmd):
+                p = m.group(1)
+                if not p.startswith(wt) and "/.claude/worktrees/" not in p:
+                    out["bash-path"] += n
+                    break
+        return dict(out)
+
+
+def collect(project_dir):
+    """1 プロジェクトディレクトリから体を集める。
+
+    Claude Code のバージョンによって subagent の行の置き場が 2 通りある:
+      (a) <session>/subagents/agent-*.jsonl に分離(現行)
+      (b) 本線の <session>.jsonl に isSidechain:true で混在(旧)
+    どちらも拾い、(b) は agentId ごとに 1 体へまとめる。
+    """
+    bodies = []
+    for main in sorted(glob.glob(os.path.join(project_dir, "*.jsonl"))):
+        sid = os.path.basename(main)[:-6]
+        m = Body("main", sid, main)
+        side = {}
+        for d in iter_lines(main):
+            if d.get("isSidechain") and d.get("agentId"):
+                side.setdefault(d["agentId"], []).append(d)
+        m.feed(main)
+        bodies.append(m)
+        for aid, _ in side.items():                      # 旧レイアウト
+            b = Body("subagent", aid, main)
+            b.feed_inline = True
+            _feed_inline(b, main, aid)
+            bodies.append(b)
+        subdir = os.path.join(project_dir, sid, "subagents")
+        for f in sorted(glob.glob(os.path.join(subdir, "*.jsonl"))):
+            meta_path = f[:-6] + ".meta.json"
+            meta = {}
+            if os.path.exists(meta_path):
+                try:
+                    meta = json.load(open(meta_path))
+                except json.JSONDecodeError:
+                    meta = {}
+            aid = os.path.basename(f)[len("agent-"):-len(".jsonl")]
+            b = Body("subagent", aid, f, meta)
+            b.feed(f)
+            bodies.append(b)
+    return bodies
+
+
+def _feed_inline(body, path, agent_id):
+    """旧レイアウト用: 本線ファイルから 1 体分の行だけを流し込む。"""
+    tmp = []
+    for d in iter_lines(path):
+        if d.get("agentId") == agent_id and d.get("isSidechain"):
+            tmp.append(d)
+    # Body.feed はファイルを読むので、ここだけ同じ処理を辞書列に対して回す
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as fh:
+        for d in tmp:
+            fh.write(json.dumps(d) + "\n")
+        name = fh.name
+    body.feed(name)
+    os.unlink(name)
+
+
+def fmt_secs(s):
+    return f"{s / 60:.1f}m" if s >= 60 else f"{s:.0f}s"
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="Claude Code の transcript から体ごとの時間・ツール・トークンの内訳を出す")
+    ap.add_argument("--project", default=os.getcwd(),
+                    help="対象リポジトリのパス、または ~/.claude/projects 配下のディレクトリ名(既定: cwd)")
+    ap.add_argument("--all-projects", action="store_true", help="全プロジェクトを対象にする")
+    ap.add_argument("--since", default="1d", help="Nd / Nh で遡る期間(既定: 1d)")
+    ap.add_argument("--main", action="store_true", help="本線も表に出す(既定は subagent のみ)")
+    ap.add_argument("--json", action="store_true", help="機械可読な JSON で出す")
+    ap.add_argument("--top-commands", type=int, default=5, help="遅かったコマンドの表示件数")
+    args = ap.parse_args()
+
+    root = os.path.expanduser("~/.claude/projects")
+    if args.all_projects:
+        dirs = [os.path.join(root, d) for d in os.listdir(root)
+                if os.path.isdir(os.path.join(root, d))]
+    else:
+        p = os.path.abspath(os.path.expanduser(args.project))
+        if not args.project.startswith(("/", "~", ".")) and os.path.isdir(os.path.join(root, args.project)):
+            dirs = [os.path.join(root, args.project)]
+        else:
+            # Claude Code はプロジェクトの絶対パスの英数字以外を "-" に置いて
+            # ディレクトリ名にしている(/Users/x/a.b → -Users-x-a-b)。
+            dirs = [os.path.join(root, re.sub(r"[^A-Za-z0-9]", "-", p))]
+        if not os.path.isdir(dirs[0]):
+            sys.exit(f"transcript のディレクトリが無い: {dirs[0]}")
+
+    m = re.fullmatch(r"(\d+)([dh])", args.since)
+    if not m:
+        sys.exit("--since は 3d / 12h の形で指定する")
+    delta = dt.timedelta(days=int(m.group(1))) if m.group(2) == "d" else dt.timedelta(hours=int(m.group(1)))
+    cutoff = dt.datetime.now(dt.timezone.utc) - delta
+
+    bodies = []
+    for d in dirs:
+        bodies.extend(collect(d))
+    bodies = [b for b in bodies if b.first and b.last >= cutoff]
+    bodies.sort(key=lambda b: b.first)
+    if not args.main:
+        shown = [b for b in bodies if b.kind == "subagent"]
+    else:
+        shown = bodies
+
+    if args.json:
+        out = []
+        for b in shown:
+            out.append({
+                "kind": b.kind, "id": b.id, "agent_type": b.meta.get("agentType"),
+                "description": b.meta.get("description"),
+                "model": b.models.most_common(1)[0][0] if b.models else None,
+                "start": b.first.isoformat(), "end": b.last.isoformat(),
+                "wall_s": round(b.wall, 1), "tool_calls": sum(b.tools.values()),
+                "tool_union_s": round(b.tool_union, 1), "model_time_s": round(b.model_time, 1),
+                "tools": dict(b.tools), "tool_secs": {k: round(v, 1) for k, v in b.tool_secs.items()},
+                "tokens": {"peak_context": b.tok_peak, "cum_output": b.tok_out,
+                           "cum_cache_creation": b.tok_cc, "cum_cache_read": b.tok_cr,
+                           "requests": b.requests},
+                "bash": {"calls": sum(b.bash_n.values()), "total_s": round(b.bash_total, 1),
+                         "by_category_s": {k: round(v, 1) for k, v in b.bash_secs.items()},
+                         "by_category_n": dict(b.bash_n)},
+                "repeated_commands": {c: n for c, n in b.bash_cmds.items() if n > 1},
+                "tail_after_last_write_s": (round(b.tail_after_write, 1)
+                                            if b.tail_after_write is not None else None),
+                "worktree": b.worktree, "spawned_with_worktree": b.meta.get("spawnedWithWorktree"),
+                "cwds": dict(b.cwds), "outside_worktree": b.outside_worktree(),
+            })
+        print(json.dumps({"since": args.since, "cutoff": cutoff.isoformat(),
+                          "bash_rules": [r[0] for r in BASH_RULES], "bodies": out},
+                         ensure_ascii=False, indent=2))
+        return
+
+    print(f"# session-breakdown  since={args.since} (cutoff {cutoff.astimezone():%Y-%m-%d %H:%M %Z})")
+    print(f"  対象ディレクトリ: {', '.join(dirs)}")
+    print("  実時間 = その体の transcript の最初と最後の message 行の timestamp の差。")
+    print("  Bash 所要 = tool_use 行と対応する tool_result 行の timestamp の差(実行時間の")
+    print("             フィールドはログに無い。権限待ちも含む)。")
+    print("  tokens.peak = 1 リクエストの文脈最大長 / cum = 全リクエストの合計。")
+    print("  Bash 分類規則(上から順に最初に当たったもの): "
+          + " > ".join(n for n, _ in BASH_RULES) + " > other")
+    print("  wait は背景に投げた test / build のログを待つポーリングが大半なので、"
+          "検証の実体は test+build+wait で見る。")
+    print()
+
+    hdr = (f"{'start':16} {'wall':>7} {'tools':>5} {'tool時':>7} {'検証':>6} {'model':>7} {'mdl%':>5} "
+           f"{'peak tok':>9}  agent / description")
+    print(hdr)
+    print("-" * 104)
+    for b in shown:
+        label = b.meta.get("description") or ("(本線 " + b.id[:8] + ")")
+        at = b.meta.get("agentType") or "main"
+        ver = b.bash_secs.get("test", 0) + b.bash_secs.get("build", 0)
+        mdl = f"{100 * b.model_time / b.wall:.0f}%" if b.wall > 0 else "-"
+        print(f"{b.first.astimezone():%m-%d %H:%M:%S} {fmt_secs(b.wall):>7} "
+              f"{sum(b.tools.values()):>5} {fmt_secs(b.tool_union):>7} {fmt_secs(ver):>6} "
+              f"{fmt_secs(b.model_time):>7} {mdl:>5} {b.tok_peak:>9,}  {at} / {label}")
+    print()
+    print("  tool時 = 全ツールの所要の和集合 / 検証 = Bash のうち test+build / "
+          "model = 実時間 − tool時")
+    print()
+
+    for b in shown:
+        label = b.meta.get("description") or ("本線 " + b.id[:8])
+        print(f"== {label}  [{b.meta.get('agentType') or 'main'}, {b.id}]")
+        print(f"   transcript: {b.path}")
+        print(f"   実時間 {fmt_secs(b.wall)}  ({b.first.astimezone():%H:%M:%S} → {b.last.astimezone():%H:%M:%S})"
+              f"  リクエスト {b.requests}  ツール {sum(b.tools.values())}")
+        print("   ツール: " + ", ".join(f"{k}×{v}" for k, v in b.tools.most_common()))
+        if b.wall:
+            print(f"   ツール所要(和集合) {fmt_secs(b.tool_union)} / "
+                  f"モデル応答ほか {fmt_secs(b.model_time)} ({100 * b.model_time / b.wall:.0f}%)")
+        print(f"   トークン: peak {b.tok_peak:,} / cum out {b.tok_out:,}"
+              f" / cache write {b.tok_cc:,} / cache read {b.tok_cr:,}")
+        if b.tail_after_write is not None:
+            print(f"   最後の Edit/Write から終了まで {fmt_secs(b.tail_after_write)}"
+                  f" ({100 * b.tail_after_write / b.wall:.0f}%)")
+        if b.bash_n:
+            cats = ", ".join(f"{k} {fmt_secs(v)}×{b.bash_n[k]}"
+                             for k, v in sorted(b.bash_secs.items(), key=lambda kv: -kv[1]))
+            print(f"   Bash 合計 {fmt_secs(b.bash_total)} / 実時間の "
+                  f"{100 * b.bash_total / b.wall:.0f}%  — {cats}")
+            for secs, cmd in sorted(b.bash_slow, reverse=True)[:args.top_commands]:
+                print(f"     {secs:7.1f}s  {' '.join(cmd.split())[:96]}")
+        rep = [(c, n) for c, n in b.bash_cmds.items() if n > 1]
+        if rep:
+            print("   同一コマンドの再実行:")
+            for c, n in sorted(rep, key=lambda x: -x[1]):
+                print(f"     ×{n}  {c[:92]}")
+        if b.worktree:
+            inside = sum(n for c, n in b.cwds.items() if c.startswith(b.worktree))
+            print(f"   worktree: {b.worktree}")
+            print(f"     cwd が worktree 内の行 {inside}/{sum(b.cwds.values())}")
+            ow = b.outside_worktree()
+            print(f"     worktree 外への参照: {ow if ow else 'なし'}")
+            for (tool, p), n in sorted(b.paths_touched.items()):
+                if (tool in ("Edit", "Write", "NotebookEdit") and p.startswith("/")
+                        and not p.startswith(b.worktree)
+                        and not p.startswith(("/tmp", "/private/tmp"))):
+                    print(f"     worktree の外に書いた: {tool} ×{n} {p}")
+        else:
+            print("   worktree: 割り当て無し(cwd: "
+                  + ", ".join(f"{c} ×{n}" for c, n in b.cwds.most_common(3)) + ")")
+        print()
+
+    # --- 分布 ------------------------------------------------------------
+    subs = [b for b in shown if b.kind == "subagent" and b.wall > 0]
+    if subs:
+        walls = sorted(b.wall for b in subs)
+        shares = sorted(100 * b.bash_total / b.wall for b in subs)
+
+        def med(xs):
+            n = len(xs)
+            return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
+        print(f"# 分布 (subagent {len(subs)} 体)")
+        print(f"  実時間: 最小 {fmt_secs(walls[0])} / 中央 {fmt_secs(med(walls))} / 最大 {fmt_secs(walls[-1])}"
+              f" / 合計 {fmt_secs(sum(walls))}")
+        vshares = sorted(100 * (b.bash_secs.get("test", 0) + b.bash_secs.get("build", 0)) / b.wall
+                         for b in subs)
+        print(f"  Bash が実時間に占める割合: 最小 {shares[0]:.0f}% / 中央 {med(shares):.0f}% / 最大 {shares[-1]:.0f}%")
+        print(f"  検証(test+build)の割合:   最小 {vshares[0]:.0f}% / 中央 {med(vshares):.0f}% / 最大 {vshares[-1]:.0f}%")
+        tot_w = sum(walls)
+        tot_b = sum(b.bash_total for b in subs)
+        tot_u = sum(b.tool_union for b in subs)
+        tot_v = sum(b.bash_secs.get("test", 0) + b.bash_secs.get("build", 0) for b in subs)
+        print(f"  合計: 実時間 {fmt_secs(tot_w)} = ツール {fmt_secs(tot_u)} ({100 * tot_u / tot_w:.0f}%)"
+              f" + モデル応答ほか {fmt_secs(tot_w - tot_u)} ({100 * (tot_w - tot_u) / tot_w:.0f}%)")
+        tot_wait = sum(b.bash_secs.get("wait", 0) for b in subs)
+        print(f"        うち Bash {fmt_secs(tot_b)} ({100 * tot_b / tot_w:.0f}%)、"
+              f"検証 {fmt_secs(tot_v)} ({100 * tot_v / tot_w:.0f}%)、"
+              f"検証+待ち {fmt_secs(tot_v + tot_wait)} ({100 * (tot_v + tot_wait) / tot_w:.0f}%)")
+        tails = sorted(100 * b.tail_after_write / b.wall
+                       for b in subs if b.tail_after_write is not None and b.wall)
+        if tails:
+            print(f"  最後の Edit/Write から終了までが実時間に占める割合({len(tails)} 体): "
+                  f"最小 {tails[0]:.0f}% / 中央 {med(tails):.0f}% / 最大 {tails[-1]:.0f}%")
+        agg = defaultdict(float)
+        aggn = Counter()
+        for b in subs:
+            for k, v in b.bash_secs.items():
+                agg[k] += v
+                aggn[k] += b.bash_n[k]
+        print("  Bash 内訳(全体): " + ", ".join(
+            f"{k} {fmt_secs(v)}×{aggn[k]}" for k, v in sorted(agg.items(), key=lambda kv: -kv[1])))
+        wt = [b for b in subs if b.worktree]
+        print(f"  worktree 付きで起動した体: {len(wt)}/{len(subs)}")
+
+    # --- 同じツリーを同時に触った体 --------------------------------------
+    # worktree を割り当てられていない体は、本体チェックアウトを直接触る。
+    # 別セッションの体も同じディレクトリの transcript にあるので、cwd が同じで
+    # 時間が重なる組を出す。ログから分かるのは「重なっていた」ことだけで、
+    # 同じファイルを取り合ったかどうかは分からない。
+    trees = defaultdict(list)
+    for b in bodies:
+        root = b.worktree or (b.cwds.most_common(1)[0][0] if b.cwds else None)
+        if root:
+            trees[root].append(b)
+    clashes = []
+    for root, bs in trees.items():
+        if "/.claude/worktrees/" in root or len(bs) < 2:
+            continue
+        bs.sort(key=lambda x: x.first)
+        for i, x in enumerate(bs):
+            for y in bs[i + 1:]:
+                if y.first < x.last:
+                    clashes.append((root, x, y, (min(x.last, y.last) - y.first).total_seconds()))
+    if clashes:
+        print()
+        print(f"# 同じツリーを同時に触った組 ({len(clashes)} 組) — worktree の外での重なりだけを出す")
+        for root, x, y, ov in sorted(clashes, key=lambda c: -c[3])[:15]:
+            lx = x.meta.get("description") or ("本線 " + x.id[:8])
+            ly = y.meta.get("description") or ("本線 " + y.id[:8])
+            print(f"  {fmt_secs(ov):>7} 重なり  {root}")
+            print(f"          {lx[:44]} ({x.kind}) × {ly[:44]} ({y.kind})")
+
+
+if __name__ == "__main__":
+    main()

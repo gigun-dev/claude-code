@@ -17,3 +17,10 @@
 2026-09-10 +project の付け替えにコマンドが無い。todo.txt と done.txt の両方を書き換える必要があり、done.txt を忘れると過去の集計と食い違う +plugins @unattended id:0022
 2026-09-10 do が根拠を残さない。閉じた根拠はコミットと docs の節なのに done.txt にはどちらも無い。see: を要求するか閉じた時点の HEAD を刻むか決める +plugins @unattended id:0023
 2026-09-10 優先度を段取りの意味で使ってしまう。2026-09-10 に (B) を「手が空いたときにまとめて撃つ束」として使い、@user と二重に持っていた。SKILL.md は との違いしか書いていない +plugins @unattended id:0024
+2026-09-11 投げる前に本線が start を打つ規約を skill 本文に書く。2026-09-11 に esp32 で subagent 3 体を worktree で走らせながら @wip がゼロだった。worktree の agent は自分の todo.txt しか見えないので、本線が start しないと他のコーディングエージェントからは未着手に見える +plugins @unattended id:0028
+2026-09-11 @wip が「誰が手を付けているか」を持たない。複数のコーディングエージェントを並行で回すと、同じ行を二重に取れてしまう。担当を書ける形にするか、start に主体を渡せるようにするか決める +plugins @unattended id:0029
+2026-09-11 worktree の subagent が todo.txt を更新してもマージまで誰にも届かない。いまは「更新するのは本線」という規約で回避しているが、規約が skill 本文に書かれていない +plugins @unattended id:0030
+2026-09-11 todo の行から local のセッションログを指せるようにする。see: は repo 相対のパスに限られるので ~/.claude/projects/ の下にあるセッションを起票時に指せない。後から別のエージェントが根拠のログを引けると効く +plugins @unattended id:0031
+2026-09-11 worktree を持つ subagent が worktree の外へ書いた件を、session-breakdown が終了コードで返す形にする。2026-09-11 の実測で 8 件あり、うち 6 件が本線のビルド対象ツリーへの書き込みだった +plugins @unattended see:docs/telemetry/2026-09-11-subagent-time-breakdown.md id:0033
+2026-09-11 「実装は終わったが検証待ち」を表す印が要るかを実データで判断する。根拠は 2026-09-11 の esp32 のセッション e4e316bc-fbdd-454b-a0bd-af98a913bbd3(2 件が実測し直し待ち、1 件が実機検証待ちのまま @wip に置かれた)。@wip は start/stop/do が管理する印なので兼ねると意味が二重になるが、頻度と実害は 1 日ぶんしか見ていない +plugins @unattended id:0034
+2026-09-11 todo の行がセッションを指すときの識別子の形を決める。パスは Claude Code と Codex で違い、cman を使う場合には不要。セッション ID なら両方から辿れる。see: は repo 相対に限られるので本文に書くしかない(id:0031 と関係する) +plugins @unattended id:0036

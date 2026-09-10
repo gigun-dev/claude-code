@@ -1,13 +1,32 @@
 ---
 name: review
-description: 自分の Claude Code セッションを Langfuse のトレースから振り返り、コスト・トークン・ツール別レイテンシ・失敗・サブエージェントの傾向を見て設定改善につなげる。「セッションを振り返って」「どのツールで時間を使ってる?」「いくら使った?」「テレメトリ見て」「/telemetry:review」で発火。
+description: 自分のコーディングセッションを実データで振り返り、時間・トークン・ツールの内訳・サブエージェント・worktree の扱いを見て設定改善につなげる。ローカルのトランスクリプトだけで答える口と、Langfuse のトレースを引く口の両方を持つ(前者は資格情報もネットワークも要らない)。「セッションを振り返って」「subagent が遅い」「何に時間を使ってる?」「いくら使った?」「worktree がおかしい」「テレメトリ見て」「/telemetry:review」で発火。
 ---
 
 # telemetry:review — 自分のセッションを観測データから振り返る
 
 ```!
+"${CLAUDE_SKILL_DIR}/../../bin/session-breakdown" --since 1d 2>&1 | head -60
 bash "${CLAUDE_SKILL_DIR}/scripts/summary.sh" 7
 ```
+
+## どの道具を使うか
+
+答えたい問いによって使う道具が違う。**上から順に試し、足りないときだけ下へ降りる。**
+
+| 問い | 道具 |
+|---|---|
+| 「あの作業はどのセッションだったか」「いつ何をしたか」 | **cman**(`search_all` で Claude Code・Pi・Codex を横断)。探すのが仕事 |
+| 「体ごとに何分かかったか」「Bash の内訳」「同じコマンドを何回走らせたか」「worktree の外へ書いたか」 | **`bin/session-breakdown`**。数えるのが仕事。資格情報もネットワークも要らない |
+| コスト・LLM 応答の中身・ツール別レイテンシ | 下の `summary.sh` / `query.sh`(Langfuse。資格情報が要る) |
+| 上のどれでも答えられない | 生の JSONL を直接読む |
+
+**ログの形はエージェントによって違う。** Claude Code は `~/.claude/projects/<project>/<session-id>.jsonl` で、
+subagent の行は `isSidechain` が真の行として本線に混ざる場合と `subagents/agent-*.jsonl` に分かれる
+場合がある。Codex は別の場所と形式なので、横断したいときは cman を通す。
+
+**セッションを指すときはセッション ID を使う。** パスはエージェントごとに違い、cman を使う経路では
+不要になる。ID なら両方から辿れる。
 
 ## 使い方
 
