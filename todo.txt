@@ -12,3 +12,5 @@
 (A) 2026-09-10 installed cache と repo の SKILL.md が乖離している原因を特定する(cache の adr 0.1.1 の description は repo 履歴に無い) +plugins id:0013
 2026-09-10 verify.sh の [n/9] を手書きでやめる(検査を名前の配列にしてループで回し、番号を導出する)。検査の増減で 9 箇所を直していた +plugins @unattended id:0014
 2026-09-10 tools/idf-board.sh の「上N個と同じく」18 箇所から数を落とす(既に 611 行と 625 行が両方 25 でずれている。数は文の意味に要らない) +refactor @unattended id:0015
+2026-09-10 adr に new と supersede を足す。いま ls と check しかなく、採番も Superseded by の 2 ファイル編集も手作業で、--help が唯一許された編集と呼ぶ操作にコマンドが無い +plugins @unattended id:0019 @wip
+2026-09-10 todo check / adr check を CI から呼べない件の答えをスキルか doctor に持たせる(CLI がプラグイン配下にあり repo が開発機に依存する)。2 つの repo が同じ判断を独立にしている +plugins @unattended id:0020
