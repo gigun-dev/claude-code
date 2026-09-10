@@ -13,3 +13,7 @@
 2026-09-10 verify.sh の [n/9] を手書きでやめる(検査を名前の配列にしてループで回し、番号を導出する)。検査の増減で 9 箇所を直していた +plugins @unattended id:0014
 2026-09-10 tools/idf-board.sh の「上N個と同じく」18 箇所から数を落とす(既に 611 行と 625 行が両方 25 でずれている。数は文の意味に要らない) +refactor @unattended id:0015
 2026-09-10 todo check / adr check を CI から呼べない件の答えをスキルか doctor に持たせる(CLI がプラグイン配下にあり repo が開発機に依存する)。2 つの repo が同じ判断を独立にしている +plugins @unattended id:0020
+(B) 2026-09-10 いま塞がれている行を一覧する手段が無い。dep: を足すと ready から消えるだけで痕跡が残らず、忘れると永久に見えない。ls dep: は依存が解けた行も出す +plugins @unattended id:0021
+2026-09-10 +project の付け替えにコマンドが無い。todo.txt と done.txt の両方を書き換える必要があり、done.txt を忘れると過去の集計と食い違う +plugins @unattended id:0022
+2026-09-10 do が根拠を残さない。閉じた根拠はコミットと docs の節なのに done.txt にはどちらも無い。see: を要求するか閉じた時点の HEAD を刻むか決める +plugins @unattended id:0023
+2026-09-10 優先度を段取りの意味で使ってしまう。2026-09-10 に (B) を「手が空いたときにまとめて撃つ束」として使い、@user と二重に持っていた。SKILL.md は との違いしか書いていない +plugins @unattended id:0024
