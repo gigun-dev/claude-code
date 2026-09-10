@@ -177,6 +177,127 @@ t "stdout に出るのは新しい行だけ" "2026-09-09 new framing +proj id:00
 	"$(todo replace 1 "new framing +proj" 2>/dev/null)"
 
 # ---------------------------------------------------------------------------
+# replace は key:value タグを持ち越す —— 言い直しただけで依存が解けない
+# ---------------------------------------------------------------------------
+# 本文 = +project と @context まで。key:value(dep: see: due: …)はメタデータで、
+# id: と同じ扱いにする。外すには操作者が key を書く(新しい TEXT で上書きするか
+# --drop で名指しするか)必要があり、書かずに外れる経路は無い。
+setup replace_tags
+todo add "基礎" >/dev/null
+todo add "本命 +upload @device see:docs/x.md due:2026-09-30" >/dev/null
+todo dep 2 1 >/dev/null
+todo replace 2 "本命を言い直す +upload" >/dev/null 2>&1
+t "replace は dep: を持ち越す(言い直しで依存が解けない)" \
+	"2026-09-09 本命を言い直す +upload see:docs/x.md due:2026-09-30 dep:0001 id:0002" \
+	"$(todo show 2)"
+t "持ち越した行は dep が未完なので ready に出ない" "2026-09-09 基礎 id:0001" "$(todo ready)"
+todo replace 2 "due を上書きする due:2026-10-01" >/dev/null 2>&1
+t "新しい TEXT の key は旧行の同じ key に勝つ" \
+	"2026-09-09 due を上書きする due:2026-10-01 see:docs/x.md dep:0001 id:0002" \
+	"$(todo show 2)"
+t "上書きは「外した」ではないので stderr で名指ししない" "0" \
+	"$(todo replace 2 "また上書き due:2026-11-01" 2>&1 >/dev/null | grep -c '外したタグ')"
+
+setup replace_drop
+todo add "基礎" >/dev/null
+todo add "本命 see:docs/x.md" >/dev/null
+todo dep 2 1 >/dev/null
+t "--drop dep は依存を外す" "2026-09-09 単独でできる see:docs/x.md id:0002" \
+	"$(todo replace 2 "単独でできる" --drop dep 2>/dev/null)"
+t "外した dep: は stderr で名指しされる" "1" \
+	"$(todo replace 2 "もう一度言い直す" --drop see 2>&1 >/dev/null | grep -c '外したタグ: see:docs/x.md')"
+t "依存を外したときはそう言う" "1" \
+	"$(setup replace_drop2; todo add "基礎" >/dev/null; todo add "本命" >/dev/null; todo dep 2 1 >/dev/null
+	todo replace 2 "単独でできる" --drop dep 2>&1 >/dev/null | grep -c '依存が解けた')"
+t "その行に無い key の --drop は 1 で落ちる" "1" \
+	"$(todo replace 2 "x" --drop due >/dev/null 2>&1; echo $?)"
+t "落ちた --drop は行を変えない" "2026-09-09 もう一度言い直す id:0002" "$(todo show 2)"
+t "--drop id は使えない" "1" "$(todo replace 2 "x" --drop id >/dev/null 2>&1; echo $?)"
+
+# ---------------------------------------------------------------------------
+# dep / undep — pri / depri と同じ対
+# ---------------------------------------------------------------------------
+setup depcmd
+todo add "土台" >/dev/null
+todo add "その次" >/dev/null
+todo add "さらに次" >/dev/null
+t "dep は id: の手前に dep: を入れる(add の並びのまま)" \
+	"2026-09-09 その次 dep:0001 id:0002" "$(todo dep 2 1)"
+t "同じ dep を二度足しても重ならない(冪等)" \
+	"2026-09-09 その次 dep:0001 id:0002" "$(todo dep 2 1)"
+t "複数の dep はカンマで連なる" \
+	"2026-09-09 さらに次 dep:0001,0002 id:0003" "$(todo dep 3 1 2)"
+t "dep を足した行は ready に出ない" "2026-09-09 土台 id:0001" "$(todo ready)"
+t "存在しない id への dep は 3 で落ちる" "3" "$(todo dep 2 99 >/dev/null 2>&1; echo $?)"
+t "自己依存は 1 で落ちる" "1" "$(todo dep 2 2 >/dev/null 2>&1; echo $?)"
+t "循環を作る dep は関門が 2 で止める" "2" "$(todo dep 1 2 >/dev/null 2>&1; echo $?)"
+t "止まった dep は行を変えない" "2026-09-09 土台 id:0001" "$(todo show 1)"
+t "undep はカンマ区切りの 1 つだけを外せる" \
+	"2026-09-09 さらに次 dep:0002 id:0003" "$(todo undep 3 1)"
+t "最後の 1 つを外すと dep: ごと消える" \
+	"2026-09-09 さらに次 id:0003" "$(todo undep 3 2)"
+t "無い dep を外しても落ちない(冪等)" "0" "$(todo undep 3 1 >/dev/null 2>&1; echo $?)"
+t "無い dep は stderr で言う" "1" "$(todo undep 3 1 2>&1 >/dev/null | grep -c 'dep:1 は無い')"
+t "undep は外す先の指定を要る(まとめて外す指定は無い)" "1" \
+	"$(todo undep 2 >/dev/null 2>&1; echo $?)"
+
+# done の行への dep は禁じない(最初から解けている依存を書き残せる)。ただし言う。
+setup dep_done
+todo add "先" >/dev/null
+todo add "後" >/dev/null
+todo do 1 >/dev/null
+t "done の行に dep しても通る" "2026-09-09 後 dep:0001 id:0002" "$(todo dep 2 1 2>/dev/null)"
+t "解けている依存だと stderr で言う" "1" \
+	"$(setup dep_done2; todo add "先" >/dev/null; todo add "後" >/dev/null; todo do 1 >/dev/null
+	todo dep 2 1 2>&1 >/dev/null | grep -c '最初から解けている')"
+t "done の行への dep でも ready には出る" "2026-09-09 後 dep:0001 id:0002" "$(todo ready)"
+
+# 宙吊りの dep: を直せること —— undep が値を resolve していたら直せない。
+setup undep_dangling
+printf '2026-09-09 宙吊り dep:0099 id:0001\n' >"$TODO_DIR/todo.txt"
+t "存在しない id を指す dep: も外せる" "2026-09-09 宙吊り id:0001" "$(todo undep 1 99)"
+t "外したあと check が通る" "0" "$(todo check >/dev/null 2>&1; echo $?)"
+
+t "完了済みの行に dep はできない" "1" \
+	"$(setup dep_settled; todo add "a" >/dev/null; todo add "b" >/dev/null; todo do 1 >/dev/null
+	todo dep 1 2 >/dev/null 2>&1; echo $?)"
+
+# ---------------------------------------------------------------------------
+# id を書かせない関門 —— 拒むのは「id として読まれるトークン」だけ
+# ---------------------------------------------------------------------------
+# 仕様(references/todo-txt-format.md)の key:value は key も value も非空。
+# CLI が id と読むのは id: の値が英数字のトークンだけなので、記法について書いた
+# 散文はタスクの本文として通す。
+setup idguard
+t "記法に言及する散文は add できる" \
+	"2026-09-09 起票する(保持は id:・作成日・優先度だけ) id:0001" \
+	"$(todo add "起票する(保持は id:・作成日・優先度だけ)")"
+t "手書きの id トークンは今までどおり 1 で拒む" "1" \
+	"$(todo add "本物 id:0007 を書く" >/dev/null 2>&1; echo $?)"
+t "ゼロ詰めでない手書きの id も拒む" "1" \
+	"$(todo add "本物 id:7 を書く" >/dev/null 2>&1; echo $?)"
+t "id: だけ(値が空)は散文なので通る" "0" \
+	"$(todo add "採番は id: が担う" >/dev/null 2>&1; echo $?)"
+t "散文の行を check は id 無しとして扱わない(id は末尾の 1 つ)" "0" \
+	"$(todo check >/dev/null 2>&1; echo $?)"
+t "URL の see: は今までどおり 2 で拒む" "2" \
+	"$(todo add "参照 see:https://example.com" >/dev/null 2>&1; echo $?)"
+t "1 トークンにコロン 2 つは今までどおり 2 で拒む" "2" \
+	"$(todo add "二重 a:b:c" >/dev/null 2>&1; echo $?)"
+t "replace も同じ関門を使う" "1" \
+	"$(todo replace 1 "手書き id:0009 を入れる" >/dev/null 2>&1; echo $?)"
+t "散文の replace は通る" "0" \
+	"$(todo replace 1 "id: の扱いを書き直す" >/dev/null 2>&1; echo $?)"
+
+# 手で書いた「id として読めない id:」だけの行は、id を持たない行として扱う。
+setup idguard_check
+printf '2026-09-09 記法の話 id:・作成日\n' >"$TODO_DIR/todo.txt"
+t "値が英数字でない id: は id ではない(id 無しとして指摘)" "1" \
+	"$(todo check 2>&1 | grep -c 'id: が無い')"
+t "todo id はそういう行にも id を配れる" \
+	"2026-09-09 記法の話 id:・作成日 id:0001" "$(todo id)"
+
+# ---------------------------------------------------------------------------
 # pri / depri / append
 # ---------------------------------------------------------------------------
 setup pri
