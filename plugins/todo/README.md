@@ -29,7 +29,14 @@ CLI は `bin/todo`・`bin/adr`・`bin/doctor` の 3 本、skill は `todo` / `ad
 ```
 (A) 2026-09-10 iPhone 相手で送信バッファを A/B する +upload @device dep:0001 see:docs/x.md id:0002
 x 2026-09-10 2026-09-08 完了した本文 +upload id:0001                        ← done.txt
+x 2026-09-10 2026-09-08 閉じた本文 id:0003 @dropped 比較する対象が無かった  ← drop
 ```
+
+**閉じ方は 2 つある。** `do` は「やった」、`drop` は「前提が崩れて問いが消えた」。
+どちらも `done.txt` の完了行で、違いは `@dropped` という context ひとつと、
+その後ろに続く理由(操作者の言葉)だけ —— **書式は増えていない**ので、他の
+todo.txt の道具からは完了行 + context + ただの語として読める。
+理由は必須。理由の無い `drop` は `do` と読み分けられず、記録を同じだけ汚す。
 
 正の置き場は 2 つに分かれる。**ここで複製すると必ずドリフトするので、要点だけ:**
 
@@ -75,8 +82,9 @@ todo ready [TERM...]     # dep: が解けている open 行 = いま着手でき
 todo ls [TERM...]        # open を優先度順に。TERM は AND、-TERM で除外
 todo start ID            # @wip を付ける / todo stop ID で外す
 todo do ID...            # @wip を外して done.txt へ移す
+todo drop ID "理由"      # 前提が崩れた行を @dropped <理由> 付きで done.txt へ
 todo pri ID A            # 優先度を付ける / todo depri ID で外す
-todo replace ID "text"   # 本文を置き換える(id: と作成日と優先度は保持)
+todo replace ID "text"   # 本文を置き換える(id: と作成日と優先度は保持。前の行は stderr へ)
 todo append ID "text"    # 行末に足す / todo prepend ID "text" は本文の先頭へ
 todo listproj / listcon  # +project / @context の一覧
 todo projects            # +project ごとの件数を多い順に(done.txt も数える)
@@ -211,7 +219,8 @@ bash scripts/verify.sh                # pre-push と CI。この中からも走�
 作り方が違うから —— todo は `TODO_DIR` を渡し、adr と doctor は**カレントディレクトリ
 からの探索**で置き場を決めるので `cd` したサブシェルから呼ぶ。
 
-todo 側は `add` の採番・`do` の移動・`ready` の依存解決と決定の索引・`replace` の保持・
+todo 側は `add` の採番・`do` の移動・`drop` の印と理由(と理由を欠いた `drop` が
+落ちること)・`ready` の依存解決と決定の索引・`replace` の保持と前の行の出力・
 `check` の各検出・`projects` の集計に加え、**生成した `todo.txt` を todo.txt-cli の
 `todo.sh` に読ませる互換テスト**を含む(自分の検査だけでは自作自演になる)。
 `todo.sh` が無い環境ではそのテストだけ skip する。`TODO_SH` で場所を指定できる。
