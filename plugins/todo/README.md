@@ -24,6 +24,13 @@ CLI は `bin/todo`・`bin/adr`・`bin/doctor` の 3 本、skill は `todo` / `ad
 `id:` と `dep:` は、エージェントがタスクを指し・順序を判断するための最小の拡張。
 仕様の `key:value` の範囲内で、todo.sh から見ればただの語として素通りする。
 
+**タグ = 仕様どおりの `key:value` トークン**(key も value も非空でコロンを含まない)。
+何を持ち越し(`replace`)、何を書かせないか(`add` の関門)は、この 1 つの定義で決まる。
+`replace` はタグをまとめて持ち越すので、言い直しただけで `dep:` が外れることはない
+—— 外すには新しい本文で同じ key を上書きするか、`--drop <key>` で名指しする。
+逆に「その文字列を含むか」で関門を書かないこと: `id:` を含む散文まで追い返す
+(2026-09-10 に起票が 2 度弾かれた。末尾コロンのときと同じ形の誤り)。
+
 ## todo.txt の行の形
 
 ```
@@ -84,7 +91,9 @@ todo start ID            # @wip を付ける / todo stop ID で外す
 todo do ID...            # @wip を外して done.txt へ移す
 todo drop ID "理由"      # 前提が崩れた行を @dropped <理由> 付きで done.txt へ
 todo pri ID A            # 優先度を付ける / todo depri ID で外す
-todo replace ID "text"   # 本文を置き換える(id: と作成日と優先度は保持。前の行は stderr へ)
+todo dep ID DEPID...     # 依存を足す / todo undep ID DEPID... で名指しして外す
+todo replace ID "text"   # 本文を置き換える(作成日・優先度・key:value タグは保持。前の行は stderr へ)
+                         #   --drop KEY でタグを名指しして外す
 todo append ID "text"    # 行末に足す / todo prepend ID "text" は本文の先頭へ
 todo listproj / listcon  # +project / @context の一覧
 todo projects            # +project ごとの件数を多い順に(done.txt も数える)
@@ -234,7 +243,8 @@ bash scripts/verify.sh                # pre-push と CI。この中からも走�
 からの探索**で置き場を決めるので `cd` したサブシェルから呼ぶ。
 
 todo 側は `add` の採番・`do` の移動・`drop` の印と理由(と理由を欠いた `drop` が
-落ちること)・`ready` の依存解決と決定の索引・`replace` の保持と前の行の出力・
+落ちること)・`ready` の依存解決と決定の索引・`replace` のタグ保持と `--drop`・前の行の出力・
+`dep` / `undep` の足し外しと拒否(存在しない id・自己依存・循環)・
 `check` の各検出・`projects` の集計に加え、**生成した `todo.txt` を todo.txt-cli の
 `todo.sh` に読ませる互換テスト**を含む(自分の検査だけでは自作自演になる)。
 `todo.sh` が無い環境ではそのテストだけ skip する。`TODO_SH` で場所を指定できる。
