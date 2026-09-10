@@ -1,14 +1,14 @@
 #!/bin/sh
 # =============================================================================
-# adr — リポジトリの Architecture Decision Record を一覧し、検査する
+# adr — リポジトリの Architecture Decision Record を一覧し、検査し、採番する
 # =============================================================================
 # 書式の正は skills/adr/references/ADR-FORMAT.md(mattpocock/skills から逐語で
 # vendor。MIT)。このスクリプトは上流の書式をそのまま検査するだけで、独自の
 # 規則を足さない —— 足せば、上流を読んで書いた ADR が落ちる。
 #
-# コマンドは ls と check の 2 つだけ。ADR を**書く**のはエージェントの仕事で、
-# 雛形を吐く CLI は要らない(埋める欄があると、埋めるために創作が始まる)。
-# 番号を採るのも CLI の仕事にしない —— `ls` が最大値を見せれば足りる。
+# 本文を**書く**のはエージェントの仕事で、CLI は書かない(埋める欄があると、
+# 埋めるために創作が始まる)。CLI が持つのは、間違えると記録そのものが壊れる
+# 2 つの操作だけ: 採番(new)と、受理済み ADR に許された唯一の編集(supersede)。
 #
 # POSIX sh + awk のみ。bash 固有機能・python・jq に依存しない。
 # =============================================================================
@@ -16,6 +16,9 @@
 set -u
 
 PROG=adr
+
+# ADR_TODAY はテスト用の注入点。日付を跨いだ実行で結果が変わるテストを書けない。
+TODAY=${ADR_TODAY:-$(date +%Y-%m-%d)}
 
 EX_USAGE=1  # 引数・状態の誤り
 EX_FORMAT=2 # 検査で指摘があった
@@ -45,10 +48,24 @@ die() {
 
 usage() {
 	cat <<'EOF'
-usage: adr <command>      — Architecture Decision Record を一覧・検査する
+usage: adr <command>      — Architecture Decision Record を一覧・検査・採番する
 
-  ls        1 行 1 件で `<date> <slug> <status> <title>` を番号順に出す
-  check     書式を検査する。指摘があれば stdout に出して 2 で終わる
+  ls                       1 行 1 件で `<date> <slug> <status> <title>` を番号順に出す
+  check                    書式を検査する。指摘があれば stdout に出して 2 で終わる
+  new "<題>" [<slug>]      次の番号でファイルを作り、パスを出す。本文は書かない
+  supersede <古い> <新しい>  古い方の先頭に `Superseded by <slug>` を 1 行足す
+
+new が作るのは題と日付の 2 行だけ(本文は書き手が書く。埋める欄を作らない)。
+番号は既存の最大値 + 1 で、欠番は埋めない。置き場が無ければ docs/adr を作る。
+slug は題から作る —— 小文字にして a-z0-9 以外を - に畳む。題が非 ASCII を
+1 文字でも含むなら作らずに拒み、第 2 引数を求める(ASCII の断片だけを拾うと、
+改名できない slug が残るため)。**同じ番号のファイルや NNNN-<slug>.md でない
+名前が 1 つでもあれば new は書かない**(採番の当てにできないので)。
+
+supersede は古い方に 1 行足すだけで、整形も書き換えもしない。新しい方が実在し
+題を持つこと・古い方がまだ `Superseded by` を持たず先頭行が題であることを
+確かめ、一つでも欠ければ何も書かずに 1 で終わる。古い方・新しい方は番号
+(0004 / 4)でも slug でも指せる。
 
 ファイルの形 (正は skills/adr/references/ADR-FORMAT.md):
 
@@ -67,7 +84,8 @@ usage: adr <command>      — Architecture Decision Record を一覧・検査す
   Superseded by <slug>
               差し替えられた ADR の先頭行。**受理済み ADR への編集はこれだけ**。
               新しい決定は新しいファイルに書き、そこから古い方を名指しする。
-              この行があれば ls の status は superseded(Status: が優先)
+              この行があれば ls の status は superseded(Status: が優先)。
+              書くのは `adr supersede <古い> <新しい>`(手で足さない)
 
 check が見るもの:
   - ファイル名が NNNN-<小文字ケバブの slug>.md か
@@ -81,10 +99,11 @@ check が見るもの:
 decisions の順に最初に見つかったもの。どれも無ければ何もせず 0 で終わる。
 
 対話しない。データは stdout、診断は stderr。
+テスト用の注入点: ADR_TODAY(new が書く日付を固定)
 
 終了コード:
   0  成功(check は指摘なし)
-  1  引数・状態の誤り(usage)
+  1  引数・状態の誤り(usage、new / supersede の拒否)
   2  check が指摘を出した
 EOF
 }
@@ -116,6 +135,33 @@ adr_files() {
 slug_of() {
 	b=${1##*/}
 	printf '%s' "${b%.md}"
+}
+
+# ファイル名が NNNN-<小文字ケバブの slug>.md か。真(0)で「違反している」。
+# check の指摘と new の採番はこの 1 つの判定を共有する —— 2 つ持つと、check が
+# 通す名前で new が落ちる(あるいはその逆)。
+name_is_bad() { # name_is_bad <slug>
+	_num=${1%%-*}
+	_rest=${1#*-}
+	case $1 in
+	*-*) ;;
+	*) return 0 ;;
+	esac
+	case $_num in
+	[0-9][0-9][0-9][0-9]) ;;
+	*) return 0 ;;
+	esac
+	case $_rest in
+	'' | *[!a-z0-9-]* | -* | *- | *--*) return 0 ;;
+	esac
+	return 1
+}
+
+# 2 つ以上のファイルが持っている番号を 1 行 1 つ。無ければ何も出さない。
+dup_numbers() { # dup_numbers <ディレクトリ>
+	adr_files "$1" |
+		awk '{ sub(/.*\//, ""); if (match($0, /^[0-9]+-/)) print substr($0, 1, RLENGTH - 1) }' |
+		LC_ALL=C sort | uniq -d
 }
 
 # 先頭の数字列(= 番号)。無ければ空。
@@ -265,9 +311,7 @@ cmd_check() {
 	n=$(adr_files "$dir" | awk 'END { print NR + 0 }')
 
 	# 同じ番号を持つファイルの一覧(番号だけを見る。改名はしない)。
-	dupnums=$(adr_files "$dir" |
-		awk '{ sub(/.*\//, ""); if (match($0, /^[0-9]+-/)) print substr($0, 1, RLENGTH - 1) }' |
-		LC_ALL=C sort | uniq -d)
+	dupnums=$(dup_numbers "$dir")
 
 	# 指摘は一時ファイルへ書いてから読む。**`$( … )` の中に `case` を書かないこと**
 	# —— macOS の /bin/sh は bash 3.2 で、コマンド置換の中の `case` を
@@ -284,19 +328,8 @@ cmd_check() {
 			slug=$(slug_of "$f")
 			set_fields "$f"
 			num=${slug%%-*}
-			rest=${slug#*-}
 			badname=0
-			case $slug in
-			*-*) ;;
-			*) badname=1 ;;
-			esac
-			case $num in
-			[0-9][0-9][0-9][0-9]) ;;
-			*) badname=1 ;;
-			esac
-			case $rest in
-			'' | *[!a-z0-9-]* | -* | *- | *--*) badname=1 ;;
-			esac
+			name_is_bad "$slug" && badname=1
 			[ "$badname" -eq 0 ] || printf '✗ %s\n    %s\n' \
 				"ファイル名が NNNN-<小文字ケバブの slug>.md でない(例: 0003-use-manual-sql-instead-of-an-orm.md)" "$f"
 
@@ -333,6 +366,181 @@ cmd_check() {
 }
 
 # ---------------------------------------------------------------------------
+# new — 番号を採り、題と日付だけのファイルを作る
+# ---------------------------------------------------------------------------
+# 本文は書かない。書くと、埋めるために創作が始まる(README の方針)。CLI が持つ
+# のは、手でやると間違える部分 —— 採番と、ファイル名の形 —— だけ。
+
+# 題から slug を作る。作れなければ 1 で返す(呼び出し側が slug を要求する)。
+# 非 ASCII を 1 文字でも含む題からは作らない —— 実際の題は日本語で、ASCII の
+# 断片だけを拾うと "tls-1-3-1-2" のような slug が**改名できない**まま残る。
+slugify() { # slugify <題>
+	printf '%s' "$1" | LC_ALL=C awk '
+	{
+		s = $0
+		for (i = 1; i <= length(s); i++) {
+			c = substr(s, i, 1)
+			if (c < " " || c > "~") exit 1
+		}
+		s = tolower(s)
+		gsub(/[^a-z0-9]+/, "-", s)
+		sub(/^-+/, "", s); sub(/-+$/, "", s)
+		print s
+		exit (s == "" ? 1 : 0)
+	}'
+}
+
+# 既存の最大値 + 1 を 4 桁で。欠番は埋めない —— 番号は採ったら永久で、欠番を
+# 埋めると、退避されたファイル名や git の履歴が指す番号と食い違う。
+next_num() { # next_num <ディレクトリ>
+	adr_files "$1" | awk '
+	{ b = $0; sub(/.*\//, "", b)
+	  if (match(b, /^[0-9]+-/)) { n = substr(b, 1, RLENGTH - 1) + 0; if (n > max) max = n } }
+	END { printf "%04d\n", max + 1 }'
+}
+
+cmd_new() {
+	[ $# -ge 1 ] && [ $# -le 2 ] || die 'usage: adr new "<題>" [<slug>]'
+	title=$1
+	slug=${2:-}
+	[ -n "$title" ] || die '題が空。usage: adr new "<題>" [<slug>]'
+	case $title in
+	'#'*) die "題に '#' は付けない(見出しはこのコマンドが書く)" ;;
+	esac
+
+	# slug は置き場より先に決める —— 拒むときにディレクトリだけ作って帰らない。
+	if [ -z "$slug" ]; then
+		slug=$(slugify "$title") ||
+			die "題から slug を作れない(非 ASCII を含む)。slug を渡すこと: adr new \"$title\" <slug>"
+	fi
+	name_is_bad "0000-$slug" &&
+		die "slug '$slug' が小文字ケバブでない(a-z 0-9 と - のみ、- で始まらず終わらず重ねない)"
+
+	dir=$(adr_dir)
+	rc=$?
+	if [ "$rc" -eq "$EX_NODIR" ]; then
+		# 置き場は最初の 1 件を書くときに作る(ADR-FORMAT の "lazily")。
+		for c in $ADR_DIR_CANDIDATES; do
+			dir=$(adr_join_dir . "$c")
+			break
+		done
+		mkdir -p "$dir" || die "$dir を作れない"
+		printf '%s: %s を作った(最初の 1 件)\n' "$PROG" "$dir" >&2
+	else
+		[ "$rc" -eq 0 ] || exit "$rc" # die は既にメッセージを出している
+	fi
+
+	# 採番できる状態かを先に見る。判定は check と同じもの(name_is_bad /
+	# dup_numbers)を使い、指摘が 1 件でもあれば書かない —— 番号は採ったら
+	# 改名できないので、読めないファイル名の隣で max+1 を当てにしない。
+	dups=$(dup_numbers "$dir")
+	[ -z "$dups" ] ||
+		die "$dir に同じ番号のファイルがある($(printf '%s' "$dups" | tr '\n' ' '))。採番できないので書かない。adr check で見ること"
+	badnames=$(adr_files "$dir" | while IFS= read -r f; do
+		s=$(slug_of "$f")
+		if name_is_bad "$s"; then printf '%s ' "$f"; fi
+	done)
+	badnames=${badnames% }
+	[ -z "$badnames" ] ||
+		die "$dir にファイル名が NNNN-<slug>.md でないものがある($badnames)。採番できないので書かない。adr check で見ること"
+
+	num=$(next_num "$dir")
+	file=$dir/$num-$slug.md
+	[ -e "$file" ] && die "$file は既にある(上書きしない)"
+
+	tmp=$file.$$
+	printf '# %s\n\nDate: %s\n' "$title" "$TODAY" >"$tmp" || {
+		rm -f "$tmp"
+		die "$tmp を書けない"
+	}
+	mv "$tmp" "$file" || {
+		rm -f "$tmp"
+		die "$file を置けない"
+	}
+	printf '%s\n' "$file"
+}
+
+# ---------------------------------------------------------------------------
+# supersede — 受理済み ADR に許された唯一の編集を、両方そろって初めて書く
+# ---------------------------------------------------------------------------
+# 触るのは古い方の先頭に 1 行足すことだけ。整形も改行の詰め直しもしない。
+# 書式どおりに見えないファイルは、推測せずに拒む。
+
+# 番号(0004 / 4)でも slug でもファイル名でも引ける。
+# 0=1 件 / 1=見つからない / 2=複数に当たる(番号が重複している)。
+resolve_ref() { # resolve_ref <ディレクトリ> <参照>
+	adr_files "$1" | awk -v ref="$2" '
+	function numof(s) { if (match(s, /^[0-9]+-/)) return substr(s, 1, RLENGTH - 1) + 0; return -1 }
+	{
+		f = $0; b = f; sub(/.*\//, "", b); sub(/\.md$/, "", b)
+		hit = (b == ref) || (ref ~ /^[0-9]+$/ && numof(b) == ref + 0)
+		if (hit) { n++; out = out (n > 1 ? "\n" : "") f }
+	}
+	END {
+		if (n == 0) exit 1
+		print out
+		if (n > 1) exit 2
+	}'
+}
+
+cmd_supersede() {
+	[ $# -eq 2 ] || die 'usage: adr supersede <古い ADR> <新しい ADR>   (番号でも slug でもよい)'
+	oldref=${1##*/}
+	oldref=${oldref%.md}
+	newref=${2##*/}
+	newref=${newref%.md}
+
+	dir=$(adr_dir)
+	rc=$?
+	[ "$rc" -eq "$EX_NODIR" ] &&
+		die 'ADR ディレクトリが無い(docs/adr などを探した)。差し替えるものが無い'
+	[ "$rc" -eq 0 ] || exit "$rc" # die は既にメッセージを出している
+
+	oldf=$(resolve_ref "$dir" "$oldref")
+	rc=$?
+	[ "$rc" -eq 1 ] && die "古い方 '$oldref' が $dir に無い"
+	[ "$rc" -eq 2 ] && die "古い方 '$oldref' が複数に当たる($(printf '%s' "$oldf" | tr '\n' ' '))。slug で指すこと"
+	newf=$(resolve_ref "$dir" "$newref")
+	rc=$?
+	[ "$rc" -eq 1 ] && die "新しい方 '$newref' が $dir に無い。先に adr new で作ること"
+	[ "$rc" -eq 2 ] && die "新しい方 '$newref' が複数に当たる($(printf '%s' "$newf" | tr '\n' ' '))。slug で指すこと"
+	[ "$oldf" != "$newf" ] || die "同じ ADR を自分自身では差し替えられない($oldf)"
+
+	oldslug=$(slug_of "$oldf")
+	newslug=$(slug_of "$newf")
+	name_is_bad "$oldslug" && die "$oldf のファイル名が NNNN-<slug>.md でない。書式どおりでないので触らない"
+	name_is_bad "$newslug" && die "$newf のファイル名が NNNN-<slug>.md でない。指す先にできない"
+
+	# 新しい方が本当に ADR か(題があるか)を見てから、古い方を触る。
+	set_fields "$newf"
+	[ -n "$title" ] || die "$newf に題(1 行目の '# ...')が無い。指す先にできない"
+
+	set_fields "$oldf"
+	[ -z "$super" ] || die "$oldf は既に 'Superseded by $super' を持っている。受理済み ADR への編集はこの 1 行だけで、書き換えない"
+	[ -n "$title" ] || die "$oldf に題(1 行目の '# ...')が無い。書式どおりでないので触らない"
+	first=$(head -n 1 "$oldf")
+	case $first in
+	'# '* | '#	'*) ;;
+	*) die "$oldf の先頭行が題(# ...)でない。どこに足すか推測せずに拒む: $first" ;;
+	esac
+
+	tmp=$oldf.$$
+	{ printf 'Superseded by %s\n\n' "$newslug" && cat "$oldf"; } >"$tmp" || {
+		rm -f "$tmp"
+		die "$tmp を書けない"
+	}
+	mv "$tmp" "$oldf" || {
+		rm -f "$tmp"
+		die "$oldf を置き換えられない"
+	}
+	# 書いた行を、check と同じ読み手で読み返す(書き手と読み手をずらさない)。
+	set_fields "$oldf"
+	[ "$super" = "$newslug" ] ||
+		die "書いた 'Superseded by $newslug' を読み返せない($oldf を確認すること)"
+	printf '%s\n' "$oldf"
+}
+
+# ---------------------------------------------------------------------------
 [ $# -ge 1 ] || {
 	usage >&2
 	exit 2
@@ -342,6 +550,8 @@ shift
 case $cmd in
 ls | list) cmd_ls "$@" ;;
 check) cmd_check "$@" ;;
+new) cmd_new "$@" ;;
+supersede) cmd_supersede "$@" ;;
 help | -h | --help) usage ;;
 *)
 	printf '%s: 知らないコマンド: %s\n' "$PROG" "$cmd" >&2

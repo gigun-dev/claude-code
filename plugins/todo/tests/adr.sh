@@ -24,6 +24,9 @@ setup() {
 	rm -rf "$W"
 	mkdir -p "$W"
 	unset ADR_DIR
+	# new が書く日付を固定する —— 実日付のままだと日を跨いだ実行で落ちる。
+	ADR_TODAY=2026-09-10
+	export ADR_TODAY
 }
 
 t() { # t <name> <expected> <actual>
@@ -248,6 +251,161 @@ t "bin/adr は lib を読み込む" "1" \
 	"$(grep -c '\. "\$ADRLIB"' "$ADRBIN" | tr -d ' ')"
 t "bin/todo も同じ lib を読み込む" "1" \
 	"$(grep -c '\. "\$ADRLIB"' "$here/../bin/todo" | tr -d ' ')"
+
+# ---------------------------------------------------------------------------
+# new — 採番と、採番できないときの拒否
+# ---------------------------------------------------------------------------
+setup new_first
+t "置き場が無ければ docs/adr を作って 0001 を採る" "docs/adr/0001-pick-postgres.md" \
+	"$(adr new "Pick Postgres" 2>/dev/null)"
+t "new が書くのは題と日付の 2 行だけ(本文は書かない)" "# Pick Postgres
+
+Date: 2026-09-10" "$(cat "$W/docs/adr/0001-pick-postgres.md")"
+t "new が書いたファイルは check を通る" "check: 問題なし (1 件)" "$(adr check)"
+
+setup new_first_stderr
+t "置き場を作ったことは stderr に言う(stdout はパスだけ)" "1" \
+	"$(adr new "Pick Postgres" 2>&1 >/dev/null | grep -c 'docs/adr を作った')"
+
+setup new_number
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-01'
+write docs/adr/0007-b.md '# B' '' 'Date: 2026-09-02'
+t "採番は最大値 + 1(欠番は埋めない)" "docs/adr/0008-adopt-a-monorepo.md" \
+	"$(adr new "Adopt a monorepo")"
+
+setup new_slug
+t "slug は小文字にして a-z0-9 以外を - に畳む" "docs/adr/0001-use-manual-sql-not-an-orm.md" \
+	"$(adr new "Use manual SQL: NOT an ORM!" 2>/dev/null)"
+t "先頭と末尾の - は落ちる" "docs/adr/0002-trim-me.md" "$(adr new "  (trim me)  ")"
+
+# 題は日本語で、slug は手で書いた英語 —— それが実際の書かれ方。ASCII の断片
+# だけを拾うと、改名できない slug が残る。
+setup new_nonascii
+out=$(adr new "探索は TLS 1.3、送信フローは 1.2 に分ける" 2>&1)
+rc=$?
+t "非 ASCII の題からは slug を作らず 1 で拒む" "1" "$rc"
+t "拒否は slug を渡せと言う" "1" "$(printf '%s\n' "$out" | grep -c 'slug を渡すこと')"
+t "拒まれた new は置き場すら作らない" "1" \
+	"$(test -d "$W/docs/adr"; echo $?)"
+t "slug を渡せば日本語の題で書ける" "docs/adr/0001-split-tls-version-by-role.md" \
+	"$(adr new "探索は TLS 1.3、送信フローは 1.2 に分ける" split-tls-version-by-role 2>/dev/null)"
+t "題は本文にそのまま入る" "# 探索は TLS 1.3、送信フローは 1.2 に分ける" \
+	"$(head -1 "$W/docs/adr/0001-split-tls-version-by-role.md")"
+
+setup new_badslug
+t "渡された slug が小文字ケバブでなければ 1 で拒む" "1" \
+	"$(adr new "A title" Bad_Slug >/dev/null 2>&1; echo $?)"
+t "空の題は 1 で拒む" "1" "$(adr new "" >/dev/null 2>&1; echo $?)"
+t "題に # を付けたら 1 で拒む(見出しは new が書く)" "1" \
+	"$(adr new "# A title" >/dev/null 2>&1; echo $?)"
+
+# 採番の当てにできない状態では書かない。判定は check と同じもの。
+setup new_dupnum
+write docs/adr/0001-first.md '# First' '' 'Date: 2026-09-01'
+write docs/adr/0001-second.md '# Second' '' 'Date: 2026-09-02'
+out=$(adr new "Next one" 2>&1)
+rc=$?
+t "同じ番号のファイルがあれば new は 1 で拒む" "1" "$rc"
+t "拒否は check を見ろと言う" "1" "$(printf '%s\n' "$out" | grep -c 'adr check')"
+t "拒まれた new はファイルを増やさない" "2" \
+	"$(ls "$W/docs/adr" | wc -l | tr -d ' ')"
+
+setup new_badname
+write docs/adr/notes.md '# Notes' '' 'Date: 2026-09-01'
+t "NNNN-<slug>.md でない名前があれば new は 1 で拒む" "1" \
+	"$(adr new "Next one" >/dev/null 2>&1; echo $?)"
+t "拒まれた new はファイルを増やさない" "1" "$(ls "$W/docs/adr" | wc -l | tr -d ' ')"
+
+setup new_adrdir
+write records/0003-a.md '# A' '' 'Date: 2026-09-01'
+export ADR_DIR=records
+t "ADR_DIR があればそこに採る" "records/0004-b.md" "$(adr new "B")"
+export ADR_DIR=nosuchdir
+t "ADR_DIR が実在しなければ作らずに 1 で落ちる" "1" \
+	"$(adr new "C" >/dev/null 2>&1; echo $?)"
+unset ADR_DIR
+
+# ---------------------------------------------------------------------------
+# supersede — 受理済み ADR に許された唯一の編集。両方そろって初めて書く
+# ---------------------------------------------------------------------------
+setup supersede_ok
+write docs/adr/0001-old.md '# Old' '' 'Date: 2026-09-01' '' '本文はそのまま残ること。'
+write docs/adr/0002-new.md '# New' '' 'Date: 2026-09-02'
+t "supersede は書き換えたファイルのパスを出す" "docs/adr/0001-old.md" "$(adr supersede 1 2)"
+t "先頭に 1 行足すだけで、元の中身は 1 バイトも変わらない" "Superseded by 0002-new
+
+# Old
+
+Date: 2026-09-01
+
+本文はそのまま残ること。" "$(cat "$W/docs/adr/0001-old.md")"
+t "supersede の後も check は通る" "check: 問題なし (2 件)" "$(adr check)"
+t "ls の status が superseded になる" "superseded" \
+	"$(adr ls | awk '$2 ~ /0001/ { print $3 }')"
+t "新しい方は触らない" "# New
+
+Date: 2026-09-02" "$(cat "$W/docs/adr/0002-new.md")"
+
+setup supersede_ref
+write docs/adr/0001-old.md '# Old' '' 'Date: 2026-09-01'
+write docs/adr/0002-new.md '# New' '' 'Date: 2026-09-02'
+t "slug でも指せる" "docs/adr/0001-old.md" "$(adr supersede 0001-old 0002-new)"
+
+setup supersede_twice
+write docs/adr/0001-old.md 'Superseded by 0002-new' '' '# Old' '' 'Date: 2026-09-01'
+write docs/adr/0002-new.md '# New' '' 'Date: 2026-09-02'
+write docs/adr/0003-newer.md '# Newer' '' 'Date: 2026-09-03'
+before=$(cat "$W/docs/adr/0001-old.md")
+out=$(adr supersede 1 3 2>&1)
+rc=$?
+t "既に Superseded by を持つ ADR は 1 で拒む" "1" "$rc"
+t "拒否は既に指している先を名指しする" "1" \
+	"$(printf '%s\n' "$out" | grep -c "既に 'Superseded by 0002-new' を持っている")"
+t "拒まれた supersede は古い方を変えない" "$before" "$(cat "$W/docs/adr/0001-old.md")"
+
+setup supersede_missing
+write docs/adr/0001-old.md '# Old' '' 'Date: 2026-09-01'
+before=$(cat "$W/docs/adr/0001-old.md")
+out=$(adr supersede 1 0099-nonexistent 2>&1)
+rc=$?
+t "指す先が実在しなければ 1 で拒む" "1" "$rc"
+t "拒否は先に new しろと言う" "1" "$(printf '%s\n' "$out" | grep -c 'adr new で作ること')"
+t "拒まれた supersede は古い方に何も書かない" "$before" "$(cat "$W/docs/adr/0001-old.md")"
+t "古い方が実在しなければ 1 で拒む" "1" \
+	"$(adr supersede 0099 1 >/dev/null 2>&1; echo $?)"
+t "自分自身では差し替えられない" "1" "$(adr supersede 1 1 >/dev/null 2>&1; echo $?)"
+
+setup supersede_ambiguous
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-01'
+write docs/adr/0001-b.md '# B' '' 'Date: 2026-09-02'
+write docs/adr/0002-new.md '# New' '' 'Date: 2026-09-03'
+t "番号が重複していれば、どちらか決められないので 1 で拒む" "1" \
+	"$(adr supersede 1 2 >/dev/null 2>&1; echo $?)"
+
+# 書式どおりに見えないファイルには、どこに足すかを推測せずに触らない
+# (frontmatter の前に足すと frontmatter ごと壊れる)。
+setup supersede_shape
+write docs/adr/0001-frontmatter.md '---' 'status: accepted' '---' '' '# Old' '' 'Date: 2026-09-01'
+write docs/adr/0002-new.md '# New' '' 'Date: 2026-09-02'
+before=$(cat "$W/docs/adr/0001-frontmatter.md")
+out=$(adr supersede 1 2 2>&1)
+rc=$?
+t "先頭行が題でなければ 1 で拒む" "1" "$rc"
+t "拒否は推測しないと言う" "1" "$(printf '%s\n' "$out" | grep -c '推測せずに拒む')"
+t "拒まれた supersede はファイルを変えない" "$before" "$(cat "$W/docs/adr/0001-frontmatter.md")"
+
+setup supersede_notitle
+write docs/adr/0001-old.md '# Old' '' 'Date: 2026-09-01'
+write docs/adr/0002-no-title.md 'Date: 2026-09-02' '' '題が無い。'
+before=$(cat "$W/docs/adr/0001-old.md")
+t "題の無い ADR は指す先にできない" "1" "$(adr supersede 1 2 >/dev/null 2>&1; echo $?)"
+t "そのとき古い方は変えない" "$before" "$(cat "$W/docs/adr/0001-old.md")"
+
+setup supersede_usage
+write docs/adr/0001-old.md '# Old' '' 'Date: 2026-09-01'
+t "引数が 2 つでなければ 1" "1" "$(adr supersede 1 >/dev/null 2>&1; echo $?)"
+t "ADR ディレクトリが無ければ supersede は 1" "1" \
+	"$(cd "$workroot" && "$ADRBIN" supersede 1 2 >/dev/null 2>&1; echo $?)"
 
 # ---------------------------------------------------------------------------
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
