@@ -440,6 +440,7 @@ cmd_new() {
 		s=$(slug_of "$f")
 		if name_is_bad "$s"; then printf '%s ' "$f"; fi
 	done)
+	badnames=${badnames% }
 	[ -z "$badnames" ] ||
 		die "$dir にファイル名が NNNN-<slug>.md でないものがある($badnames)。採番できないので書かない。adr check で見ること"
 
