@@ -156,15 +156,25 @@ t "宙吊り dep の行は ready に出ない" "2026-09-09 free id:0002" \
 # ---------------------------------------------------------------------------
 setup replace
 todo add "(C) old body +proj" >/dev/null
-todo replace 1 "new body @ctx" >/dev/null
+todo replace 1 "new body @ctx" >/dev/null 2>&1
 t "replace は id・作成日・優先度を保持する" \
 	"(C) 2026-09-09 new body @ctx id:0001" "$(todo show 1)"
-todo replace 1 "(A) reprioritised" >/dev/null
+todo replace 1 "(A) reprioritised" >/dev/null 2>&1
 t "replace の本文が (A) で始まればそれを優先度に採る" \
 	"(A) 2026-09-09 reprioritised id:0001" "$(todo show 1)"
 todo prepend 1 "URGENT" >/dev/null
 t "prepend は優先度と作成日の後ろに入れる" \
 	"(A) 2026-09-09 URGENT reprioritised id:0001" "$(todo show 1)"
+
+# replace は前の言い方を消す。書式は増やさない代わりに、消す前の行を stderr へ
+# 出して転記の口を開けておく —— コミットされる前に書き換えると誰も復元できない。
+setup replace_prev
+todo add "old framing +proj" >/dev/null
+t "replace は消す前の行を stderr に出す" \
+	"todo: replace 前: 2026-09-09 old framing +proj id:0001" \
+	"$(todo replace 1 "new framing +proj" 2>&1 >/dev/null)"
+t "stdout に出るのは新しい行だけ" "2026-09-09 new framing +proj id:0001" \
+	"$(todo replace 1 "new framing +proj" 2>/dev/null)"
 
 # ---------------------------------------------------------------------------
 # pri / depri / append
@@ -325,6 +335,76 @@ setup check_keyvalue_ok
 printf '2026-09-09 one id:0001 see:docs/x.md due:2026-09-30\n' >"$TODO_DIR/todo.txt"
 t "リポジトリ相対パスの see: は通る" "0" "$(todo check >/dev/null 2>&1; echo $?)"
 
+# 仕様は key も value も**非空**の非空白文字列と定める(references/todo-txt-format.md
+# の "Both `key` and `value` must consist of non-whitespace characters, which are not
+# colons.")。末尾のコロンは value が空 = key:value ではない = 散文。
+setup check_keyvalue_trailing
+t "末尾がコロンの語は散文として add できる" \
+	"2026-09-09 原因ではない: 焼き直すと解けた id:0001" \
+	"$(todo add "原因ではない: 焼き直すと解けた")"
+t "コロン 1 つの key:value は今までどおり通る" \
+	"2026-09-09 比 1:2 を測る id:0002" "$(todo add "比 1:2 を測る")"
+t "末尾コロンの行を check は咎めない" "0" "$(todo check >/dev/null 2>&1; echo $?)"
+t "コロン 2 つ(URL)は今までどおり 2 で拒む" "2" \
+	"$(todo add "参照 see:https://example.com" >/dev/null 2>&1; echo $?)"
+t "コロン 2 つが隣り合っていても拒む" "2" \
+	"$(todo add "二重 a::b" >/dev/null 2>&1; echo $?)"
+t "末尾コロンでもコロンが 2 つあれば拒む" "2" \
+	"$(todo add "だめ a:b:" >/dev/null 2>&1; echo $?)"
+t "拒まれた add は行を増やさない" "2" "$(wc -l <"$TODO_DIR/todo.txt" | tr -d ' ')"
+t "手で書いた末尾コロンの行も check は通る" "0" \
+	"$(printf '2026-09-09 理由: あとで書く id:0003\n' >>"$TODO_DIR/todo.txt"; todo check >/dev/null 2>&1; echo $?)"
+
+# ---------------------------------------------------------------------------
+# drop — 前提が崩れた行を閉じる(`do` と読み分けられること)
+# ---------------------------------------------------------------------------
+setup drop
+todo add "-DFOO と -DBAR を A/B する +upload @device" >/dev/null
+todo add "普通に終わる仕事" >/dev/null
+todo start 1 >/dev/null
+t "drop は done.txt へ @dropped <理由> 付きで移す" \
+	"x 2026-09-09 2026-09-09 -DFOO と -DBAR を A/B する +upload @device id:0001 @dropped 測る段では両者の生成コードが同一だった" \
+	"$(todo drop 1 "測る段では両者の生成コードが同一だった")"
+t "drop した行は todo.txt から消える" "2026-09-09 普通に終わる仕事 id:0002" \
+	"$(cat "$TODO_DIR/todo.txt")"
+todo do 2 >/dev/null
+t "do は @dropped を付けない(done.txt で読み分けられる)" "1" \
+	"$(grep -c '@dropped' "$TODO_DIR/done.txt")"
+t "show は drop した行を見つける" "1" "$(todo show 1 | grep -c '@dropped')"
+t "drop した行は ready に出ない" "" "$(todo ready 2>/dev/null)"
+t "drop した行は ls に出ない" "" "$(todo ls 2>/dev/null)"
+t "drop した done.txt は check を通る" "0" "$(todo check >/dev/null 2>&1; echo $?)"
+t "二度目の drop は何もしない(冪等)" "0" \
+	"$(todo drop 1 "もう一度" >/dev/null 2>&1; echo $?)"
+t "二度目の drop は done.txt を増やさない" "2" \
+	"$(wc -l <"$TODO_DIR/done.txt" | tr -d ' ')"
+
+setup drop_reason
+todo add "前提の怪しい仕事" >/dev/null
+t "理由の無い drop は 1 で落ちる(理由が無ければ do と変わらない)" "1" \
+	"$(todo drop 1 >/dev/null 2>&1; echo $?)"
+t "落ちた drop は todo.txt を変えない" "2026-09-09 前提の怪しい仕事 id:0001" \
+	"$(cat "$TODO_DIR/todo.txt")"
+t "空の理由も 1 で落ちる" "1" "$(todo drop 1 "  " >/dev/null 2>&1; echo $?)"
+t "存在しない id の drop は 3" "3" "$(todo drop 9 "理由" >/dev/null 2>&1; echo $?)"
+t "理由に URL を書けば関門が 2 で止める" "2" \
+	"$(todo drop 1 "根拠 see:https://example.com" >/dev/null 2>&1; echo $?)"
+t "止まった drop は todo.txt を変えない" "2026-09-09 前提の怪しい仕事 id:0001" \
+	"$(cat "$TODO_DIR/todo.txt")"
+t "理由に末尾コロンの散文は書ける" \
+	"x 2026-09-09 2026-09-09 前提の怪しい仕事 id:0001 @dropped 原因ではない: 別の板でも出た" \
+	"$(todo drop 1 "原因ではない: 別の板でも出た")"
+
+# drop も done.txt へ入る = dep: を解決する。依存していた行は ready に出てくる
+# —— 前提が消えたなら、その先も見直せるように人の目の前へ戻す方が良い。
+setup drop_dep
+todo add "前提の怪しい仕事" >/dev/null
+todo add "その結果を使う仕事 dep:0001" >/dev/null
+t "drop 前は依存側が ready に出ない" "2026-09-09 前提の怪しい仕事 id:0001" "$(todo ready)"
+todo drop 1 "比較する対象が存在しなかった" >/dev/null
+t "drop した行は dep: を解決する" "2026-09-09 その結果を使う仕事 dep:0001 id:0002" \
+	"$(todo ready)"
+
 # ---------------------------------------------------------------------------
 # id — 手で足した行を CLI の操作対象へ引き上げる
 # ---------------------------------------------------------------------------
@@ -377,6 +457,23 @@ if [ -x "$todosh" ]; then
 		"$("$todosh" -d "$cfg" -p listproj 2>&1 | grep -c '^+web$')"
 	t "todo.sh が done.txt を読める" "1" \
 		"$("$todosh" -d "$cfg" -p listfile done.txt 2>&1 | grep -c 'gamma id:0003')"
+
+	# drop が足すのは context 1 つと行末の散文だけ。独立した実装から見て
+	# 完了行のままであること(= 書式を増やしていないこと)を確かめる。
+	setup compat_drop
+	todo add "premise task +web" >/dev/null
+	todo drop 1 "比較する対象が存在しなかった" >/dev/null
+	cfg="$TODO_DIR/todo.cfg"
+	{
+		printf 'export TODO_DIR="%s"\n' "$TODO_DIR"
+		printf 'export TODO_FILE="$TODO_DIR/todo.txt"\n'
+		printf 'export DONE_FILE="$TODO_DIR/done.txt"\n'
+		printf 'export REPORT_FILE="$TODO_DIR/report.txt"\n'
+	} >"$cfg"
+	t "todo.sh は drop した行を done.txt の完了行として読む" "1" \
+		"$("$todosh" -d "$cfg" -p listfile done.txt 2>&1 | grep -c 'premise task +web id:0001 @dropped')"
+	t "todo.sh は @dropped を context として認識する" "1" \
+		"$("$todosh" -d "$cfg" -p listfile done.txt @dropped 2>&1 | grep -c 'premise task')"
 else
 	printf 'skip: 互換テスト — todo.sh が無い (%s)\n' "$todosh"
 fi

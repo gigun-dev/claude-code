@@ -72,9 +72,12 @@ usage: todo <command> [args]      — リポジトリのタスクを todo.txt �
   start ID...          @wip を付ける(着手した)。既に付いていれば何もしない
   stop ID...           @wip を外す(未完のまま置いた)。無ければ何もしない
   do ID...             @wip を外して done.txt へ移す。既に done なら何もしない
+  drop ID "理由"       前提が崩れた行を閉じる。done.txt へ @dropped <理由> 付きで移す
+                       (やったのではない。理由は必須)
   pri ID PRIORITY      優先度 (A-Z) を付ける/差し替える
   depri ID...          優先度を外す
   replace ID "TEXT"    本文を置き換える(id:・作成日・優先度は保持)
+                       消す前の行を stderr に出す(残したい経緯はそこから拾う)
   append ID "TEXT"     行末に足す
   prepend ID "TEXT"    本文の先頭に足す(優先度と作成日の後ろ)
   check                形式検査。違反があれば stdout に出して 2 で終わる
@@ -84,14 +87,17 @@ usage: todo <command> [args]      — リポジトリのタスクを todo.txt �
 
   (A) 2026-09-10 本文 +project @context dep:0001 see:docs/x.md id:0002
   x 2026-09-10 2026-09-08 完了した本文 id:0001              ← done.txt
+  x 2026-09-10 2026-09-08 閉じた本文 id:0003 @dropped 前提が消えた理由  ← drop
 
   (A)..(Z)   任意・先頭のみ。重要度(進行中を表さない —— それは @wip)
   2026-09-10 作成日。任意(add は必ず付ける)。優先度があればその後ろ
   +project   束ね。行にはその次の一手だけを書く
-  @context   要る状況(@device @user)。@wip は進行中の印
+  @context   要る状況(@device @user)。@wip は進行中の印、@dropped は drop の印
   id:NNNN    add が採番する連番(4 桁ゼロ詰め)。タスクを指す唯一の手段
   dep:N,M    依存。指す先が done.txt に入るまで ready に出ない
   key:value  自由。key も value も空白とコロンを含めない(URL は書けない)
+             末尾のコロンは value が空 = key:value ではないので散文として通る
+             (「原因ではない: …」は書ける。see:https://… は 2 つ目のコロンで落ちる)
 
 ID は id: の値。ゼロ詰めは付けても付けなくてよい (todo do 12 = todo do 0012)。
 数値としての完全一致のみ —— 3 は 30 に当たらない。
@@ -172,6 +178,12 @@ function hastag(s, tag) { return index(" " s " ", " " tag " ") > 0 }
 # 数字でないもの(手書きの英字 id)は文字列のまま。接頭辞で名前空間を分けるのは、
 # "#12" と "$12" のような衝突を避けるため。
 function idkey(v) { return (v ~ /^[0-9]+$/) ? "#" (v + 0) : "$" v }
+# トークンの中のコロンの数。
+function colons(s,   n) { n = gsub(/:/, ":", s); return n }
+# そのトークンは key:value のつもりか。仕様は key も value も**非空**の非空白文字
+# 列と定めているので、末尾のコロンは value が空 = key:value ではない = ただの散文。
+# 日本語で理由を書くと「原因ではない: 焼き直すと解けた」の形が自然に出る。
+function iskv(s) { return colons(s) > 0 && !(colons(s) == 1 && substr(s, length(s), 1) == ":") }
 '
 
 # 空行を落として open 行を出す。ファイルが無ければ何も出さない。
@@ -373,6 +385,28 @@ show_ids() {
 
 cmd_do() {
 	[ $# -ge 1 ] || die "usage: todo do ID...   (例: todo do 3)"
+	settle '' "$@"
+}
+
+# 前提が崩れた行を閉じる。`do`(やった)と読み分けられる必要があるので、
+# 完了行に `@dropped <理由>` を足す —— 印は context ひとつ、理由は行末の散文で、
+# どちらも todo.txt の仕様の内側にある(新しい書式を足していない。他の
+# todo.txt クライアントからは context + ただの語として読める)。
+#
+# 理由を必須にしているのが要点。理由の無い drop は `do` と区別がつかず、
+# 「終わった」と嘘をつくのと同じだけ記録を汚す。
+DROPTAG='@dropped'
+cmd_drop() {
+	[ $# -eq 2 ] || die "usage: todo drop ID \"理由\"   (例: todo drop 3 \"焼き直したら再現しなくなった\")"
+	check_text "$2"
+	reason=$(printf '%s' "$2" | awk "$AWKLIB"'{ print trim($0) }')
+	settle " $DROPTAG $reason" "$1"
+}
+
+# do / drop の共通部分。$1 は完了行の末尾に足す文字列(do は空)。
+settle() {
+	suffix=$1
+	shift
 	resolve_open_set 0 "$@" || exit $?
 	ids=$set_out
 
@@ -393,10 +427,10 @@ cmd_do() {
 	# 同じく落とす(残したければ pri:A を自分で書く)。id: は残す —— 後続の dep: が
 	# 「その id は done にあるか」で解決するので、消すと ready が壊れる。
 	# @wip は進行中の印なので、完了と同時に落とす。
-	open_lines | awk -v ids="$ids" -v today="$TODAY" -v dfile="$tmp_done" "$AWKLIB"'
+	open_lines | awk -v ids="$ids" -v today="$TODAY" -v dfile="$tmp_done" -v suffix="$suffix" "$AWKLIB"'
 		{
 			id = lineid($0)
-			if (id != "" && index(ids, "," id ",") > 0) print "x " today " " stripwip(stripri($0)) >> dfile
+			if (id != "" && index(ids, "," id ",") > 0) print "x " today " " stripwip(stripri($0)) suffix >> dfile
 			else print
 		}' >"$tmp_todo" || {
 		rm -f "$tmp_todo" "$tmp_done"
@@ -408,7 +442,7 @@ cmd_do() {
 	# 2 ファイルを同時に変えるので、関門にも 2 ファイルの候補を渡す。
 	tmp_full="$DONE_FILE.full.$$"
 	cat "$DONE_FILE" "$tmp_done" >"$tmp_full" || die "$DONE_FILE を組み立てられない"
-	gate_write "$tmp_todo" "$tmp_full" do || {
+	gate_write "$tmp_todo" "$tmp_full" "$OPNAME" || {
 		rm -f "$tmp_todo" "$tmp_done" "$tmp_full"
 		exit "$EX_FORMAT"
 	}
@@ -474,6 +508,11 @@ cmd_replace() {
 	check_text "$2"
 	resolve_open_set 1 "$1" || exit $?
 	text=$(printf '%s' "$2" | awk "$AWKLIB"'{ print trim($0) }')
+	# 消す前の行を stderr へ出す。書式は増やさない —— 前の言い方の置き場は
+	# コミットメッセージと docs で、todo.txt ではない。ただし黙って消すと、
+	# コミットされる前の言い方は誰も復元できない(2026-09-10 に 3 行で起きた)。
+	# 転記の口を 1 つ開けておけば、必要なら書き手がそこから拾える。
+	printf '%s: replace 前: %s\n' "$PROG" "$(find_open "$resolved")" >&2
 	# 新しい本文が (A) で始まっていたらそれを優先度として採る。無ければ元の優先度を
 	# 保つ —— replace は「本文の置き換え」であって、優先度と作成日と id は本文ではない。
 	rewrite_todo awk -v want="$resolved" -v text="$text" "$AWKLIB"'
@@ -703,12 +742,13 @@ run_check() {
 			}
 
 			# --- key:value ------------------------------------------------
-			# 仕様: key も value も空白とコロンを含まない。空白はトークン分割で
-			# 構造上入りようがないので、実質「1 トークンにコロンは 1 つまで」。
-			# これに引っかかる代表例が see:https://... —— URL は書けない。
+			# 仕様: key も value も**非空**の、空白とコロンを含まない文字列。
+			# 空白はトークン分割で構造上入りようがないので、実質「1 トークンに
+			# コロンは 1 つまで」。これに引っかかる代表例が see:https://... ——
+			# URL は書けない。末尾のコロン(値が空)は key:value ではないので散文。
 			nk = split(line, kv, /[ \t]+/)
 			for (ki = 1; ki <= nk; ki++) {
-				if (index(kv[ki], ":") == 0) continue
+				if (!iskv(kv[ki])) continue
 				if (kv[ki] !~ /^[^: \t]+:[^: \t]+$/)
 					err("key:value の形式違反 (" kv[ki] ") —— key も value もコロンを含めない", line)
 			}
@@ -815,6 +855,7 @@ shift
 case $cmd in
 add | a) cmd_add "$@" ;;
 do) cmd_do "$@" ;;
+drop) cmd_drop "$@" ;;
 start) cmd_start "$@" ;;
 stop) cmd_stop "$@" ;;
 pri | p) cmd_pri "$@" ;;
