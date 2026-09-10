@@ -92,6 +92,8 @@ usage: todo <command> [args]      — リポジトリのタスクを todo.txt �
   id:NNNN    add が採番する連番(4 桁ゼロ詰め)。タスクを指す唯一の手段
   dep:N,M    依存。指す先が done.txt に入るまで ready に出ない
   key:value  自由。key も value も空白とコロンを含めない(URL は書けない)
+             末尾のコロンは value が空 = key:value ではないので散文として通る
+             (「原因ではない: …」は書ける。see:https://… は 2 つ目のコロンで落ちる)
 
 ID は id: の値。ゼロ詰めは付けても付けなくてよい (todo do 12 = todo do 0012)。
 数値としての完全一致のみ —— 3 は 30 に当たらない。
@@ -172,6 +174,12 @@ function hastag(s, tag) { return index(" " s " ", " " tag " ") > 0 }
 # 数字でないもの(手書きの英字 id)は文字列のまま。接頭辞で名前空間を分けるのは、
 # "#12" と "$12" のような衝突を避けるため。
 function idkey(v) { return (v ~ /^[0-9]+$/) ? "#" (v + 0) : "$" v }
+# トークンの中のコロンの数。
+function colons(s,   n) { n = gsub(/:/, ":", s); return n }
+# そのトークンは key:value のつもりか。仕様は key も value も**非空**の非空白文字
+# 列と定めているので、末尾のコロンは value が空 = key:value ではない = ただの散文。
+# 日本語で理由を書くと「原因ではない: 焼き直すと解けた」の形が自然に出る。
+function iskv(s) { return colons(s) > 0 && !(colons(s) == 1 && substr(s, length(s), 1) == ":") }
 '
 
 # 空行を落として open 行を出す。ファイルが無ければ何も出さない。
@@ -703,12 +711,13 @@ run_check() {
 			}
 
 			# --- key:value ------------------------------------------------
-			# 仕様: key も value も空白とコロンを含まない。空白はトークン分割で
-			# 構造上入りようがないので、実質「1 トークンにコロンは 1 つまで」。
-			# これに引っかかる代表例が see:https://... —— URL は書けない。
+			# 仕様: key も value も**非空**の、空白とコロンを含まない文字列。
+			# 空白はトークン分割で構造上入りようがないので、実質「1 トークンに
+			# コロンは 1 つまで」。これに引っかかる代表例が see:https://... ——
+			# URL は書けない。末尾のコロン(値が空)は key:value ではないので散文。
 			nk = split(line, kv, /[ \t]+/)
 			for (ki = 1; ki <= nk; ki++) {
-				if (index(kv[ki], ":") == 0) continue
+				if (!iskv(kv[ki])) continue
 				if (kv[ki] !~ /^[^: \t]+:[^: \t]+$/)
 					err("key:value の形式違反 (" kv[ki] ") —— key も value もコロンを含めない", line)
 			}
