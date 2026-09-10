@@ -76,8 +76,11 @@ usage: todo <command> [args]      — リポジトリのタスクを todo.txt �
                        (やったのではない。理由は必須)
   pri ID PRIORITY      優先度 (A-Z) を付ける/差し替える
   depri ID...          優先度を外す
-  replace ID "TEXT"    本文を置き換える(id:・作成日・優先度は保持)
+  dep ID DEPID...      dep: を足す(id: の手前へ。既にあるものは重ねない)
+  undep ID DEPID...    dep: から名指しした値を外す(まとめて外す指定は無い)
+  replace ID "TEXT"    本文を置き換える(作成日・優先度・key:value タグは保持)
                        消す前の行を stderr に出す(残したい経緯はそこから拾う)
+    --drop KEY[,KEY]   保持せず外す key を名指しする(その行に無い KEY は誤り)
   append ID "TEXT"     行末に足す
   prepend ID "TEXT"    本文の先頭に足す(優先度と作成日の後ろ)
   check                形式検査。違反があれば stdout に出して 2 で終わる
@@ -94,10 +97,12 @@ usage: todo <command> [args]      — リポジトリのタスクを todo.txt �
   +project   束ね。行にはその次の一手だけを書く
   @context   要る状況(@device @user)。@wip は進行中の印、@dropped は drop の印
   id:NNNN    add が採番する連番(4 桁ゼロ詰め)。タスクを指す唯一の手段
-  dep:N,M    依存。指す先が done.txt に入るまで ready に出ない
+             TEXT に書けるのは散文としての "id:" まで。id:0001 の形は add が拒む
+  dep:N,M    依存。指す先が done.txt に入るまで ready に出ない。dep / undep で足し外し
   key:value  自由。key も value も空白とコロンを含めない(URL は書けない)
              末尾のコロンは value が空 = key:value ではないので散文として通る
              (「原因ではない: …」は書ける。see:https://… は 2 つ目のコロンで落ちる)
+             この形のトークンだけが「タグ」で、replace はまとめて持ち越す
 
 ID は id: の値。ゼロ詰めは付けても付けなくてよい (todo do 12 = todo do 0012)。
 数値としての完全一致のみ —— 3 は 30 に当たらない。
@@ -119,16 +124,20 @@ EOF
 # ---------------------------------------------------------------------------
 AWKLIB='
 function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+# CLI が id として読むトークンはこれだけ。**文字列 "id:" の有無ではない** ——
+# 記法そのものを書いた散文(「保持は id:・作成日・優先度だけ」)は id ではないので、
+# 読む側も書く側も(check_text の関門も)この 1 つの述語を使う。
+function isidtag(s) { return s ~ /^id:[0-9A-Za-z]+$/ }
 # 行から id:N の N を返す(無ければ "")。複数あれば最後のものを返す —— check が
 # 別途「id が複数」を見るので、ここでは黙って 1 つに決める。
 function lineid(s,   n, a, i, r) {
 	n = split(s, a, /[ \t]+/); r = ""
-	for (i = 1; i <= n; i++) if (a[i] ~ /^id:[0-9A-Za-z]+$/) r = substr(a[i], 4)
+	for (i = 1; i <= n; i++) if (isidtag(a[i])) r = substr(a[i], 4)
 	return r
 }
 function idcount(s,   n, a, i, c) {
 	n = split(s, a, /[ \t]+/); c = 0
-	for (i = 1; i <= n; i++) if (a[i] ~ /^id:/) c++
+	for (i = 1; i <= n; i++) if (isidtag(a[i])) c++
 	return c
 }
 function pri(s) { if (s ~ /^\([A-Z]\) /) return substr(s, 2, 1); return "" }
@@ -184,6 +193,25 @@ function colons(s,   n) { n = gsub(/:/, ":", s); return n }
 # 列と定めているので、末尾のコロンは value が空 = key:value ではない = ただの散文。
 # 日本語で理由を書くと「原因ではない: 焼き直すと解けた」の形が自然に出る。
 function iskv(s) { return colons(s) > 0 && !(colons(s) == 1 && substr(s, length(s), 1) == ":") }
+# **タグ** = 仕様どおりの key:value トークン(key も value も非空・コロンなし)。
+# 何を保存し(replace)、何を書かせない(check_text)かは、すべてこの 1 つの述語で
+# 決める —— 3 箇所が別々に「それらしい形」を判定していたのが、id: を書いた散文を
+# 追い返しつつ dep: を黙って落とす、という食い違いの出どころだった。
+function iskvtag(s) { return iskv(s) && s ~ /^[^: \t]+:[^: \t]+$/ }
+function kvkey(s) { return substr(s, 1, index(s, ":") - 1) }
+# dep: トークンを val で入れ替えた行を返す(val が空なら dep: を落とす)。
+# 挿す位置は id: の直前 —— add が id: を最後に置くので、書き足しても並びが揃う。
+function setdep(s, val,   n, a, i, out, ins) {
+	n = split(s, a, /[ \t]+/); out = ""; ins = 0
+	for (i = 1; i <= n; i++) {
+		if (a[i] == "") continue
+		if (a[i] ~ /^dep:/) continue
+		if (val != "" && !ins && isidtag(a[i])) { out = out " dep:" val; ins = 1 }
+		out = out " " a[i]
+	}
+	if (val != "" && !ins) out = out " dep:" val
+	return substr(out, 2)
+}
 '
 
 # 空行を落として open 行を出す。ファイルが無ければ何も出さない。
@@ -197,16 +225,24 @@ done_lines() {
 	awk 'NF { print }' "$DONE_FILE"
 }
 
-# 引数の TEXT を検証する。id: の混入を拒むのは、採番の一意性を CLI 側でしか
-# 守れないため(人が書いた id: を受け入れると重複が静かに入る)。
+# 引数の TEXT を検証する。手書きの id を拒むのは、採番の一意性を CLI 側でしか
+# 守れないため(人が書いた id を受け入れると重複が静かに入る)。
+#
+# 拒むのは **CLI が id として読むトークン**(isidtag)だけで、文字列 "id:" の
+# 存在ではない。後者は記法そのものについて書いた散文まで追い返す
+# —— 「保持は id:・作成日・優先度だけ」が 2026-09-10 に 2 度弾かれた。
+# 末尾のコロンの関門を直したときと同じ形の誤りで、直し方も同じ:
+# 「その文字列があるか」ではなく「仕様上そう読まれるか」を見る。
 check_text() {
 	case $1 in
 	*"$NL"*) die "TEXT に改行がある。1 行 = 1 タスクなので改行は置けない。分けて 2 回呼ぶこと" ;;
 	esac
 	[ -n "$(printf '%s' "$1" | tr -d ' \t')" ] || die "TEXT が空。例: todo add \"送信バッファを A/B する +upload @device\""
-	case $1 in
-	*"id:"*) die "TEXT に id: がある。id は add が採番するので書かない。例: todo add \"次の一手 +upload dep:0003\"" ;;
-	esac
+	if printf '%s' "$1" | awk "$AWKLIB"'
+		{ for (i = 1; i <= NF; i++) if (isidtag($i)) found = 1 }
+		END { exit(found ? 0 : 1) }'; then
+		die "TEXT に id:NNNN の形のトークンがある。id は add が採番するので書かない。例: todo add \"次の一手 +upload dep:0003\""
+	fi
 }
 
 # 与えられた ID を、ファイルに保存されている形へ解決する。
@@ -474,6 +510,81 @@ cmd_depri() {
 	for id in $resolved; do find_open "$id"; done
 }
 
+# dep / undep —— pri / depri と同じ対。dep: は check が検証し ready が従う一級の
+# 記法なのに、足す口が append しか無かった(2026-09-10 に 5 行へ dep: を足すのに
+# todo.txt を直接書き換える使い捨てスクリプトが書かれた。この CLI がまさに
+# 防ぐためにある操作)。append と違って id: の**手前**へ入れるので、add が作る
+# 並び(id: が最後)のままになる。
+#
+# 依存先は resolve_id で解決する = 存在しない id は 3 で落ちる。宙吊りの dep: を
+# 咎めるのは check の判断で、ここで作り直さない(自己依存と循環も同じ —— 書く前に
+# gate_write が check にかけ、違反が増えるなら書かない)。
+cmd_dep() {
+	[ $# -ge 2 ] || die "usage: todo dep ID DEPID...   (例: todo dep 5 3)"
+	resolve_open_set 1 "$1" || exit $?
+	target=$resolved
+	shift
+	add=''
+	for a in "$@"; do
+		rid=$(resolve_id "$a") || exit "$EX_NOID"
+		[ "$rid" != "$target" ] || die "id:$target が自分自身に依存することになる"
+		find_open "$rid" >/dev/null ||
+			printf '%s: id:%s は既に done.txt にある。この依存は最初から解けている\n' "$PROG" "$rid" >&2
+		add="${add:+$add }$rid"
+	done
+	# 既にある値は数値として突き合わせて重ねない(dep:12 と dep:0012 は同じ番号)。
+	rewrite_todo awk -v want="$target" -v add="$add" "$AWKLIB"'
+		{
+			if (lineid($0) != want) { print; next }
+			vals = ""
+			n = split(depstr($0), ca, ",")
+			for (i = 1; i <= n; i++) if (ca[i] != "" && !(idkey(ca[i]) in seen)) {
+				seen[idkey(ca[i])] = 1; vals = vals (vals == "" ? "" : ",") ca[i]
+			}
+			m = split(add, aa, " ")
+			for (i = 1; i <= m; i++) if (!(idkey(aa[i]) in seen)) {
+				seen[idkey(aa[i])] = 1; vals = vals (vals == "" ? "" : ",") aa[i]
+			}
+			print setdep($0, vals)
+		}
+	' || exit $?
+	find_open "$target"
+}
+
+# 外す先は必ず名指しする。`depri ID` のように「全部外す」は用意しない ——
+# dep: は集合で、まとめて外すと何が解けたのか行にも stderr にも残らない。
+# 宙吊りの dep: を直せる必要があるので、値は resolve_id に通さない
+# (存在しない id を指す dep: こそ外したい対象)。
+cmd_undep() {
+	[ $# -ge 2 ] || die "usage: todo undep ID DEPID...   (例: todo undep 5 3。外す先の指定は必須)"
+	resolve_open_set 1 "$1" || exit $?
+	target=$resolved
+	shift
+	line=$(find_open "$target")
+	for a in "$@"; do
+		case $a in
+		'' | *[!0-9A-Za-z]*) die "DEPID '$a' に英数字以外がある。DEPID は dep: の値" ;;
+		esac
+		printf '%s\n' "$line" | awk -v v="$a" "$AWKLIB"'
+			{ n = split(depstr($0), d, ","); for (i = 1; i <= n; i++) if (d[i] != "" && idkey(d[i]) == idkey(v)) f = 1 }
+			END { exit(f ? 0 : 1) }' ||
+			printf '%s: id:%s に dep:%s は無い。飛ばす\n' "$PROG" "$target" "$a" >&2
+	done
+	rewrite_todo awk -v want="$target" -v rm="$*" "$AWKLIB"'
+		{
+			if (lineid($0) != want) { print; next }
+			n = split(rm, ra, " ")
+			for (i = 1; i <= n; i++) kill[idkey(ra[i])] = 1
+			vals = ""
+			m = split(depstr($0), da, ",")
+			for (i = 1; i <= m; i++) if (da[i] != "" && !(idkey(da[i]) in kill))
+				vals = vals (vals == "" ? "" : ",") da[i]
+			print setdep($0, vals)
+		}
+	' || exit $?
+	find_open "$target"
+}
+
 # start / stop —— 「進行中」は優先度ではなく @wip という context ひとつで表す。
 # 優先度 (A)..(Z) は重要度・順序の意味のまま残す(混ぜると、着手した瞬間に
 # 重要度の情報が消える)。見るのは `todo ls @wip`。
@@ -503,28 +614,104 @@ cmd_stop() {
 	for id in $resolved; do find_open "$id"; done
 }
 
+# replace は**本文**を置き換える。本文とは +project と @context までで、
+# key:value タグ(dep: see: due: …)は本文ではなくメタデータ —— id: を保持して
+# いたのと同じ理由で、まとめて持ち越す。
+#
+# 持ち越さなかった頃、言い直しただけで dep: が消え、依存が黙って解けた
+# (2026-09-10 に確認。5 回の言い直しのどれかが dep: を持っていたら気づけなかった)。
+# タグを本当に外したいことはあるので、外す口は残す:
+#   - 新しい TEXT に同じ key を書けば、その key は新しい値で上書きされる
+#   - --drop KEY で名指しすれば外れる(その行に無い KEY は誤りとして落とす)
+# どちらも操作者が key を書いた場合だけで、**書かずに外れる経路は無い**。
+# 念のため、書いたあとに旧行と新行のタグを突き合わせ、消えた key を stderr で名指しする。
 cmd_replace() {
-	[ $# -eq 2 ] || die "usage: todo replace ID \"TEXT\"   (例: todo replace 3 \"新しい本文 +upload\")"
-	check_text "$2"
-	resolve_open_set 1 "$1" || exit $?
-	text=$(printf '%s' "$2" | awk "$AWKLIB"'{ print trim($0) }')
+	drop=''
+	nargs=0
+	rid_arg=''
+	newtext=''
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--drop)
+			[ $# -ge 2 ] || die "usage: todo replace ID \"TEXT\" [--drop KEY[,KEY...]]   (--drop に KEY が無い)"
+			drop="${drop:+$drop,}$2"
+			shift 2
+			;;
+		--drop=*)
+			drop="${drop:+$drop,}${1#--drop=}"
+			shift
+			;;
+		*)
+			nargs=$((nargs + 1))
+			case $nargs in
+			1) rid_arg=$1 ;;
+			2) newtext=$1 ;;
+			*) die "usage: todo replace ID \"TEXT\" [--drop KEY[,KEY...]]   (引数が多い)" ;;
+			esac
+			shift
+			;;
+		esac
+	done
+	[ "$nargs" -eq 2 ] || die "usage: todo replace ID \"TEXT\" [--drop KEY[,KEY...]]   (例: todo replace 3 \"新しい本文 +upload\")"
+	check_text "$newtext"
+	resolve_open_set 1 "$rid_arg" || exit $?
+	text=$(printf '%s' "$newtext" | awk "$AWKLIB"'{ print trim($0) }')
+	old=$(find_open "$resolved")
+
+	# --drop の KEY は、その行に実在するタグの key でなければ受けない
+	# —— 効かない --drop を黙って通すと「外したつもり」が残る。
+	for k in $(printf '%s' "$drop" | tr ',' ' '); do
+		case $k in
+		id) die "--drop id は使えない。id: は本文ではなく CLI の採番" ;;
+		*[:\ ]*) die "--drop の KEY '$k' に空白かコロンがある。KEY は key:value の key" ;;
+		esac
+		printf '%s\n' "$old" | awk -v k="$k" "$AWKLIB"'
+			{ for (i = 1; i <= NF; i++) if (iskvtag($i) && kvkey($i) == k) f = 1 }
+			END { exit(f ? 0 : 1) }' ||
+			die "id:$resolved に $k: は無い。--drop で外せるのはその行にあるタグだけ"
+	done
+
 	# 消す前の行を stderr へ出す。書式は増やさない —— 前の言い方の置き場は
 	# コミットメッセージと docs で、todo.txt ではない。ただし黙って消すと、
 	# コミットされる前の言い方は誰も復元できない(2026-09-10 に 3 行で起きた)。
 	# 転記の口を 1 つ開けておけば、必要なら書き手がそこから拾える。
-	printf '%s: replace 前: %s\n' "$PROG" "$(find_open "$resolved")" >&2
+	printf '%s: replace 前: %s\n' "$PROG" "$old" >&2
 	# 新しい本文が (A) で始まっていたらそれを優先度として採る。無ければ元の優先度を
 	# 保つ —— replace は「本文の置き換え」であって、優先度と作成日と id は本文ではない。
-	rewrite_todo awk -v want="$resolved" -v text="$text" "$AWKLIB"'
+	rewrite_todo awk -v want="$resolved" -v text="$text" -v drop=",$drop," "$AWKLIB"'
 		{
 			if (lineid($0) != want) { print; next }
 			p = pri($0); c = created($0); t = text
 			if (t ~ /^\([A-Z]\) /) { p = substr(t, 2, 1); t = substr(t, 5) }
-			out = (p == "" ? "" : "(" p ") ") (c == "" ? "" : c " ") t " id:" want
-			print out
+			# 新しい本文が持つ key は、旧行の同じ key に勝つ(上書き)。
+			nn = split(t, na, /[ \t]+/)
+			for (i = 1; i <= nn; i++) if (iskvtag(na[i])) newkey[kvkey(na[i])] = 1
+			keep = ""
+			no = split(body($0), oa, /[ \t]+/)
+			for (i = 1; i <= no; i++) {
+				if (!iskvtag(oa[i])) continue
+				k = kvkey(oa[i])
+				if (k == "id" || (k in newkey) || index(drop, "," k ",") > 0) continue
+				keep = keep " " oa[i]
+			}
+			print (p == "" ? "" : "(" p ") ") (c == "" ? "" : c " ") t keep " id:" want
 		}
 	' || exit $?
-	find_open "$resolved"
+
+	# 書いたあとに突き合わせる。上のどの経路で消えたかに関わらず、消えた key は
+	# 必ず名指しされる —— 「依存が黙って外れる」を残さないための最後の一枚。
+	new=$(find_open "$resolved")
+	lost=$( (printf '%s\n' "$old"; printf '%s\n' "$new") | awk "$AWKLIB"'
+		NR == 1 { for (i = 1; i <= NF; i++) if (iskvtag($i)) { o[++n] = $i } }
+		NR == 2 { for (i = 1; i <= NF; i++) if (iskvtag($i)) has[kvkey($i)] = 1 }
+		END { for (i = 1; i <= n; i++) if (!(kvkey(o[i]) in has)) printf "%s%s", (m++ ? " " : ""), o[i] }')
+	if [ -n "$lost" ]; then
+		case " $lost " in
+		*" dep:"*) printf '%s: replace が外したタグ: %s —— 依存が解けた\n' "$PROG" "$lost" >&2 ;;
+		*) printf '%s: replace が外したタグ: %s\n' "$PROG" "$lost" >&2 ;;
+		esac
+	fi
+	printf '%s\n' "$new"
 }
 
 cmd_append() {
@@ -757,8 +944,9 @@ run_check() {
 			c = idcount(line)
 			if (c == 0) { err("id: が無い —— `todo id` で付ける(無いと add 以外のコマンドがこの行を触れない)", line); next }
 			if (c > 1) { err("id: が 2 つ以上ある", line); next }
+			# 数えたのは id として読めるトークンなので、ここでは必ず取れる。
+			# 値が英数字でない `id:…` は id ではなく散文で、上の c == 0 に落ちる。
 			id = lineid(line)
-			if (id == "") { err("id: の値が英数字でない", line); next }
 			# 突き合わせは idkey(数字なら数値)。id:0012 と id:12 は同じ番号を
 			# 指しているので、書き方が違っても重複として拾う。
 			k = idkey(id)
@@ -860,6 +1048,8 @@ start) cmd_start "$@" ;;
 stop) cmd_stop "$@" ;;
 pri | p) cmd_pri "$@" ;;
 depri | dp) cmd_depri "$@" ;;
+dep) cmd_dep "$@" ;;
+undep) cmd_undep "$@" ;;
 replace) cmd_replace "$@" ;;
 append | app) cmd_append "$@" ;;
 prepend | prep) cmd_prepend "$@" ;;

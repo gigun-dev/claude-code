@@ -6,7 +6,7 @@ description: >-
   including when the user never says "todo". Tasks live in this repository's todo.txt
   and done.txt, driven by the `todo` CLI. Also on '/todo:todo'.
 metadata:
-  version: "0.1.5"
+  version: "0.2.0"
 ---
 
 このスキルのディレクトリから `../../bin/todo` を絶対パスに解決し、対象リポジトリのルートで `ready` を実行する。以下の `todo` は、その同梱 CLI を引用符で囲んだ絶対パスで呼ぶことを指す。作業ディレクトリは対象リポジトリに保つ。
@@ -19,9 +19,11 @@ metadata:
 |---|---|
 | `@wip` | 進行中。`start` が付け、`stop` と `do` が外す。見るのは `ls @wip` |
 | `@dropped` | 前提が崩れて閉じた印。`drop` が理由とともに付ける。`do`（やった）と読み分けるためのもので、後ろに理由がそのまま続く |
-| `dep:0001` | 依存。カンマ区切りで複数可。指す先が done.txt に入るまでその行は `ready` に出ない。存在しない id を指すと永久に出ないので、`check` がその行を名指しする |
+| `dep:0001` | 依存。カンマ区切りで複数可。指す先が done.txt に入るまでその行は `ready` に出ない。存在しない id を指すと永久に出ないので、`check` がその行を名指しする。足し外しは `dep` / `undep` で、外す先は必ず名指しする |
 | `see:docs/x.md` | 根拠の置き場。リポジトリ相対パスに限る。URL は value にコロンが二つ目に入るので形式違反になる。語の末尾のコロン（「原因ではない:」）は値が空で key:value ではないため、散文として通る |
-| `id:0001` | `add` が付ける連番。4 桁ゼロ詰め、done.txt も数えた最大値に 1 を足す。タスクを指す唯一の手段で、行番号は編集とマージでずれるので使わない。指すときのゼロ詰めは省略できる（`todo do 12`）。手で足した行には `todo id` が配る |
+| `id:0001` | `add` が付ける連番。4 桁ゼロ詰め、done.txt も数えた最大値に 1 を足す。タスクを指す唯一の手段で、行番号は編集とマージでずれるので使わない。指すときのゼロ詰めは省略できる（`todo do 12`）。手で足した行には `todo id` が配る。本文に書けるのは散文としての `id:` までで、`id:0001` の形は `add` が拒む |
+
+`key:value` の形をしたトークンが**タグ**で、`replace` はタグをまとめて持ち越す（本文とみなすのは `+project` と `@context` まで）。外すのは、新しい本文に同じ key を書いて上書きするか、`--drop <key>` で名指しするかのどちらか。書かずに外れることはなく、外れた key は stderr に出る。
 
 タスクに言及するときは id だけで済ませず、「main.c の送信経路の切り出し（`id:0007`）」のように中身を先に置く。読む側が todo.txt を開いているとは限らず、`id:0007` とだけ言われるとそのたびに引きに行くことになる。一覧をそのまま貼るときは別で、そこは id が並んでいてよい。
 
@@ -34,6 +36,7 @@ todo start <id>         # 着手した              todo stop <id>   # 未完の
 todo do <id>            # 検証まで終わった      todo add "<次の一手>"
 todo drop <id> "<理由>" # 前提が崩れて問いが消えた（比較する対象が無い、原因が再現しない、その経路が無い）
 todo replace <id> "…"   # 言い方・粒度を直す    todo pri <id> A / todo depri <id>
+todo dep <id> <dep-id>  # 依存を足す            todo undep <id> <dep-id>
 todo projects           # 束ごとの件数（断片化）
 ```
 
