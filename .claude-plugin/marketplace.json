@@ -63,7 +63,7 @@
     {
       "name": "telemetry",
       "source": "./plugins/telemetry",
-      "description": "Review your own Claude Code sessions from Langfuse traces and turn findings into config improvements"
+      "description": "Review Claude Code and Codex local sessions, or configured Langfuse traces, and identify evidence-backed improvements"
     },
     {
       "name": "japanese-tech-writing",

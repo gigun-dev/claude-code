@@ -28,7 +28,7 @@ overall_failed=0
 # bash 3.2(macOS の /bin/bash)には連想配列(declare -A)が無いので、
 # 素朴な添字配列と、呼ばれた回数を数えるだけのカウンタで済ませる。
 CHECK_NAMES=(
-	"シェル構文チェック (bash -n)"
+	"スクリプト構文チェック (Shell / Python)"
 	"JSON 妥当性チェック"
 	"todo.txt の形式チェック"
 	"plugin.json 版数整合性チェック (.claude-plugin ⇔ .codex-plugin)"
@@ -37,6 +37,7 @@ CHECK_NAMES=(
 	"ADR の形式チェック"
 	"todo プラグインのテスト (tests/run.sh)"
 	"pre-push プラグインの実 push テスト"
+	"telemetry のローカル集計・クエリ回帰テスト"
 )
 check_total=${#CHECK_NAMES[@]}
 check_n=0
@@ -86,17 +87,22 @@ if [ -z "$sh_files" ]; then
 	sh_failed=1
 else
 	while IFS= read -r f; do
-		err=$(bash -n "$f" 2>&1)
+		# Extensionless plugin CLIs may use Python rather than Shell.
+		if head -1 "$f" | grep -Eq '^#!.*python'; then
+			err=$(python3 -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' "$f" 2>&1)
+		else
+			err=$(bash -n "$f" 2>&1)
+		fi
 		rc=$?
 		if [ "$rc" -ne 0 ]; then
-			echo "✗ [sh]   $f"
+			echo "✗ [syntax] $f"
 			echo "$err" | sed 's/^/    /'
 			sh_failed=1
 		fi
 	done <<<"$sh_files"
 fi
 if [ "$sh_failed" -eq 0 ]; then
-	echo "✓ シェル構文: 問題なし"
+	echo "✓ スクリプト構文: 問題なし"
 fi
 [ "$sh_failed" -ne 0 ] && overall_failed=1
 
@@ -472,6 +478,24 @@ if prepush_out=$(python3 plugins/pre-push/tests/test_pre_push.py 2>&1); then
     printf '%s\n' "$prepush_out" | tail -4
 else
     printf '%s\n' "$prepush_out"
+    overall_failed=1
+fi
+
+# Local fixtures cover period boundaries, usage accounting, and query output.
+echo ""
+check_header
+if [ ! -d plugins/telemetry/tests ]; then
+    echo "✗ telemetry tests are missing"
+    overall_failed=1
+elif telemetry_out=$(python3 -m unittest discover -s plugins/telemetry/tests -p 'test*.py' 2>&1); then
+    if printf '%s\n' "$telemetry_out" | grep -q 'Ran 0 tests'; then
+        echo "✗ telemetry test discovery found no tests"
+        overall_failed=1
+    else
+        printf '%s\n' "$telemetry_out" | tail -4
+    fi
+else
+    printf '%s\n' "$telemetry_out"
     overall_failed=1
 fi
 

@@ -1,14 +1,13 @@
 ---
 name: review
-description: 自分のコーディングセッションを実データで振り返り、時間・トークン・ツールの内訳・サブエージェント・worktree の扱いを見て設定改善につなげる。ローカルのトランスクリプトだけで答える口と、Langfuse のトレースを引く口の両方を持つ(前者は資格情報もネットワークも要らない)。「セッションを振り返って」「subagent が遅い」「何に時間を使ってる?」「いくら使った?」「worktree がおかしい」「テレメトリ見て」「/telemetry:review」で発火。
+description: 自分の Claude Code / Codex セッションを実データで振り返り、時間・トークン・ツールの内訳・親子関係・worktree の扱いを確認する。ローカル JSONL だけで答える口と、要求されたときだけ Langfuse のトレースを引く口を持つ(前者は資格情報もネットワークも要らない)。「セッションを振り返って」「subagent が遅い」「何に時間を使ってる?」「いくら使った?」「worktree がおかしい」「テレメトリ見て」「/telemetry:review」で発火。
 ---
 
 # telemetry:review — 自分のセッションを観測データから振り返る
 
-```!
-"${CLAUDE_SKILL_DIR}/../../bin/session-breakdown" --since 1d 2>&1 | head -60
-bash "${CLAUDE_SKILL_DIR}/scripts/summary.sh" 7
-```
+このスキルは読み込み時にコマンドを自動実行しない。対象を選んでから、スキルの配置場所にある
+`../../bin/session-breakdown` を明示的に実行する。対象が決まっていない場合は、利用可能な
+セッション ID を先に調べ、全期間・全プロジェクトを暗黙に読み込まない。
 
 ## どの道具を使うか
 
@@ -23,7 +22,12 @@ bash "${CLAUDE_SKILL_DIR}/scripts/summary.sh" 7
 
 **ログの形はエージェントによって違う。** Claude Code は `~/.claude/projects/<project>/<session-id>.jsonl` で、
 subagent の行は `isSidechain` が真の行として本線に混ざる場合と `subagents/agent-*.jsonl` に分かれる
-場合がある。Codex は別の場所と形式なので、横断したいときは cman を通す。
+場合がある。Codex は `~/.codex/sessions/**/rollout-*.jsonl` などの JSONL に
+`session_meta`、`response_item`、`event_msg`、`token_usage_record` を記録する。
+`session_meta.parent_thread_id` から親子を辿り、`token_usage_record.response_id` を重複排除して集計する。
+Codex の usage は input / cached input / output / reasoning output / total を表示し、cached input と
+reasoning output はそれぞれの部分集合として扱う。窓に usage が無ければ `unavailable`、親子の
+一部だけなら `partial` として、0 と誤認しない。
 
 **セッションを指すときはセッション ID を使う。** パスはエージェントごとに違い、cman を使う経路では
 不要になる。ID なら両方から辿れる。
@@ -33,13 +37,15 @@ subagent の行は `isSidechain` が真の行として本線に混ざる場合�
 1. 上の集計を読み、**金を食っている所・時間を食っている所・失敗している所**を特定する。
 2. 個別の裏取りは `scripts/query.sh`:
    ```sh
-   "${CLAUDE_SKILL_DIR}/scripts/query.sh" errors 7       # 失敗したツール実行の一覧
-   "${CLAUDE_SKILL_DIR}/scripts/query.sh" slow 7 10      # 遅い順
-   "${CLAUDE_SKILL_DIR}/scripts/query.sh" cost 7 10      # 高い LLM 応答の順
-   "${CLAUDE_SKILL_DIR}/scripts/query.sh" trace <id>     # 1ターンを時系列で
-   "${CLAUDE_SKILL_DIR}/scripts/query.sh" gen <obs_id>   # LLM 応答の中身(入出力・usage・コスト)
+   scripts/query.sh errors 7       # 失敗したツール実行の一覧
+   scripts/query.sh slow 7 10      # 取得した標本内で遅い順
+   scripts/query.sh cost 7 10      # 取得した標本内で高い順
+   scripts/query.sh trace <id>     # 1ターンを時系列で
+   scripts/query.sh gen <obs_id>   # LLM 応答の中身(入出力・usage・コスト)
    ```
-3. 見つけた傾向を設定変更に落とす。観測しただけでは何も改善しないので、ここまでやって終わりとする:
+   Langfuse を使う場合も、対象期間・trace ID を選んだ後に要求されたサブコマンドだけを実行する。
+3. 見つけた傾向から改善の要否を判断する。変更が必要なら根拠と対象を示し、根拠が足りなければ
+   **変更不要 / 判断保留**と明記して終える:
    - 特定ツールの失敗が多い → CLAUDE.md / rules に予防を書く、または Hook で強制する
    - キャッシュ読み取りが伸びず入力トークンが毎回膨らんでいる → 常時ロードの設定を削る
    - 同じ外部リクエストを繰り返している → 手順を skill 化して固定する
@@ -63,5 +69,9 @@ subagent の行は `isSidechain` が真の行として本線に混ざる場合�
   (b) ツール失敗は PostToolUseFailure を購読していなかったので1件も記録されず、代わりに出力の
   "rror" 文字列一致で誤検知したものが ERROR として積まれていた(実測で実際の 64 倍)。古い期間を
   集計に混ぜると嘘の傾向が出る。
-- 未設定・ネットワーク不通なら集計はスキップされる(その旨が上に出る)。資格情報は
+- 未設定・ネットワーク不通なら Langfuse の集計はスキップされる(その旨を報告する)。資格情報は
   `~/.config/claude-code/langfuse.env`(600・git 管理外)。
+- ローカル集計の例: `bin/session-breakdown --source claude --session <session-id> --from <ISO> --to <ISO> --main --json`
+- Codex 集計の例: `bin/session-breakdown --source codex --session <thread-id> --from <ISO> --to <ISO> --json`
+- 出力の `elapsed` は記録区間、`tool` は対応付けた tool の和集合、`wait` は明示的な待機、
+  `unattributed` は分類できない残りを表す。残りをモデル思考時間や費用と解釈しない。

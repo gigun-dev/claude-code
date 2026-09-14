@@ -63,12 +63,16 @@ for o in rows[:50]:
     ;;
   slow)
     days="${1:-7}"; n="${2:-10}"
-    N="$n" api "${BASE}/api/public/v2/observations?fromStartTime=$(since "$days")&limit=200" | python3 -c '
+    # Langfuse returns the first sample only.  Do not label this a ranking of
+    # the whole period; pass the requested output count to the Python process.
+    api "${BASE}/api/public/v2/observations?fromStartTime=$(since "$days")&limit=200" | N="$n" python3 -c '
 import json,sys,os
 n=int(os.environ.get("N","10"))
 d=json.load(sys.stdin)
 rows=[o for o in d.get("data",[]) if o.get("latency")]
 rows.sort(key=lambda o:-(o.get("latency") or 0))
+sample_count = len(d.get("data", []))
+print("  retrieved sample: {} observations (limit=200); ranking is within this sample, not the whole period".format(sample_count))
 for o in rows[:n]:
     lat = o.get("latency") or 0
     ty  = o.get("type") or ""
@@ -80,11 +84,13 @@ for o in rows[:n]:
   cost)
     days="${1:-7}"; n="${2:-10}"
     # コストは generation にしか付かない(ツール実行に値段は無い)。
-    N="$n" api "${BASE}/api/public/v2/observations?fromStartTime=$(since "$days")&type=GENERATION&limit=200" | python3 -c '
+    api "${BASE}/api/public/v2/observations?fromStartTime=$(since "$days")&type=GENERATION&limit=200" | N="$n" python3 -c '
 import json,sys,os
 n=int(os.environ.get("N","10"))
 d=json.load(sys.stdin)
 rows=[o for o in d.get("data",[]) if (o.get("calculatedTotalCost") or o.get("totalPrice"))]
+sample_count = len(d.get("data", []))
+print("  retrieved sample: {} generations (limit=200); ranking is within this sample, not the whole period".format(sample_count))
 if not rows:
     print("  (一覧 API はコストを返さないことがある。合計は summary.sh、個別は query.sh gen <id>)")
     raise SystemExit
@@ -99,11 +105,16 @@ for o in rows[:n]:
     ;;
   trace)
     [ $# -ge 1 ] || { usage; exit 2; }
-    api "${BASE}/api/public/v2/observations?traceId=$1&limit=200" | python3 -c '
-import json,sys
+    api "${BASE}/api/public/v2/observations?traceId=$1&limit=200" | TRACE_LIMIT=200 python3 -c '
+import json,sys,os
+limit=int(os.environ.get("TRACE_LIMIT","200"))
 d=json.load(sys.stdin)
 rows=sorted(d.get("data",[]), key=lambda o:o.get("startTime") or "")
-for o in rows:
+returned=len(rows)
+truncation=("output may be truncated when the limit is reached"
+            if returned >= limit else "all returned sample rows shown")
+print(f"  retrieved trace sample: {returned} observations (limit={limit}); {truncation}")
+for o in rows[:limit]:
     lat = o.get("latency") or 0   # observations API は秒(metrics API はミリ秒。単位が非対称)
     hhmmss = (o.get("startTime") or "")[11:19]
     ty  = (o.get("type") or "")[:10]
