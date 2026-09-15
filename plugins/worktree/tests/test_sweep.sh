@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# plugins/worktree-sweep のテスト。使い捨てリポジトリを作って実際に判定・削除させる。
-# 走らせ方: bash plugins/worktree-sweep/tests/test_worktree_sweep.sh
+# plugins/worktree の sweep のテスト。使い捨てリポジトリを作って実際に判定・削除させる。
+# 走らせ方: bash plugins/worktree/tests/run.sh
 set -uo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
