@@ -4,7 +4,7 @@
 set -uo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
-BIN="$here/../bin/worktree-sweep"
+BIN="$here/../bin/sweep"
 
 pass=0
 fail=0
@@ -53,14 +53,15 @@ echo "$out" | grep -q '^  消せる ' && has_removable=1 || has_removable=0
 t "squash 取り込み済みは消せると判定する" 1 "$has_removable"
 echo "$out" | grep -q 'squash 取り込みと同等' && has_note=1 || has_note=0
 t "squash 判定の根拠を出力に書く" 1 "$has_note"
+echo "$out" | grep -q 'branch -D' && has_branch_action=1 || has_branch_action=0
+t "判定表示にブランチ削除の強度(-D)を書く" 1 "$has_branch_action"
 
 "$BIN" --apply "$repo" >/dev/null 2>&1
 [ -d "$wt" ] && wt_remains=1 || wt_remains=0
 t "--apply で squash 済み worktree を実際に消す" 0 "$wt_remains"
-# git branch -d は squash 由来のマージを merged と認識しない(force は使わない設計)ので、
-# worktree は消えてもブランチは残る。これは --force を使わない既存の設計どおり。
+# squash 判定は内容の一致を機械で確かめているので、git の merged フラグを待たず -D で消す。
 git -C "$repo" show-ref --verify --quiet refs/heads/feature && branch_remains=1 || branch_remains=0
-t "squash 済みブランチは git 標準の安全策で保持される(--force を使わない設計どおり)" 1 "$branch_remains"
+t "squash 判定で消せたブランチは -D で一緒に消える" 0 "$branch_remains"
 
 # ---------------------------------------------------------------------------
 # 未取込ブランチ: squash 判定できないので人が決めるに残す(消さない)

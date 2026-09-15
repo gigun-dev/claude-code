@@ -1,16 +1,18 @@
 ---
 name: sweep
 description: >-
-  Clean up git worktrees a subagent left behind. Use when asked to sweep, clean up,
-  or garbage-collect worktrees, or when finishing delegated work that used
-  isolation: worktree.
+  Clean up git worktrees a subagent left behind, when integrate wasn't used at the
+  time. Use when asked to sweep, clean up, or garbage-collect worktrees.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
-# worktree-sweep
+# worktree:sweep
 
-判定ロジックはこのスキルの配置場所にある `../../bin/worktree-sweep` が持つ。ここで
+取りこぼしの網。**主経路は `worktree:integrate`**(取り込み直後にその場で片付けるので、
+下の squash 判定の限界に当たりにくい)。sweep は integrate を経ずに残った分を拾う。
+
+判定ロジックはこのスキルの配置場所にある `../../bin/sweep` が持つ。ここで
 作り直さず、絶対パスに解決してそれを呼ぶこと。
 
 ## 手順
@@ -18,7 +20,7 @@ metadata:
 1. まず判定だけ実行して結果を見せる(引数はそのまま渡す。無ければカレントリポジトリ)。
 
    ```bash
-   "<このスキルのディレクトリ>/../../bin/worktree-sweep" $ARGUMENTS
+   "<このスキルのディレクトリ>/../../bin/sweep" $ARGUMENTS
    ```
 
 2. 出力は3分類: 「消せる」「人が決める」「触るな」。最後の合計行で件数と
@@ -40,23 +42,29 @@ metadata:
 - `--purge-ignored`: ignore 成果物のみ残る worktree も削除対象に含める(単独では判定のみ。
   `--apply` と併用して初めて消える)
 
-## squash 判定
+## squash 判定と限界
 
 基準ブランチの祖先でなくても、`git merge --squash` で取り込まれていることがある。
-このスキルは、分岐後にブランチが触れたファイルだけに絞り、基準ブランチと差分が
-残っていないかを機械的に見る。差分が無ければ squash 取り込み済みと同等とみなして
-消せる扱いにする。比較材料が無い、または差分が残る場合は推測せず人が決めるに残す。
+分岐後にブランチが触れたファイルだけに絞り、基準ブランチと差分が残っていないかを
+機械的に見る。差分が無ければ消せる扱いにする。
+
+**限界**: この判定は「未取込」と「基準側が独立に同じファイルを進めた」を区別できない。
+活発なリポジトリでは基準側が先に進むだけで「人が決める」に落ちやすい —— 判定の欠陥
+ではなく、推測しない設計の裏返し。integrate を使えばこの限界には当たらない
+(取り込んだ直後にその場で消すので分岐点が古くならない)。
 
 ## 消し急ぎを防ぐ
 
 `--apply` はこの判定で「消せる」と出た対象しか消さない。この道具を経由せず
 `git worktree remove` / `git branch -D` を直接叩くと、この判定は一切働かない ——
-必ずこの道具を通すこと。
+必ずこの道具を通すこと。squash 判定で消せた対象はブランチも `-D` で消える
+(内容の一致を機械で確かめているため)。祖先判定で消せた対象は `-d` のまま
+(git 自身の merged 判定に乗る)。
 
 ## 注意
 
 - `--apply` は worktree のディレクトリとブランチを消す。未追跡・ignore 成果物、lock、
   未取込 commit、Git の判定失敗があれば保持する。unlocked の稼働中 agent は検出できず、
   判定直後の ignore ファイル生成とも競合するため、**停止済みの作業だけを対象にする**。
-- `--force` は使わない。lock / prunable / detached には触らない。
+- lock / prunable / detached には触らない。
 - 「人が決める」が多いときは、掃除ではなく取り込みの問題。マージするか捨てるかを先に決める。

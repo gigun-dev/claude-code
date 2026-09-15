@@ -1,31 +1,37 @@
 #!/usr/bin/env bash
 # セッション履歴の保持 (cleanupPeriodDays=9999) と切り離して worktree を掃除する。
+# 取りこぼしの網 —— 主経路は `integrate`(取り込み直後にその場で片付けるので、
+# 下の squash 判定の限界に当たりにくい)。sweep は integrate を経ずに残った分を拾う。
+#
 # 判定は 3 分類: 消せる / 人が決める / 触るな。行動が変わるのはこの 3 つだけ。
 #   消せる     … 未コミット・未追跡・ignore 成果物が無く、既定ブランチの祖先。
 #                または祖先ではないが、squash 取り込みと同等だと機械判定できた場合
-#                (下記「squash 判定」参照)。
+#                (判定ロジックは ../lib/common.sh の squash_equivalent)。
 #   人が決める … ignore 成果物のみ残っている(内容の可否は機械には分からない)、
 #                または祖先でも squash 同等でもない(未取込かもしれないが機械には
-#                断定できない)。
+#                断定できない。活発なリポジトリでは基準側が独立に進むだけでも
+#                ここに落ちる —— 詳細は common.sh のコメント)。
 #   触るな     … locked / prunable / detached、未コミットの変更、判定エラー。
-# force は使わない(lock・並行変更を Git に拒否させるため)。
 #
 # 消し急ぎを防ぐ設計: --apply が worktree とブランチを消すのは、この判定で「消せる」
 # と出た対象だけ。この道具を経由せず `git worktree remove` / `git branch -D` を直接
 # 叩けば、この判定は一切働かない —— 道具を通ることが安全装置そのもの。
 #
-# squash 判定: 基準ブランチの祖先でない場合、推測はしない。その代わり
-# `merge-base(base, head)..head` で変更されたファイルだけに絞り、`base` の内容と
-# 一致するかを diff で機械的に見る。一致すれば「そのブランチ固有の変更は基準側に
-# 既に含まれている」と言えるので消せる扱いにする。一致しない、または比較対象の
-# ファイルが無い(判定材料が無い)場合は、squash 済みかもしれないが機械には
-# 判断できないとして人が決めるに残す。
+# ブランチの削除は祖先判定 (`branch -d`, git 自身の merged 判定に乗る) と
+# squash 判定 (`branch -D`, 分岐後の変更が基準側に含まれることを内容で確かめて
+# いるので git の merged フラグを待たない) とで強制の有無を変える。祖先判定は
+# --force を使わない従来どおり、squash 判定はそれより強い検証を通っているので
+# 強制してよい。どちらで消したかは出力に書く。
 #
-# 使い方: worktree-sweep [--apply] [--purge-ignored] [--all | リポジトリ...]
+# 使い方: sweep [--apply] [--purge-ignored] [--all | リポジトリ...]
 # 既定は判定のみ。--apply だけでは ignore 成果物が残る worktree は消さない
 # (内容がプロジェクトごとに違うため。ビルド成果物なら捨ててよいが、ローカル DO/D1
 # の実体のように戻せないものもある)。ignore 成果物ごと消すには --purge-ignored も要る。
 set -uo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=../lib/common.sh
+source "$here/../lib/common.sh"
 
 apply=0
 all=0
@@ -65,41 +71,6 @@ human_kb() {
     else if (v >= 1024) { v = v / 1024; u = "MB" }
     printf "%.1f%s", v, u
   }'
-}
-
-# squash 判定。$1=root $2=base_oid $3=head を受け取り、標準出力に
-# "yes"|"no"|"undetermined" のいずれかと、理由の 1 行を tab 区切りで返す。
-# rc は常に 0(判定自体の失敗は "undetermined" として理由に書く)。
-squash_equivalent() {
-  local root="$1" base_oid="$2" head="$3"
-  local merge_base
-  if ! merge_base=$(git -C "$root" merge-base "$base_oid" "$head" 2>/dev/null); then
-    printf 'undetermined\t共通の祖先が無く比較できない\n'
-    return
-  fi
-  local touched=()
-  while IFS= read -r -d '' f; do
-    touched+=("$f")
-  done < <(git -C "$root" diff --name-only -z "$merge_base" "$head" 2>/dev/null)
-  if [ "${#touched[@]}" -eq 0 ]; then
-    printf 'undetermined\t基準からの分岐後にブランチ固有の変更が見当たらず比較材料が無い\n'
-    return
-  fi
-  local remaining
-  if ! remaining=$(git -C "$root" diff "$base_oid" "$head" -- "${touched[@]}" 2>/dev/null); then
-    printf 'undetermined\t差分の取得に失敗した\n'
-    return
-  fi
-  local shown
-  shown=$(printf '%s ' "${touched[@]:0:5}")
-  if [ "${#touched[@]}" -gt 5 ]; then
-    shown="${shown}他$(( ${#touched[@]} - 5 ))件"
-  fi
-  if [ -z "$remaining" ]; then
-    printf 'yes\t触れた%d件のファイル(%s)が基準ブランチと差分なし\n' "${#touched[@]}" "$shown"
-  else
-    printf 'no\t触れた%d件のファイル(%s)のうち基準ブランチと差分が残るものがある\n' "${#touched[@]}" "$shown"
-  fi
 }
 
 failed=0
@@ -160,7 +131,11 @@ inspect() {
   # ビルド物か、ローカル DO/D1 の実体のように戻せないものか)はリポジトリ次第で
   # 機械には判断できないため、内訳を見せて人に決めさせる。
   squash_note=""
-  [ "$squash_taken" = 1 ] && squash_note=" (祖先ではないが squash 取り込みと同等: $squash_reason)"
+  branch_action="branch -d(git が merged と認めた場合のみ)"
+  if [ "$squash_taken" = 1 ]; then
+    squash_note=" (祖先ではないが squash 取り込みと同等: $squash_reason)"
+    branch_action="branch -D(squash 判定済みのため強制削除)"
+  fi
   ignored=$(git -C "$path" status --porcelain --untracked-files=normal --ignored=matching)
   if [ -n "$ignored" ]; then
     entries=()
@@ -186,8 +161,8 @@ EOF
       total_removable=$((total_removable + 1))
       total_removable_kb=$((total_removable_kb + total_kb))
       if [ "$apply" = 0 ]; then
-        printf '  消せる %s%s (取込済み。ignore 成果物 %s を --purge-ignored で含めて削除: %s)\n' \
-          "$path" "$squash_note" "$(human_kb "$total_kb")" "$breakdown"
+        printf '  消せる %s%s (取込済み。ignore 成果物 %s を --purge-ignored で含めて削除: %s / %s)\n' \
+          "$path" "$squash_note" "$(human_kb "$total_kb")" "$breakdown" "$branch_action"
         return
       fi
     else
@@ -203,7 +178,7 @@ EOF
     total_removable=$((total_removable + 1))
     total_removable_kb=$((total_removable_kb + dir_kb))
     if [ "$apply" = 0 ]; then
-      printf '  消せる %s%s (%s)\n' "$path" "$squash_note" "$(human_kb "$dir_kb")"
+      printf '  消せる %s%s (%s / %s)\n' "$path" "$squash_note" "$(human_kb "$dir_kb")" "$branch_action"
       return
     fi
   fi
@@ -211,16 +186,19 @@ EOF
   if [ "$apply" = 0 ]; then
     return
   fi
-  # force は使わない。lock や追跡ファイルへの並行変更は Git にも拒否させる。
   # 稼働中の作業には --apply しない(判定後の ignore ファイル生成と不可分に競合する)。
   if ! git -C "$root" worktree remove "$path"; then
     printf '  失敗 %s (worktree 削除失敗)\n' "$path"
     failed=1
     return
   fi
-  # -D で強制しない。upstream など Git 側の判定で拒否されたブランチは残す。
-  if git -C "$root" branch -d -- "${branch#refs/heads/}"; then
-    printf '  削除 %s%s\n' "$path" "$squash_note"
+  if [ "$squash_taken" = 1 ]; then
+    # squash 判定は「分岐後の変更が基準側に含まれる」ことを内容で確かめているので、
+    # git の merged フラグを待たず -D で消す。
+    git -C "$root" branch -D -- "${branch#refs/heads/}"
+    printf '  削除 %s%s (branch -D)\n' "$path" "$squash_note"
+  elif git -C "$root" branch -d -- "${branch#refs/heads/}"; then
+    printf '  削除 %s%s (branch -d)\n' "$path" "$squash_note"
   else
     printf '  worktree のみ削除、ブランチは保持 %s\n' "$branch"
     failed=1
@@ -233,28 +211,10 @@ for repo in "${repos[@]}"; do
     failed=1
     continue
   fi
-  base=$(git -C "$root" symbolic-ref --quiet --short refs/remotes/origin/HEAD)
-  rc=$?
-  if [ "$rc" -eq 1 ]; then
-    base=main
-  elif [ "$rc" -ne 0 ]; then
+  if ! IFS=$'\t' read -r base_ref base_display < <(resolve_base "$root"); then
     echo "触るな $root (既定ブランチ取得失敗)" >&2
     failed=1
     continue
-  fi
-  # 基準はローカルの既定ブランチにする。統合はローカルで起きる(squash マージ含む)ため、
-  # origin/HEAD がローカルより遅れていると取込済みの worktree まで未取込と誤判定する。
-  # ローカルに同名ブランチが無ければ従来どおり origin/HEAD へ落ちる。
-  case "$base" in
-    origin/*) local_branch=${base#origin/} ;;
-    *) local_branch=$base ;;
-  esac
-  if git -C "$root" show-ref --verify --quiet "refs/heads/$local_branch"; then
-    base_ref="refs/heads/$local_branch"
-    base_display="$local_branch (ローカル)"
-  else
-    base_ref="$base"
-    base_display="$base"
   fi
   if ! base_oid=$(git -C "$root" rev-parse --verify "${base_ref}^{commit}"); then
     echo "触るな $root (基準 $base_display の取得失敗)" >&2

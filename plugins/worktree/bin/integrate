@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# worktree を取り込む主経路。squash-merge → (人がコミット) → 片付け、を
+# 別ステップに分け、片付けは「取り込みのコミットが成立している」ことを
+# 道具自身が確かめてから行う。順序を守れと書くのではなく、守られたことを検査する。
+#
+# 使い方:
+#   integrate merge <worktree-path>   … 基準ブランチへ squash-merge する。
+#                                        競合が残れば止めて人に返す(自動解決しない)。
+#                                        コミットはしない —— メッセージは呼び出し元が書く。
+#   integrate finish <worktree-path>  … 呼び出し元がコミットした後に呼ぶ。
+#                                        分岐後にブランチが触ったファイルが基準ブランチの
+#                                        現在の HEAD と差分なしかを機械的に確かめ(sweep と
+#                                        同じ squash 判定)、確かめられて初めて worktree と
+#                                        ブランチ(-D)を消す。確かめられなければ何も消さず
+#                                        理由を言う。
+set -uo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=../lib/common.sh
+source "$here/../lib/common.sh"
+
+cmd="${1:-}"
+wt="${2:-}"
+if [ -z "$cmd" ] || [ -z "$wt" ]; then
+  echo "使い方: integrate merge|finish <worktree-path>" >&2
+  exit 1
+fi
+case "$cmd" in
+  merge|finish) ;;
+  *) echo "不明なサブコマンド: $cmd (merge|finish)" >&2; exit 1 ;;
+esac
+
+if ! git -C "$wt" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "触るな $wt (Git 管理外または取得失敗)" >&2
+  exit 1
+fi
+common_dir=$(git -C "$wt" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
+  echo "触るな $wt (共有 .git の解決に失敗)" >&2
+  exit 1
+}
+root=${common_dir%/.git}
+branch=$(git -C "$wt" symbolic-ref --quiet --short HEAD)
+if [ -z "$branch" ]; then
+  echo "触るな $wt (detached HEAD はブランチ名が無く対象外)" >&2
+  exit 1
+fi
+if ! IFS=$'\t' read -r base_ref base_display < <(resolve_base "$root"); then
+  echo "触るな $root (既定ブランチ取得失敗)" >&2
+  exit 1
+fi
+
+if [ "$cmd" = "merge" ]; then
+  if git -C "$root" rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+    echo "触るな $root (マージが進行中。先に前回の後始末をすること)" >&2
+    exit 1
+  fi
+  if root_dirty=$(git -C "$root" status --porcelain --untracked-files=normal --ignored=no) && [ -n "$root_dirty" ]; then
+    echo "触るな $root (基準ブランチの作業ツリーに未コミット / 未追跡の変更がある)" >&2
+    exit 1
+  fi
+  echo "=== $root へ $branch (基準: $base_display) を squash-merge"
+  if ! git -C "$root" merge --squash "$branch"; then
+    conflicts=$(git -C "$root" diff --name-only --diff-filter=U)
+    if [ -n "$conflicts" ]; then
+      echo "競合が残った。自動解決しない。解決して commit した後に \`integrate finish $wt\` を実行すること:"
+      printf '%s\n' "$conflicts" | sed 's/^/  /'
+    else
+      echo "merge --squash が失敗した(競合以外の理由)。手動で確認すること。"
+    fi
+    exit 1
+  fi
+  conflicts=$(git -C "$root" diff --name-only --diff-filter=U)
+  if [ -n "$conflicts" ]; then
+    echo "競合が残った。自動解決しない。解決して commit した後に \`integrate finish $wt\` を実行すること:"
+    printf '%s\n' "$conflicts" | sed 's/^/  /'
+    exit 1
+  fi
+  echo "squash 完了。コミットは呼び出し元が行うこと(道具はメッセージを書かない)。"
+  echo "commit した後に \`integrate finish $wt\` を実行すると worktree とブランチを片付ける。"
+  exit 0
+fi
+
+# finish
+# `merge --squash` は MERGE_HEAD を作らないので、それでは「未コミット」を検出できない。
+# 代わりに squash_equivalent 自体が判定する —— commit していなければ base_oid が
+# 進んでおらず、分岐後の変更との差分は埋まらないので "no" に落ちて消えない。
+if ! base_oid=$(git -C "$root" rev-parse --verify "${base_ref}^{commit}"); then
+  echo "触るな $root (基準 $base_display の取得失敗)" >&2
+  exit 1
+fi
+if ! head=$(git -C "$wt" rev-parse --verify HEAD); then
+  echo "触るな $wt (HEAD 判定失敗)" >&2
+  exit 1
+fi
+if wt_dirty=$(git -C "$wt" status --porcelain --untracked-files=normal --ignored=no) && [ -n "$wt_dirty" ]; then
+  echo "触るな $wt (worktree に未コミット / 未追跡の変更が残っている)" >&2
+  exit 1
+fi
+
+IFS=$'\t' read -r verdict reason < <(squash_equivalent "$root" "$base_oid" "$head")
+if [ "$verdict" != "yes" ]; then
+  echo "消さない: $wt ($branch) の取り込みが確認できない。$reason" >&2
+  exit 1
+fi
+
+if ! git -C "$root" worktree remove "$wt"; then
+  echo "失敗 $wt (worktree 削除失敗)" >&2
+  exit 1
+fi
+git -C "$root" branch -D -- "$branch"
+echo "削除 $wt ($branch, branch -D)。取り込みの確認: $reason"

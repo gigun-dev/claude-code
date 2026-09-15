@@ -76,9 +76,9 @@
       "description": "Set up and inspect Git pre-push checks using the repository’s CI verification command. Preserve existing hook management; copied hooks run independently of the plugin."
     },
     {
-      "name": "worktree-sweep",
-      "source": "./plugins/worktree-sweep",
-      "description": "Clean up git worktrees left behind by subagents: judge each as removable, human-decides, or hands-off, including a machine check for squash-merged branches. Never guesses squash status and never force-deletes."
+      "name": "worktree",
+      "source": "./plugins/worktree",
+      "description": "Manage git worktrees a subagent used: integrate (squash-merge, verify the commit landed, then clean up) as the primary path, sweep (judge removable / human-decides / hands-off) to catch the rest. Never guesses squash status and never force-deletes without a machine-verified reason."
     }
   ]
 }

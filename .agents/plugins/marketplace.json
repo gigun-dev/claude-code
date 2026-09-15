@@ -16,6 +16,6 @@
     { "name": "telemetry", "source": { "source": "local", "path": "./plugins/telemetry" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Productivity" },
     { "name": "japanese-tech-writing", "source": { "source": "local", "path": "./plugins/japanese-tech-writing" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Productivity" },
     {"name": "pre-push", "source": {"source": "local", "path": "./plugins/pre-push"}, "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"}, "category": "Developer Tools"},
-    {"name": "worktree-sweep", "source": {"source": "local", "path": "./plugins/worktree-sweep"}, "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"}, "category": "Developer Tools"}
+    {"name": "worktree", "source": {"source": "local", "path": "./plugins/worktree"}, "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"}, "category": "Developer Tools"}
   ]
 }
