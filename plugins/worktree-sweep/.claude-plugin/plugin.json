@@ -1,0 +1,9 @@
+{
+  "name": "worktree-sweep",
+  "version": "0.1.0",
+  "description": "Clean up git worktrees left behind by subagents: judge each as removable, human-decides, or hands-off, including a machine check for squash-merged branches. Never guesses squash status and never force-deletes.",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  }
+}
