@@ -1,0 +1,45 @@
+---
+name: agy-cli-runtime
+description: Internal helper contract for calling the `agy` CLI from Claude Code or Codex
+user-invocable: false
+---
+
+# agy CLI Runtime
+
+Do not call `agy` directly from Bash. Prefer the helper (`scripts/agy-run.sh`) or
+the MCP tools (`agy_search` / `agy_ask` / `agy_look` / `agy_youtube`) over
+hand-rolled `agy` CLI strings, or any other Bash activity that shells out to `agy`.
+The `codex:agy-ja-writer` agent must call the helper, not `agy` directly.
+
+Primary helper:
+- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --file <path> [--instruction <text>|--instruction-file <path>] [--model <model>]`
+- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --prompt <text> [--model <model>]`
+- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --prompt-file <path> [--model <model>]`
+
+What the helper absorbs (do not reimplement these elsewhere):
+- The `-p=<text>` join. `agy -p "..." --model X` lets `-p` swallow `--model` as
+  the prompt (measured). The helper always uses `=`.
+- The default model for Japanese final-draft prose: `gemini-3.8-flash-high`.
+- Stripping the leading preamble sentence Gemini always prepends (e.g. "ご提示
+  いただいた文章を…整えました") by having `agy` wrap the real answer in sentinel
+  markers and extracting only what is between them. Callers get body text only.
+- Long prompts/files, passed to `agy` in a way that survives shell metacharacters
+  and newlines.
+- `--file` mode never overwrites the source file: it prints a unified diff
+  (original vs. agy's draft) plus an original-vs-result character count to
+  stderr. Applying the diff is the caller's decision, not the helper's.
+
+Command selection:
+- Use `--file` when the input already lives in a repo file. Use `--prompt` /
+  `--prompt-file` only for text that has no file of its own.
+- Fact checks (numbers, URLs, proper nouns, item counts) and the character-count
+  comparison must be read off the diff against the original file — not off the
+  raw prompt text handed to `agy`.
+
+Safety rules:
+- Do not add `--dangerously-skip-permissions`. Media/search tool permission is
+  handled by `plugins/agy-mcp/server.py`, not by this helper.
+- The MCP tools remain the only supported path for search grounding
+  (`agy_search`) and media understanding (`agy_look` / `agy_youtube`). This
+  helper covers the plain-text call the MCP tools do not: instructing `agy` to
+  rewrite text.
