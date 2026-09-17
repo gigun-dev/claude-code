@@ -1360,7 +1360,7 @@ def agy_ask(
     設計判断やレビューを別モデルに問う用途。プロンプトは一切加工されない。
     ウェブ検索を意図するなら agy_search を使うこと。ファイルの日本語校正
     (差分で返す・元ファイルは書き換えない)を意図するなら
-    scripts/agy-run.sh --file か codex:agy-ja-writer を使うこと。
+    scripts/agy-run.sh --file を使うこと。
 
     来歴行の cid を conversation_id に渡すと同じ会話を継続でき、指示語だけの
     追撃で深掘りできる。**conversation_id を省略した場合は必ず新しい会話になる**

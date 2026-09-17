@@ -9,7 +9,6 @@ user-invocable: false
 Do not call `agy` directly from Bash. Prefer the helper (`scripts/agy-run.sh`) or
 the MCP tools (`agy_search` / `agy_ask` / `agy_look` / `agy_youtube`) over
 hand-rolled `agy` CLI strings, or any other Bash activity that shells out to `agy`.
-The `codex:agy-ja-writer` agent must call the helper, not `agy` directly.
 
 Primary helper:
 - `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --file <path> [--instruction <text>|--instruction-file <path>] [--rules <path> ...] [--skill <name> ...] [--model <model>] [--max-followups <n>] [--json]`

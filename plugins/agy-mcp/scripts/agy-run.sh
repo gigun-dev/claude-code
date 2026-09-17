@@ -32,7 +32,7 @@
 #     無音で deny しなくなる。上の3つ(パスを渡さない・CWD 隔離・事後照合)は
 #     フックとは独立に残す。
 #
-# 呼び出し元(agy-ja-writer / MCP ツール以外で agy を直接叩きたい場面)は、
+# 呼び出し元(MCP ツール以外で agy を直接叩きたい場面)は、
 # 生の `agy` 文字列を組まず、必ずこのスクリプトを経由すること
 # (plugins/agy-mcp/skills/agy-cli-runtime/SKILL.md)。
 #
