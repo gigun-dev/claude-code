@@ -4,7 +4,7 @@ description: >-
   iOS Simulator を CLI で操作し、検証用の状態(OS アカウント、同じ状態の複数台、資格情報、到達画面)を
   用意する。「シミュレータで動かして」「アカウントを入れて」「端末を複数用意して」「スクショ撮って」
   「デモ動画を撮って」と頼まれたときに使う。タップが無言で失敗する、テキスト入力が化ける、キーボードが
-  出ない、TLS が落ちる、アカウントを追加できない、録画の尺が合わない、といった詰まりの診断にも使う。
+  出ない、TLS が失敗する、アカウントを追加できない、録画の尺が合わない、といった詰まりの診断にも使う。
   Simulator を操作する前に読む。実機は対象外(ios-device-build)。
 compatibility: >-
   macOS + フル Xcode(Command Line Tools だけでは不可)。tap/swipe/テキスト入力/アクセシビリティ走査には
@@ -32,7 +32,7 @@ buildはプロジェクト側の手順に任せる。すべてのコマンドで
    観測を始める。端末のcreate/bootはpreflightより前でよい。preflightを飛ばすと、以降の観測は
    汚れた土台の上の値になり無効になる。
 
-2. UI操作前に、タップを削れるか判断する。タップを1回も撃たずに終えてよく、「Simulatorでは
+2. UI操作前に、タップを削れるか判断する。タップを1回も行わずに終えてよく、「Simulatorでは
    検証しない」という結論もこの手順の正しい終わり方に含める。
 
    - アプリ内状態: `SIMCTL_CHILD_<VAR>`またはURL scheme。
@@ -61,8 +61,8 @@ buildはプロジェクト側の手順に任せる。すべてのコマンドで
    `sim-tap.py`、出現待ちは`sim-wait.py`を使う。
 
 5. stdoutのJSON、終了コード、スクリーンショットまたは対象UDIDのログを合わせて成否を判定する。
-   終了コードだけでは操作が当たったことにならないので、スクショ差分・`AXValue`・対象UDIDのログの
-   いずれかで裏を取る。
+   終了コードだけでは操作が成功したとは限らないため、スクショ差分・`AXValue`・対象UDIDのログの
+   いずれかで確認する。
 
 ## 実測で確定した境界
 
@@ -81,21 +81,21 @@ buildはプロジェクト側の手順に任せる。すべてのコマンドで
   `references/system-proxy.md`と`scripts/sim-trust-ca.sh`を使い、ホスト全体のproxy設定を変更しない。
 - `simctl keychain`はBooted端末、`simctl clone`のsourceはShutdown端末を要求する。同じcode 405でも
   実行コマンドを見て原因を分ける。
-- 新品SimulatorのCalDAV初回追加にはOS側の罠がある。サーバーを調べる前に
+- 新規SimulatorのCalDAV初回追加にはOS側の罠がある。サーバーを調べる前に
   `references/state-provisioning.md`のseed/clone手順とDBでの判定を使う。
 - `simctl io recordVideo`は静止区間で実時間と一致しないことがある。停止時は実PIDへSIGINTし、
   process exitをpollする。詳しくは`references/recording.md`。
 - デモ動画は`setpts`で引き伸ばさず、止まっている区間を切る。要るのは実時間の忠実さではなく
   画面が動いている割合で、実測では先頭トリムが99%、`setpts`が64%だった。`setpts`は計測用途だけ。
 - 複数端末のログはホスト側`log stream`で混ぜず、`xcrun simctl spawn <UDID> log ...`で分離する。
-- 端末は作成者も用途も持たない(`simctl list -j`は`lastBootedAt`まで)。**名前がライフサイクル契約**で、
+- 端末には作成者も用途もない(`simctl list -j`は`lastBootedAt`まで)。**名前がライフサイクル契約**で、
   使い捨ては`w-`、永続seedは`seed-`。`trap`で消す(`references/state-provisioning.md` §1-b)。
-  既定名のまま放置した端末を作業台にしない —— `simctl clone`のsourceに選ばれて、
+  既定名のまま放置した端末を作業に使わない —— `simctl clone`のsourceに選ばれて、
   案ごとの差が消えた実例がある。
 
 ## 同梱スクリプト
 
-全scriptは`--help`を持つ。データはstdoutのJSON、診断はstderr。`--udid`または`SIM_UDID`を使う。
+全scriptに`--help`がある。データはstdoutのJSON、診断はstderr。`--udid`または`SIM_UDID`を使う。
 
 | script | 用途 |
 |---|---|
@@ -118,5 +118,5 @@ buildはプロジェクト側の手順に任せる。すべてのコマンドで
 | `references/text-input.md` | 非ASCII、IME、pbcopy、キーボード判定 |
 | `references/system-proxy.md` | HTTPS/TLSだけ失敗、CA追加後も失敗 |
 | `references/setup.md` | idb未導入、companion未接続 |
-| `references/recording.md` | 録画の尺、デモの死に区間の切り方、停止、ffmpegとの選択 |
+| `references/recording.md` | 録画の尺、デモの静止区間の切り方、停止、ffmpegとの選択 |
 | `references/webview-offload.md` | WKWebViewをブラウザへ切り出して確認する |

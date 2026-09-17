@@ -14,7 +14,7 @@ compatibility: >-
 
 # Liquid Glassアプリアイコンを作る
 
-素材と最終renderは別物。作成 → `ictool` render → 実サイズ比較のloopを必ず回す。
+素材と最終renderは別物。作成 → `ictool` render → 実サイズ比較を必ず繰り返す。
 
 ## 描く前のゲート
 
@@ -26,10 +26,10 @@ compatibility: >-
 | 該当 | 直し方 |
 |---|---|
 | 意味を説明する絵(吹き出し=チャット、リング=カレンダー) | 説明的ピクトグラムは古びる。抽象的な記号と構成で成立させる(純正のカレンダーは数字でなくドット格子) |
-| シェイプが5個以上、または細い線・小さい形がある | 屈折が汚れる(Appleが最多の失敗として名指し)。2〜4個へ削る |
+| シェイプが5個以上、または細い線・小さい形がある | 屈折が汚れる(Appleが最多の失敗例に挙げる)。2〜4個へ削る |
 | 文字・数字・ロゴタイプがある | 形へ置き換える(SVGを使うならアウトライン化) |
-| 前景が濃色・多色 | Tintedでコントラストを失う。前景は白〜near-whiteの単色にする |
-| 純正アイコンをまだ並べていない | 思い込み(たいてい一世代前)に沿った案しか出ない。手順1を先に回す |
+| 前景が濃色・多色 | Tintedでコントラストが落ちる。前景は白〜near-whiteの単色にする |
+| 純正アイコンをまだ並べていない | 思い込み(たいてい一世代前)に沿った案しか出ない。手順1を先に行う |
 
 ## 手順
 
@@ -44,7 +44,7 @@ compatibility: >-
    素材へ焼かずIcon Composerへ任せる。一方で**素材自身の色とその階調はsystemが作らない** ——
    全layerをベタ塗りにすると案ごとの違いが消える。gradient、重なりの合成、rim light、環境影を
    焼く判断と失敗パターンは`references/native-look.md`。焼いたら6 appearanceで
-   system effectとの二重を確認する(rim lightはspecularに近いので特に)。
+   system effectとの重複を確認する(rim lightはspecularに近いので特に)。
 
 2. 素材の複雑さで経路を選ぶ。
 
@@ -54,7 +54,7 @@ compatibility: >-
      右端1024pxまで溢れたまま3世代連続で見落とした実例がある。
    - gradient、mask、blur、blendが必要: 1つのSVGへ`data-layer`付きgroupを書き、
      `scripts/render_svg.swift <icon.svg> <outDir> --size 1024`で同一座標系のPNGへ分解する。
-   - どちらも中央約81%の安全域を守る。SVG pathやJSON schemaの詳細はreferencesへ進む。
+   - どちらも中央約81%の安全域を守る。SVG pathやJSON schemaの詳細はreferencesを読む。
 
 3. レイヤーを`.icon`へ組み立てる。`build_icon.sh`へは**手前から奥**の順で渡す。
    既存bundleを置換するときだけ`--force`を明示する。
@@ -83,7 +83,7 @@ compatibility: >-
    `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`、`Assets.car`、`CFBundleIconName`、actool warningを確認する。
    配置、XcodeGen、旧OS向けappiconset、生成元の除外は`references/xcode-integration.md`を読む。
 
-6. 最終的にSimulatorまたは実機のホーム画面で確認する。効果はsystem versionで異なりうるので、
+6. 最後にSimulatorまたは実機のホーム画面で確認する。効果はsystem versionで異なりうるので、
    サポート対象OSごとにappearanceを確認する。
 
 ## 同梱resource
