@@ -12,9 +12,42 @@ hand-rolled `agy` CLI strings, or any other Bash activity that shells out to `ag
 The `codex:agy-ja-writer` agent must call the helper, not `agy` directly.
 
 Primary helper:
-- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --file <path> [--instruction <text>|--instruction-file <path>] [--rules <path> ...] [--skill <name> ...] [--model <model>]`
-- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --prompt <text> [--rules <path> ...] [--skill <name> ...] [--model <model>]`
-- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --prompt-file <path> [--rules <path> ...] [--skill <name> ...] [--model <model>]`
+- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --file <path> [--instruction <text>|--instruction-file <path>] [--rules <path> ...] [--skill <name> ...] [--model <model>] [--max-followups <n>] [--json]`
+- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --prompt <text> [--rules <path> ...] [--skill <name> ...] [--model <model>] [--json]`
+- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --prompt-file <path> [--rules <path> ...] [--skill <name> ...] [--model <model>] [--json]`
+
+The round trip (write → check the facts → ask again where they drifted) is the
+helper's own work, not the caller's. In `--file` mode it compares the result
+against the original and, when they disagree, sends one more turn in the same
+`agy` conversation naming only what drifted — the document is not resent.
+`--max-followups` caps that (default 2). Hitting the cap is not a pass: the
+helper prints what is still wrong and the `--json` payload carries
+`"status": "fact_mismatch_unresolved"`.
+
+What the machine check covers, and what it does not:
+- Numbers and URLs are compared as multisets (what disappeared, what appeared).
+  Numbers are taken narrowly: full-width digits are folded to ASCII, thousands
+  separators are dropped, digits glued to ASCII letters (`GA4`, `v2`) are
+  skipped, kanji numerals are not read, and dates decompose into their parts so
+  `9月14日` and `9/14` compare equal.
+- Item counts cover list items and ATX headings only.
+- Proper nouns are not checked. No machine can decide them, so the helper
+  does not pretend to: every run says so on stderr and in the payload
+  (`fact_check.not_machine_checked`). Items enumerated inside prose are out of
+  scope for the same reason. A human still has to read the diff.
+- `--prompt` / `--prompt-file` run no fact check at all — there is no original
+  to compare against. The payload records that instead of leaving it blank.
+
+`--json` writes the machine payload (result body, diff for file mode, character
+counts, the fact-check outcome, how many follow-ups were spent, and what was
+not checked) to stdout, and moves the human-facing diff to stderr. Without
+`--json` the output is unchanged: diff on stdout, character counts on stderr.
+
+The instruction the helper defaults to aims at removing the machine-written
+feel, not at shortening. Making shortness the goal moves the character count
+barely at all and degrades word choice instead (measured: the only thing that
+changed was picking 「確認済み」 over 「実測確認」). Ask for better word choice,
+not for fewer characters.
 
 `--rules <path>` appends a fixed document (e.g. a writing-style skill's
 `SKILL.md`, or a file holding a constraint that applies to this one call only)
@@ -65,8 +98,9 @@ What the helper absorbs (do not reimplement these elsewhere):
 Command selection:
 - Use `--file` when the input already lives in a repo file. Use `--prompt` /
   `--prompt-file` only for text that has no file of its own.
-- Fact checks (numbers, URLs, proper nouns, item counts) and the character-count
-  comparison must be read off the diff against the original file — not off the
+- The helper's machine check already covers numbers, URLs and item counts in
+  `--file` mode. What is left to the caller is reading the diff for proper
+  nouns and for meaning — off the diff against the original file, not off the
   raw prompt text handed to `agy`.
 
 Safety rules:
