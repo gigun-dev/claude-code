@@ -45,11 +45,20 @@ A follow-up that restores the facts by handing back the source text passes the
 fact check while fixing nothing, so the helper watches for it separately. When
 a follow-up ran and the result is at least 0.85 times the original's length,
 it warns on stderr and sets `rolled_back` in the payload, with the length ratio
-and whether the result is byte-identical to the source next to it. It is a
+next to it. It is a
 warning, not a failure — the facts are intact, so the result is still usable.
 The threshold costs false positives on short or already terse documents, and
 on callers whose own instruction drops facts (restoring them pushes the length
 back up); that is why the evidence ships with the verdict.
+
+A result byte-identical to the source is a separate signal, judged on every
+`--file` run whether or not a follow-up happened: `agy` did nothing at all. Such
+a run passes the fact check and produces an empty diff, so the helper warns on
+stderr, sets `identical_to_original: true`, and reports
+`"status": "identical_to_original"` instead of `"ok"`. Character counts and the
+length ratio are taken from the same pair `cmp` compares (source content plus
+one trailing newline vs. the extracted body), so an identical run reports
+`original_chars == result_chars` and a ratio of 1.000.
 
 `--json` writes the machine payload (result body, diff for file mode, character
 counts, the fact-check outcome, the rollback verdict, how many follow-ups were
@@ -62,6 +71,16 @@ feel, not at shortening. Making shortness the goal moves the character count
 barely at all and degrades word choice instead (measured: the only thing that
 changed was picking 「確認済み」 over 「実測確認」). Ask for better word choice,
 not for fewer characters.
+
+That default is document-type neutral: it fixes wording and nothing else, and
+holds the source's register (常体/敬体), line breaks, indentation, punctuation
+width, terminology, English lines, the force of its rules, and its length. It
+used to ask for "business Japanese", which destroyed a rules document (measured
+2026-09-18 on `.claude/rules/comments.md`: 常体 turned into 敬体, 3130 characters
+grew to 4050, ASCII `( ) :` went full-width, coinages like `AIモデル` appeared,
+and the soft-wrapped lines collapsed into one — while the fact check passed).
+A caller who wants those things changed passes its own `--instruction` /
+`--instruction-file`.
 
 `--rules <path>` appends a fixed document (e.g. a writing-style skill's
 `SKILL.md`, or a file holding a constraint that applies to this one call only)

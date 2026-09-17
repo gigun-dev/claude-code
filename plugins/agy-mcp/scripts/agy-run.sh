@@ -75,7 +75,11 @@ Usage:
   結果の数値・URL・箇条書きと見出しの数を元と照合し、合わなければ同じ会話の
   次のターンでずれた箇所を名指しして直させる(既定 2 回まで)。
   聞き直しの結果が元の長さへ戻っていれば警告する(失敗にはしない)。
+  結果が元と完全に一致した回は、聞き直しの有無に関係なく警告し、
+  payload の status を identical_to_original にする。
   固有名詞は機械で照合しない(できない)。
+  既定の指示は文体・改行・記号・術語・長さを元のまま保たせる。
+  別の直し方をさせたいときは --instruction / --instruction-file で差し替える。
 
 --prompt / --prompt-file モード(従):
   短い断片やファイルに紐づかない相談用。前置きを剥がした本文だけを標準出力へ返す。
@@ -111,10 +115,25 @@ USAGE
 # ほぼ変わらず、変わったのは「実測確認」→「確認済み」のような語の選び方だけ
 # だった)。短くしたいときも、指示は語の選び方の側で書くこと。
 #
+# 文書の種類に依存しない指示にしてある。以前は「ビジネスユースの日本語へ」と
+# 書いており、規則・仕様の文書に当てると全損だった(実測 2026-09-18、
+# .claude/rules/comments.md: 常体が敬体になり、3130 字が 4050 字へ 29% 膨らみ、
+# ASCII の ( ) : が全角になり、「AIモデル」「UI画面」のような語が生まれ、
+# soft wrap の改行が 1 行に潰れた。それでも事実照合は通った)。
+# 文体・長さ・改行・記号・術語・規範の強さは、どの種類の文書でも書き手の
+# 決めたことであって推敲の対象ではないので、既定で保たせる。緩めたい呼び出しは
+# --instruction / --instruction-file で自前の指示に差し替えればよい。
+#
 # 事実を変えないことは、この指示で agy へ伝えたうえで、返ってきた結果を
 # このスクリプトが機械で照合する(数値・URL・箇条書きと見出しの数)。
-_DEFAULT_INSTRUCTION='次の文章を、意図や内容を変えずに、極めて自然かつ平易なビジネスユースの日本語へ校正すること。
+_DEFAULT_INSTRUCTION='次の文章を、意図・内容・形式を変えずに、自然で平易な日本語へ校正すること。直すのは語の選び方と言い回しだけに限ること。
 普段の日本語では使わない言い回しや単語は避けること。難しい言葉を別の難しい言葉に置き換えるだけにしないこと。
+文体は元の文章に合わせること。常体(だ・である)で書かれていれば常体のまま、敬体(です・ます)で書かれていれば敬体のまま返すこと。
+元の文章に無い語を作らないこと。術語・識別子・製品名・ファイル名・英数字の表記は元のまま使うこと。英語で書かれた行や語は英語のまま残すこと。
+指示・禁止・条件・例外の強さを変えないこと(「するな」を「しないほうがよい」にしない。逆もしない)。
+改行の位置・空行・字下げ・箇条書きと見出しの構造をそのまま保つこと。複数行に分かれている段落を1行につなげないこと。
+記号は元の文字種のまま使うこと。ASCII の括弧・コロン・引用符を全角にしないこと。全角のものを半角にしないこと。
+全体の文字数を元より増やさないこと。説明・補足・言い換えを足さないこと。
 数値・URL・固有名詞・項目数など事実に関わる部分は一切変えないこと。'
 
 model="gemini-3.8-flash-high"
@@ -745,24 +764,36 @@ else:
         "比較の基準になる元文が無いので事実照合を行わない"
     )
 
+# 完全一致は --file の全ての回で判定する(聞き直しの有無に依らない)ので、
+# 聞き直し限定の巻き戻り判定の中には置かず、独立した欄で出す。
+identical = os.environ.get("AGY_RUN_IDENTICAL") == "true"
+if mode == "file":
+    payload["identical_to_original"] = identical
+
 # 巻き戻りは事実照合を通り抜ける壊れ方なので、照合の結果とは別の欄で出す。
 # 真偽値だけでは閾値をまたいだだけなのか本当に戻ったのかが分からないので、
-# 判定の根拠(長さの比・閾値・元と完全一致か)も並べる。
+# 判定の根拠(長さの比・閾値)も並べる。
 rolled_back = os.environ.get("AGY_RUN_ROLLBACK", "null")
 payload["rolled_back"] = {"true": True, "false": False}.get(rolled_back)
 payload["rollback_evidence"] = {
     "length_ratio": float(os.environ.get("AGY_RUN_LENGTH_RATIO", "0")),
     "threshold": float(os.environ.get("AGY_RUN_ROLLBACK_THRESHOLD", "0")),
-    "identical_to_original": os.environ.get("AGY_RUN_IDENTICAL") == "true",
+    "identical_to_original": identical,
     "note": (
-        "聞き直しが起きた回だけ判定する。null は聞き直しが無かったことを表す"
+        "rolled_back は聞き直しが起きた回だけ判定する。null は聞き直しが"
+        "無かったことを表す。identical_to_original は聞き直しの有無に依らず判定する"
     ),
 }
 
 fact = payload["fact_check"]
-payload["status"] = (
-    "ok" if fact is None or fact.get("match") else "fact_mismatch_unresolved"
-)
+if identical and mode == "file":
+    # 何も書き直されていない回。事実照合は必ず通り diff も空になるので、
+    # status を ok にすると成功した回と見分けが付かない。
+    payload["status"] = "identical_to_original"
+else:
+    payload["status"] = (
+        "ok" if fact is None or fact.get("match") else "fact_mismatch_unresolved"
+    )
 
 json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
 sys.stdout.write("\n")
@@ -815,6 +846,12 @@ ${original_content}"
 	followup_txt=$(mktemp)
 	diff_file=$(mktemp)
 	_tmp_paths+=("$tmp_out" "$orig_copy" "$check_json" "$followup_txt" "$diff_file")
+	# 比較の基準はこの退避ファイル。$(cat) が落とした末尾の改行を1つだけ戻して
+	# 書く。agy の結果(tmp_out)も行単位の抽出なので必ず改行で終わる —— 同じ形へ
+	# 揃えた対どうしを cmp と文字数の両方で比べる。以前は文字数だけ
+	# printf '%s' "$original_content" から取っており、結果が1バイトも違わない回に
+	# 元 1590 / 結果 1591 と出ていた(実測 2026-09-18)。比が 1.000 にならず、
+	# 完全一致の判定だけが別の基準で動く状態だった。
 	printf '%s\n' "$original_content" >"$orig_copy"
 
 	_call_agy "$body_prompt" "$tmp_out"
@@ -872,7 +909,8 @@ ${original_content}"
 		echo "agy-run.sh: 警告 — agy が呼び出し中に元ファイル ${file} を書き換えた(本来 --file モードは元ファイルを変更しない契約)。退避しておいた元の内容へ書き戻した。書き換わったこと自体が異常であり、原因(prompt へのパス漏れや agy 側の設定変化)を調べること。" >&2
 	fi
 
-	orig_chars=$(printf '%s' "$original_content" | wc -m | tr -d ' ')
+	# 両方とも末尾の改行を1つ含んだ形で数える(cmp が比べるのと同じ対)。
+	orig_chars=$(wc -m <"$orig_copy" | tr -d ' ')
 	new_chars=$(wc -m <"$tmp_out" | tr -d ' ')
 	echo "agy-run.sh: 元 ${orig_chars} 文字 / 結果 ${new_chars} 文字(差 $((new_chars - orig_chars)))" >&2
 
@@ -882,18 +920,25 @@ ${original_content}"
 		echo "agy-run.sh: 警告 — 事実照合が最後まで合わなかった(聞き直し ${followups} 回)。残っているずれ:" >&2
 		printf '%s\n' "$check_summary" | sed 's/^/    /' >&2
 	fi
+	# 完全一致は聞き直しの有無に関係なく異常なので、--file の全ての回で判定する。
+	# 聞き直しが無い回に出るのは「agy が何もしなかった」ということで、事実照合は
+	# 必ず通り diff も空になる —— ここで言わないと、呼び出し元には成功した回と
+	# 区別が付かない(実測 2026-09-18: 出力が入力と1バイトも違わない回に
+	# rolled_back: null / diff: "" / status: "ok" / fact_check.match: true だけが出た)。
+	identical="false"
+	cmp -s -- "$orig_copy" "$tmp_out" && identical="true"
+	if [ "$identical" = "true" ]; then
+		echo "agy-run.sh: 警告 — 結果が元ファイルと完全に一致した(聞き直し ${followups} 回)。書き直しが1文字も残っていない。" >&2
+	fi
+
 	# 巻き戻りの判定は聞き直しが起きた回だけに限る。初回の結果が元と近い長さなのは、
 	# 単に書き直しが小さかっただけかもしれず、巻き戻りとは別の話。
 	rollback="null"
 	length_ratio=$(_rollback_ratio "$orig_chars" "$new_chars")
-	identical="false"
-	cmp -s -- "$orig_copy" "$tmp_out" && identical="true"
 	if [ "$followups" -gt 0 ]; then
 		if _rollback_verdict "$length_ratio"; then
 			rollback="true"
-			if [ "$identical" = "true" ]; then
-				echo "agy-run.sh: 警告 — 聞き直しの結果が元ファイルと完全に一致した。事実は保たれているが書き直しは残っていない。" >&2
-			else
+			if [ "$identical" != "true" ]; then
 				echo "agy-run.sh: 警告 — 聞き直しで書き直しが元へ戻っている可能性がある(結果は元の ${length_ratio} 倍の長さ。閾値 ${_ROLLBACK_RATIO_THRESHOLD})。事実は保たれているので結果は使えるが、diff を見て確かめること。" >&2
 			fi
 		else
