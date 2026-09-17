@@ -35,6 +35,7 @@ CHECK_NAMES=(
 	"marketplace.json プラグイン一覧整合性チェック (.claude-plugin ⇔ .agents)"
 	"Codex プラグインキャッシュ整合性チェック (~/.codex/plugins/cache ⇔ リポジトリ)"
 	"agy-mcp パース回帰テスト (--selftest-parse)"
+	"agy-run.sh 事実照合の対照テスト (--selftest-facts)"
 	"ADR の形式チェック"
 	"todo プラグインのテスト (tests/run.sh)"
 	"pre-push プラグインの実 push テスト"
@@ -565,6 +566,42 @@ else
 	fi
 fi
 [ "$agy_failed" -ne 0 ] && overall_failed=1
+
+# -----------------------------------------------------------------------
+# agy-run.sh の事実照合の対照テスト(agy を呼ばない)
+# -----------------------------------------------------------------------
+# 【性質】
+#   agy-run.sh --selftest-facts は固定の材料に対して照合関数だけを走らせる。
+#   agy を呼ばない・決定論的・1秒未満で、上の --selftest-parse と同じ性質。
+#
+# 【なぜ関門に入れるのか】
+#   agy-run.sh は「数値・URL・箇条書きと見出しの数が元文から変わっていないか」を
+#   機械で照合し、合わなければ agy に聞き直す。この照合が壊れて素通しになっても、
+#   呼び出し元には「合致」としか見えない —— 検知器が黙って死ぬ形そのもの。
+#   --selftest-facts は陰性対照(事実を保った書き直しで鳴らないこと)と
+#   陽性対照(数値と URL が落ちた結果を検出すること)を両方走らせるので、
+#   素通しになった瞬間にここで落ちる。
+#
+# 【uv ではなく python3 を要る理由】
+#   照合は agy-run.sh に埋め込んだ python3 で行う(server.py とは別経路)。
+#   python3 が無ければ agy-run.sh 自身が非0で落ちるので、ここでは追加の
+#   事前判定を置かず、落ちた出力をそのまま見せる。
+echo ""
+check_header
+facts_failed=0
+agy_helper="plugins/agy-mcp/scripts/agy-run.sh"
+if ! git ls-files --error-unmatch -- "$agy_helper" >/dev/null 2>&1; then
+	echo "- $agy_helper が無いので検査しない(このリポジトリに agy-mcp は入っていない)"
+else
+	if facts_out=$(bash "$agy_helper" --selftest-facts 2>&1); then
+		echo "✓ agy-run.sh 事実照合の対照テスト: 問題なし"
+	else
+		echo "✗ agy-run.sh の事実照合の対照テストが失敗した"
+		echo "$facts_out" | tail -20 | sed 's/^/    /'
+		facts_failed=1
+	fi
+fi
+[ "$facts_failed" -ne 0 ] && overall_failed=1
 
 # ADR の単体テストに加え、リポジトリ自身の決定を検査する。
 echo ""
