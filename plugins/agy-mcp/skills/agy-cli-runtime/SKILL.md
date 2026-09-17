@@ -41,6 +41,16 @@ What the helper absorbs (do not reimplement these elsewhere):
 - `--file` mode never overwrites the source file: it prints a unified diff
   (original vs. agy's draft) plus an original-vs-result character count to
   stderr. Applying the diff is the caller's decision, not the helper's.
+  This is enforced, not just intended: `agy`'s own settings
+  (`~/.gemini/antigravity-cli/settings.json`, `agentMode: accept-edits` /
+  `toolPermission: always-proceed`) let it call file-write tools without
+  approval, and `agy` also `ls`s its CWD and opens absolute paths it finds in
+  the prompt text (measured). The helper never puts the source file's
+  absolute path in the prompt (only its basename), runs `agy` with its CWD
+  isolated in a fresh empty directory per call, and diffs the source file's
+  content against a stashed copy after the call — if it changed anyway, the
+  helper restores the stashed content and prints a warning to stderr before
+  returning the diff.
 
 Command selection:
 - Use `--file` when the input already lives in a repo file. Use `--prompt` /

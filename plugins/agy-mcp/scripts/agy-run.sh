@@ -13,9 +13,15 @@
 #     位置で切るので言い回しに依存しない)。
 #   - 長いプロンプト/長いファイル。ファイル経由で渡し、シェルのメタ文字と
 #     改行を壊さない。
-#   - ファイル入力のときは**その場で書き戻さない**。元ファイルと agy の案の
-#     unified diff を返すだけにする。採用するかどうかは呼び出し元(エージェント
-#     または人)が diff を見てから決める。
+#   - ファイル入力のときはその場で書き戻さない契約。ただし agy 自身の設定
+#     (~/.gemini/antigravity-cli/settings.json の agentMode: accept-edits /
+#     toolPermission: always-proceed)は承認なしでファイル書き込みツールを
+#     実行できるため、prompt に元ファイルの絶対パスを書くと agy がその場で
+#     元ファイルを直接書き換えた(実測: 呼び出し前後で md5 が変化)。ここでは
+#     prompt にファイル名(basename)だけを渡して絶対パスを書かず、agy の
+#     CWD を呼び出しごとの空ディレクトリへ隔離し、さらに呼び出し後に
+#     元ファイルの内容を退避分と照合して変わっていれば書き戻す。渡し方を
+#     絞ったうえで、それでも破れた場合に検査で戻す二重の構え。
 #
 # 呼び出し元(agy-ja-writer / MCP ツール以外で agy を直接叩きたい場面)は、
 # 生の `agy` 文字列を組まず、必ずこのスクリプトを経由すること
@@ -33,6 +39,18 @@
 
 set -euo pipefail
 
+# 生成した一時パス(ディレクトリ・ファイル)をここへ積み、EXIT 時にまとめて消す。
+# agy を呼ぶたびに CWD 隔離用の空ディレクトリを1つ作るので、trap は複数パス
+# 前提で書く(1パスだけを消す前提の trap だと隔離ディレクトリが残り続ける)。
+_tmp_paths=()
+_cleanup_tmp_paths() {
+	local p
+	for p in "${_tmp_paths[@]}"; do
+		rm -rf -- "$p"
+	done
+}
+trap _cleanup_tmp_paths EXIT
+
 usage() {
 	cat >&2 <<'USAGE'
 Usage:
@@ -42,7 +60,7 @@ Usage:
 
 --file モード(主):
   元ファイルを読み、instruction(省略時は日本語校正の既定指示)に従って
-  agy に書き直させ、**元ファイルは変更せず** unified diff だけを標準出力へ出す。
+  agy に書き直させ、元ファイルは変更せず unified diff だけを標準出力へ出す。
   文字数(元/結果)を stderr に1行出す(事実照合・文字数照合は差分を見る側の仕事)。
 
 --prompt / --prompt-file モード(従):
@@ -188,6 +206,11 @@ _end_marker="=====AGY_RUN_BODY_END====="
 
 # `agy` を1回呼び、前置きを剥がした本文だけを標準出力へ書く。
 # 失敗(マーカーが見当たらない等)は非0で返し、生応答を stderr に残す。
+#
+# agy は自分の CWD を ls して回り、prompt 本文に書かれた絶対パスまで勝手に
+# 開く(実測)。呼び出しごとに空の一時ディレクトリを作り、そこへ cd してから
+# agy を起動することで、呼び出し元のリポジトリ全体(および CWD 配下の
+# .agents/skills 等)を見えなくする。
 _call_agy() {
 	local body_prompt="$1"
 	local wrapped
@@ -206,8 +229,12 @@ ${_end_marker}
 EOF
 	)"
 
+	local isolated_cwd
+	isolated_cwd=$(mktemp -d)
+	_tmp_paths+=("$isolated_cwd")
+
 	local raw
-	raw=$(agy -p="${wrapped}" --model "${model}" --disable-slash-commands)
+	raw=$(cd -- "$isolated_cwd" && agy -p="${wrapped}" --model "${model}" --disable-slash-commands)
 
 	local body
 	body=$(printf '%s\n' "$raw" | awk -v b="$_begin_marker" -v e="$_end_marker" '
@@ -246,17 +273,29 @@ $rules_text"
 	fi
 
 	original_content=$(cat -- "$file")
+	# 絶対パスは書かない。ファイル名(拡張子)まではモデルへの推敲の手がかりに
+	# なるので渡すが、agy が到達できる形の手がかり(ディレクトリ構造)は渡さない。
 	body_prompt="$instruction
 
-対象ファイル: ${file}
+対象ファイル名: $(basename -- "$file")
 
 --- 本文 ---
 ${original_content}"
 
 	tmp_out=$(mktemp)
-	trap 'rm -f "$tmp_out"' EXIT
+	_tmp_paths+=("$tmp_out")
 	_call_agy "$body_prompt" >"$tmp_out"
 	printf '\n' >>"$tmp_out"
+
+	# 上の対策(絶対パスを渡さない・CWD を隔離する)で塞いだつもりでも、agy が
+	# 別経路(例えば元々開いていたファイルディスクリプタ)で元ファイルへ到達し
+	# うる以上、最後に実物を照合して契約を保つ。変わっていたら退避してあった
+	# 内容へ戻し、その事実(異常)を stderr に警告する。
+	current_content=$(cat -- "$file")
+	if [ "$current_content" != "$original_content" ]; then
+		printf '%s' "$original_content" >"$file"
+		echo "agy-run.sh: 警告 — agy が呼び出し中に元ファイル ${file} を書き換えた(本来 --file モードは元ファイルを変更しない契約)。退避しておいた元の内容へ書き戻した。書き換わったこと自体が異常であり、原因(prompt へのパス漏れや agy 側の設定変化)を調べること。" >&2
+	fi
 
 	orig_chars=$(printf '%s' "$original_content" | wc -m | tr -d ' ')
 	new_chars=$(wc -m <"$tmp_out" | tr -d ' ')
