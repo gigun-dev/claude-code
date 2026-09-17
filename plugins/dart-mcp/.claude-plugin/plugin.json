@@ -2,6 +2,10 @@
   "name": "dart-mcp",
   "version": "1.0.0",
   "description": "Dart/Flutter MCP server",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
   "mcpServers": {
     "dart": {
       "type": "stdio",

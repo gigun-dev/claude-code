@@ -2,6 +2,10 @@
   "name": "next-devtools-mcp",
   "version": "1.0.0",
   "description": "Next.js DevTools MCP server",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
   "mcpServers": {
     "next-devtools": {
       "type": "stdio",

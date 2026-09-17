@@ -2,6 +2,10 @@
   "name": "xcode-mcp",
   "version": "1.0.0",
   "description": "Xcode MCP server (xcrun mcpbridge)",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
   "mcpServers": {
     "xcode": {
       "type": "stdio",

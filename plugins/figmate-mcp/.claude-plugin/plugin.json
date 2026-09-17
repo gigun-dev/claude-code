@@ -2,6 +2,10 @@
   "name": "figmate-mcp",
   "version": "1.0.0",
   "description": "Figmate MCP server (agent2figma design)",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
   "mcpServers": {
     "figmate": {
       "type": "stdio",

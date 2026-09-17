@@ -1,5 +1,5 @@
 {
-  "$versionGeneratedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); only \"version\" is generated here, the rest of this file is hand-edited",
+  "$generatedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); generates name/version/description/author here — homepage, repository, keywords, the mcpServers/skills pointer, and interface stay hand-edited in this file",
   "name": "ios-skills",
   "version": "1.2.0",
   "description": "iOS app icon authoring, Simulator control, physical-device builds, and App Store Connect uploads.",
@@ -9,7 +9,13 @@
   },
   "homepage": "https://github.com/gigun-dev/claude-code/tree/main/plugins/ios-skills",
   "repository": "https://github.com/gigun-dev/claude-code",
-  "keywords": ["ios", "swift", "xcode", "app-icon", "simulator"],
+  "keywords": [
+    "ios",
+    "swift",
+    "xcode",
+    "app-icon",
+    "simulator"
+  ],
   "skills": "./skills/",
   "interface": {
     "displayName": "iOS Skills",

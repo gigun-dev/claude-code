@@ -2,6 +2,10 @@
   "name": "chrome-devtools-mcp",
   "version": "1.0.0",
   "description": "Chrome DevTools MCP server",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
   "mcpServers": {
     "chrome-devtools": {
       "type": "stdio",

@@ -2,6 +2,10 @@
   "name": "agy-mcp",
   "version": "0.3.0",
   "description": "Antigravity CLI (agy) MCP server (Gemini: Google Search grounding, image/video understanding)",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
   "mcpServers": {
     "agy": {
       "type": "stdio",

@@ -3,13 +3,14 @@
 
 Two things used to be written by hand in two places:
 
-  1. plugin version
-     source: plugins/<name>/.claude-plugin/plugin.json  ("version")
-     generated: plugins/<name>/.codex-plugin/plugin.json  ("version" only;
-       every other field in that file — description, interface, keywords,
-       homepage, etc. — is still hand-edited directly in that file. This
-       script never touches anything but the "version" value and the
-       $versionGeneratedFrom marker next to it.)
+  1. plugins/<name>/.claude-plugin/plugin.json's "name", "version",
+     "description", and "author"
+     generated into: plugins/<name>/.codex-plugin/plugin.json (same four
+       fields, verbatim from the Claude side). Everything else in that
+       file — homepage, repository, keywords, the mcpServers/skills
+       pointer, interface — has no Claude-side equivalent, so it stays
+       hand-edited directly in that file. The $generatedFrom marker next
+       to "name" says which fields are generated and which are not.
 
   2. the published plugin list
      source: .claude-plugin/marketplace.json (name, source path, order,
@@ -37,7 +38,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -45,11 +45,21 @@ PLUGINS_ROOT = REPO_ROOT / "plugins"
 CLAUDE_MARKETPLACE = REPO_ROOT / ".claude-plugin" / "marketplace.json"
 CODEX_MARKETPLACE = REPO_ROOT / ".agents" / "plugins" / "marketplace.json"
 
-VERSION_MARKER_KEY = "$versionGeneratedFrom"
-VERSION_MARKER_VALUE = (
+# Fields plugin.json generation copies verbatim from .claude-plugin/plugin.json,
+# in the order they are written into .codex-plugin/plugin.json.
+GENERATED_PLUGIN_FIELDS = ["name", "version", "description", "author"]
+GENERATED_FROM_KEY = "$generatedFrom"
+GENERATED_FROM_VALUE = (
     "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); "
-    "only \"version\" is generated here, the rest of this file is hand-edited"
+    "generates " + "/".join(GENERATED_PLUGIN_FIELDS) + " here — "
+    "homepage, repository, keywords, the mcpServers/skills pointer, and "
+    "interface stay hand-edited in this file"
 )
+# Marker key names this script used to write and no longer does — dropped on
+# regeneration so a previous run's marker doesn't linger as a stray
+# hand-written-looking field.
+LEGACY_MARKER_KEYS = {"$versionGeneratedFrom"}
+
 MARKETPLACE_MARKER_KEY = "$generated"
 MARKETPLACE_MARKER_VALUE = (
     "scripts/generate_manifests.py --write, from .claude-plugin/marketplace.json "
@@ -74,19 +84,8 @@ def plugin_dirs() -> list[Path]:
 
 
 # ---------------------------------------------------------------------------
-# 1. plugin.json version
+# 1. plugin.json — name/version/description/author
 # ---------------------------------------------------------------------------
-
-
-_VERSION_FIELD_RE = re.compile(r'("version"\s*:\s*")[^"]*(")')
-# A JSON string value: any run of characters that are not a bare quote or
-# backslash, or a backslash-escaped pair (\", \\, \n, ...). Matches the
-# whole '"$versionGeneratedFrom": "...",' key-value pair (with its trailing
-# comma and any leading whitespace/newline) so it can be stripped cleanly
-# before a fresh one is inserted, however it was last written.
-_MARKER_KV_RE = re.compile(
-    r'\s*"\$versionGeneratedFrom"\s*:\s*"(?:[^"\\]|\\.)*"\s*,'
-)
 
 
 def generate_codex_plugin_json(claude_path: Path, codex_path: Path) -> str | None:
@@ -94,50 +93,36 @@ def generate_codex_plugin_json(claude_path: Path, codex_path: Path) -> str | Non
     there is no paired .codex-plugin/plugin.json to generate (Codex-less
     plugin — not this script's concern).
 
-    This patches the raw text in place (strip any existing marker, insert a
-    fresh one, substitute the version value) instead of parsing and
-    re-serializing the whole object, because everything past "version" in
-    this file is hand-edited directly here and must keep its own formatting
-    untouched."""
+    Rebuilds the whole object: the generated fields (in GENERATED_PLUGIN_FIELDS
+    order) come from the Claude side, everything else is carried over
+    unchanged from the current Codex file, in its existing order. This means
+    a full re-serialize (indent=2) rather than a byte-preserving text patch —
+    once more than one field is generated, patching text fragments in place
+    stops being simpler or safer than parse-merge-reserialize."""
     if not codex_path.is_file():
         return None
 
-    claude_version = json.loads(claude_path.read_text(encoding="utf-8"))["version"]
-    codex_raw = codex_path.read_text(encoding="utf-8")
-    json.loads(codex_raw)  # fail loudly on already-broken JSON before patching
+    claude_data = json.loads(claude_path.read_text(encoding="utf-8"))
+    codex_data = json.loads(codex_path.read_text(encoding="utf-8"))
 
-    # json.dumps(str) round-trips through the JSON string grammar (escaping
-    # any quotes/backslashes in the marker text), so this cannot emit broken
-    # JSON regardless of what the marker text contains.
-    marker_value_json = json.dumps(VERSION_MARKER_VALUE, ensure_ascii=False)
+    for field in GENERATED_PLUGIN_FIELDS:
+        if field not in claude_data:
+            raise SystemExit(
+                f"{claude_path}: missing \"{field}\", needed to generate {codex_path}"
+            )
 
-    text = _MARKER_KV_RE.sub("", codex_raw, count=1)
-    pretty = text.startswith("{\n")
-    if pretty:
-        # Insert as its own line right after the opening "{\n", not right
-        # after "{" — otherwise the marker lands on the same line as "{".
-        insertion = f'  "{VERSION_MARKER_KEY}": {marker_value_json},\n'
-        text = text[:2] + insertion + text[2:]
-    else:
-        insertion = f'"{VERSION_MARKER_KEY}":{marker_value_json},'
-        text = text[:1] + insertion + text[1:]
+    merged = {GENERATED_FROM_KEY: GENERATED_FROM_VALUE}
+    for field in GENERATED_PLUGIN_FIELDS:
+        merged[field] = claude_data[field]
+    for key, value in codex_data.items():
+        if key in (GENERATED_FROM_KEY, *LEGACY_MARKER_KEYS) or key in GENERATED_PLUGIN_FIELDS:
+            continue
+        merged[key] = value
 
-    text, n = _VERSION_FIELD_RE.subn(
-        lambda m: f'{m.group(1)}{claude_version}{m.group(2)}', text, count=1
-    )
-    if n == 0:
-        raise SystemExit(f'{codex_path}: no "version" field found to patch')
-
-    # Validate the patched text is still well-formed JSON carrying the right
-    # data before handing it back — a regex patch that produced broken or
-    # silently-wrong JSON must fail loudly, not get written.
-    patched = json.loads(text)
-    if patched.get("version") != claude_version or patched.get(VERSION_MARKER_KEY) != VERSION_MARKER_VALUE:
-        raise SystemExit(f"{codex_path}: patch did not produce the expected version/marker")
-    return text
+    return fmt_json(merged, compact=False)
 
 
-def sync_plugin_versions(write: bool) -> list[str]:
+def sync_plugin_manifests(write: bool) -> list[str]:
     """Return the list of plugin dirs whose .codex-plugin/plugin.json is
     stale (or, in write mode, that were rewritten)."""
     stale: list[str] = []
@@ -234,14 +219,15 @@ def main() -> None:
     args = parser.parse_args()
     write = args.write
 
-    stale_versions = sync_plugin_versions(write)
+    stale_plugins = sync_plugin_manifests(write)
     marketplace_stale = sync_marketplace(write)
 
     problems = []
-    if stale_versions:
+    if stale_plugins:
         verb = "regenerated" if write else "out of sync"
         problems.append(
-            f"plugin.json version {verb} in: " + ", ".join(stale_versions)
+            f".codex-plugin/plugin.json ({'/'.join(GENERATED_PLUGIN_FIELDS)}) {verb} in: "
+            + ", ".join(stale_plugins)
         )
     if marketplace_stale:
         verb = "regenerated" if write else "out of sync"

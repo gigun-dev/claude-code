@@ -2,6 +2,10 @@
   "name": "deepwiki-mcp",
   "version": "1.0.0",
   "description": "DeepWiki MCP server (GitHub repo docs Q&A)",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
   "mcpServers": {
     "deepwiki": {
       "type": "http",

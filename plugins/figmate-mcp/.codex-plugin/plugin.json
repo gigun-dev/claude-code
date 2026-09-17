@@ -1,5 +1,5 @@
 {
-  "$versionGeneratedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); only \"version\" is generated here, the rest of this file is hand-edited",
+  "$generatedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); generates name/version/description/author here — homepage, repository, keywords, the mcpServers/skills pointer, and interface stay hand-edited in this file",
   "name": "figmate-mcp",
   "version": "1.0.0",
   "description": "Figmate MCP server (agent2figma design)",

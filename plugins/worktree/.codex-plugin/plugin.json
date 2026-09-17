@@ -1,5 +1,5 @@
 {
-  "$versionGeneratedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); only \"version\" is generated here, the rest of this file is hand-edited",
+  "$generatedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); generates name/version/description/author here — homepage, repository, keywords, the mcpServers/skills pointer, and interface stay hand-edited in this file",
   "name": "worktree",
   "version": "0.2.0",
   "description": "Manage git worktrees a subagent used: integrate (squash-merge, human commits, cleanup only after the commit is verified) as the primary path, sweep (judge removable / human-decides / hands-off, with a machine check for squash-merged branches) to catch what integrate didn't handle. Never guesses squash status and never force-deletes without a machine-verified reason.",
