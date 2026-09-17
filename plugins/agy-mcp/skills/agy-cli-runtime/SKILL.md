@@ -17,9 +17,12 @@ Primary helper:
 - `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --prompt-file <path> [--rules <path> ...] [--skill <name> ...] [--model <model>]`
 
 `--rules <path>` appends a fixed document (e.g. a writing-style skill's
-`SKILL.md`, or a plain text file listing terms the caller has individually
-rejected) after the instruction/prompt, verbatim, in the order given. It can
-be repeated. `--skill <name>` is a name-based shortcut for the same path:
+`SKILL.md`, or a file holding a constraint that applies to this one call only)
+after the instruction/prompt, verbatim, in the order given. It can
+be repeated. Do not build a file that accumulates the terms a caller has
+rejected one by one (ruling of 2026-09-17): prose degrades in unlimited ways,
+so such a list grows forever without ever covering them. Re-applying the
+writing norm is cheaper. `--skill <name>` is a name-based shortcut for the same path:
 it resolves `<name>` against this repo's `plugins/*/skills/<name>/SKILL.md`
 (the caller doesn't need to know which plugin owns it) and feeds the
 resolved file into the same `--rules` pipe — there is only one concatenation
