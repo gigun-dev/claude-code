@@ -66,3 +66,12 @@ Safety rules:
   (`agy_search`) and media understanding (`agy_look` / `agy_youtube`). This
   helper covers the plain-text call the MCP tools do not: instructing `agy` to
   rewrite text.
+- Only pass text that is fine to be public. Two destinations are confirmed:
+  `google-antigravity/antigravity-cli`'s README ("Terms of Service & Data
+  Use") states Google collects Interactions data by default; the README lists
+  an opt-out but its setting key is not found in the README or in
+  `~/.gemini/antigravity-cli/settings.json` (unconfirmed). Separately, the
+  full prompt text lands in plaintext in
+  `~/.gemini/antigravity-cli/brain/<conversation-id>/.system_generated/logs/transcript_full.jsonl`
+  (`USER_REQUEST`, measured); no deletion mechanism was found. Do not pass
+  secrets, tokens, or unpublished values to `--file` or `--rules`.
