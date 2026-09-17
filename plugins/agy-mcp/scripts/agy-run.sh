@@ -74,6 +74,7 @@ Usage:
   文字数(元/結果)を stderr に1行出す。
   結果の数値・URL・箇条書きと見出しの数を元と照合し、合わなければ同じ会話の
   次のターンでずれた箇所を名指しして直させる(既定 2 回まで)。
+  聞き直しの結果が元の長さへ戻っていれば警告する(失敗にはしない)。
   固有名詞は機械で照合しない(できない)。
 
 --prompt / --prompt-file モード(従):
@@ -98,7 +99,8 @@ Options:
                                既定 2。0 で聞き直さない(--file モードのみ)。
   --json                       機械向けの payload(JSON)を標準出力へ出す。
                                このとき人向けの表示(diff・文字数)は標準エラーへ回す。
-  --selftest-facts             事実照合の陽性対照・陰性対照を走らせる(agy を呼ばない)。
+  --selftest-facts             事実照合と巻き戻り判定の陽性対照・陰性対照を走らせる
+                               (agy を呼ばない)。
 USAGE
 	exit 1
 }
@@ -357,6 +359,41 @@ if __name__ == "__main__":
 FACTS_PY
 }
 
+# -----------------------------------------------------------------------------
+# 巻き戻りの検知
+# -----------------------------------------------------------------------------
+# 聞き直しで事実は戻ったが、書き直しごと元の文章へ戻ってしまった回を捕まえる。
+# この壊れ方は事実照合を通り抜ける(事実は保たれているので)。検知しなければ
+# 呼び出し元は「照合に合格した」としか読めない。
+#
+# 判定は結果と元文の文字数の比で行う。完全一致だけを見る案は採らない ——
+# 実測(2026-09-17、聞き直しの文面を直す前の 5 回)では、完全一致は 5 回中
+# 2 回しか捕まえず、残り 3 回は元の言い回しがほぼ戻ったうえに空句が増えていた。
+# 比なら 5 回すべてを捕まえる。
+#
+# 閾値 0.85 の根拠(同じ実測。出発点の 0.9 から下げた):
+#   巻き戻った 5 回の比: 0.874 / 0.988 / 1.004 / 1.004 / 1.004
+#   素直に書き直せた 5 回の比: 0.561 / 0.570 / 0.594 / 0.598 / 0.637
+#   両者の間は 0.637〜0.874 が空いている。0.9 では 0.874 の回を取りこぼすので、
+#   空いた区間の中で巻き戻り側に寄せた 0.85 を採る。
+#
+# 誤検知について。短い文書や、元々簡潔な文書では、正しい書き直しでも比が
+# 0.85 を超える。呼び出し元の指示が事実を落とす向き(数値を省けなど)のときも、
+# 聞き直しで値が戻る分だけ結果が伸びて超えうる(実測で 5 回中 4 回が該当した)。
+# 閾値を置く以上は避けられないので、失敗にはせず警告にとどめ、payload には
+# 判定の根拠(比と完全一致かどうか)を一緒に出して呼び出し元が見分けられるようにする。
+_ROLLBACK_RATIO_THRESHOLD="0.85"
+
+# 元文字数と結果文字数から比を出す(小数第3位まで)。
+_rollback_ratio() {
+	awk -v o="$1" -v n="$2" 'BEGIN { printf "%.3f", (o > 0 ? n / o : 0) }'
+}
+
+# 比が閾値以上なら 0(巻き戻りの疑いあり)、そうでなければ 1 を返す。
+_rollback_verdict() {
+	awk -v r="$1" -v t="$_ROLLBACK_RATIO_THRESHOLD" 'BEGIN { exit (r >= t ? 0 : 1) }'
+}
+
 # --selftest-facts: agy を呼ばずに照合の陽性対照・陰性対照を走らせる。
 # 検知しない照合を積んでも意味が無いので、「落ちるべきときに落ちるか」を
 # 材料つきで確かめられる口を残す。
@@ -421,11 +458,35 @@ BAD
 			fi
 		fi
 	done
+	# 巻き戻り判定の対照。材料は 2026-09-17 に agy を 10 回回して取った実測の
+	# 文字数(結果/元)そのもの。陽性は聞き直しの文面を直す前の 5 回(書き直しが
+	# 元へ戻った)、陰性は直した後の 5 回(書き直しを保ったまま値だけ戻った)。
+	echo "--- rollback ---"
+	for pair in 235:234:yes 235:234:yes 235:234:yes 338:342:yes 299:342:yes \
+		139:234:no 149:234:no 140:234:no 195:342:no 192:342:no; do
+		st_new=${pair%%:*}
+		st_rest=${pair#*:}
+		st_orig=${st_rest%%:*}
+		st_want=${st_rest#*:}
+		st_ratio=$(_rollback_ratio "$st_orig" "$st_new")
+		if _rollback_verdict "$st_ratio"; then
+			st_got=yes
+		else
+			st_got=no
+		fi
+		if [ "$st_got" != "$st_want" ]; then
+			echo "NG [rollback] 元 ${st_orig} / 結果 ${st_new}(比 ${st_ratio}): 期待 ${st_want} だが ${st_got}"
+			st_failed=1
+		else
+			echo "    元 ${st_orig} / 結果 ${st_new}(比 ${st_ratio}) → 巻き戻り ${st_got}"
+		fi
+	done
+
 	if [ "$st_failed" -ne 0 ]; then
 		echo "NG selftest-facts: 失敗あり"
 		exit 1
 	fi
-	echo "OK selftest-facts: 陰性対照は誤検知せず、陽性対照は検出した"
+	echo "OK selftest-facts: 陰性対照は誤検知せず、陽性対照は検出した(事実照合・巻き戻り判定とも)"
 	exit 0
 fi
 
@@ -684,6 +745,20 @@ else:
         "比較の基準になる元文が無いので事実照合を行わない"
     )
 
+# 巻き戻りは事実照合を通り抜ける壊れ方なので、照合の結果とは別の欄で出す。
+# 真偽値だけでは閾値をまたいだだけなのか本当に戻ったのかが分からないので、
+# 判定の根拠(長さの比・閾値・元と完全一致か)も並べる。
+rolled_back = os.environ.get("AGY_RUN_ROLLBACK", "null")
+payload["rolled_back"] = {"true": True, "false": False}.get(rolled_back)
+payload["rollback_evidence"] = {
+    "length_ratio": float(os.environ.get("AGY_RUN_LENGTH_RATIO", "0")),
+    "threshold": float(os.environ.get("AGY_RUN_ROLLBACK_THRESHOLD", "0")),
+    "identical_to_original": os.environ.get("AGY_RUN_IDENTICAL") == "true",
+    "note": (
+        "聞き直しが起きた回だけ判定する。null は聞き直しが無かったことを表す"
+    ),
+}
+
 fact = payload["fact_check"]
 payload["status"] = (
     "ok" if fact is None or fact.get("match") else "fact_mismatch_unresolved"
@@ -698,6 +773,10 @@ PAYLOAD_PY
 		AGY_RUN_FOLLOWUPS="${followups-0}" \
 		AGY_RUN_MAX_FOLLOWUPS="$max_followups" \
 		AGY_RUN_FILE="$file" \
+		AGY_RUN_ROLLBACK="${rollback-null}" \
+		AGY_RUN_LENGTH_RATIO="${length_ratio-0}" \
+		AGY_RUN_ROLLBACK_THRESHOLD="$_ROLLBACK_RATIO_THRESHOLD" \
+		AGY_RUN_IDENTICAL="${identical-false}" \
 		python3 "$_payload_py" "$1" "$2" "$3" "$4" "$5" "$6"
 }
 
@@ -803,6 +882,25 @@ ${original_content}"
 		echo "agy-run.sh: 警告 — 事実照合が最後まで合わなかった(聞き直し ${followups} 回)。残っているずれ:" >&2
 		printf '%s\n' "$check_summary" | sed 's/^/    /' >&2
 	fi
+	# 巻き戻りの判定は聞き直しが起きた回だけに限る。初回の結果が元と近い長さなのは、
+	# 単に書き直しが小さかっただけかもしれず、巻き戻りとは別の話。
+	rollback="null"
+	length_ratio=$(_rollback_ratio "$orig_chars" "$new_chars")
+	identical="false"
+	cmp -s -- "$orig_copy" "$tmp_out" && identical="true"
+	if [ "$followups" -gt 0 ]; then
+		if _rollback_verdict "$length_ratio"; then
+			rollback="true"
+			if [ "$identical" = "true" ]; then
+				echo "agy-run.sh: 警告 — 聞き直しの結果が元ファイルと完全に一致した。事実は保たれているが書き直しは残っていない。" >&2
+			else
+				echo "agy-run.sh: 警告 — 聞き直しで書き直しが元へ戻っている可能性がある(結果は元の ${length_ratio} 倍の長さ。閾値 ${_ROLLBACK_RATIO_THRESHOLD})。事実は保たれているので結果は使えるが、diff を見て確かめること。" >&2
+			fi
+		else
+			rollback="false"
+		fi
+	fi
+
 	echo "agy-run.sh: 機械で照合していない — 固有名詞(機械では判定できない)と、箇条書き・見出し以外の散文中の項目。ここは人が読むこと。" >&2
 
 	# diff は 0(差分なし)/1(差分あり)のどちらでも正常系。2以上だけ異常。

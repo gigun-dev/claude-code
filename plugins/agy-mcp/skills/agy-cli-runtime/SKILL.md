@@ -41,10 +41,21 @@ What the machine check covers, and what it does not:
 - `--prompt` / `--prompt-file` run no fact check at all — there is no original
   to compare against. The payload records that instead of leaving it blank.
 
+A follow-up that restores the facts by handing back the source text passes the
+fact check while fixing nothing, so the helper watches for it separately. When
+a follow-up ran and the result is at least 0.85 times the original's length,
+it warns on stderr and sets `rolled_back` in the payload, with the length ratio
+and whether the result is byte-identical to the source next to it. It is a
+warning, not a failure — the facts are intact, so the result is still usable.
+The threshold costs false positives on short or already terse documents, and
+on callers whose own instruction drops facts (restoring them pushes the length
+back up); that is why the evidence ships with the verdict.
+
 `--json` writes the machine payload (result body, diff for file mode, character
-counts, the fact-check outcome, how many follow-ups were spent, and what was
-not checked) to stdout, and moves the human-facing diff to stderr. Without
-`--json` the output is unchanged: diff on stdout, character counts on stderr.
+counts, the fact-check outcome, the rollback verdict, how many follow-ups were
+spent, and what was not checked) to stdout, and moves the human-facing diff to
+stderr. Without `--json` the output is unchanged: diff on stdout, character
+counts on stderr.
 
 The instruction the helper defaults to aims at removing the machine-written
 feel, not at shortening. Making shortness the goal moves the character count
