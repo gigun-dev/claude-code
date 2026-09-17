@@ -18,7 +18,11 @@ Primary helper:
 The round trip (write → check the facts → ask again where they drifted) is the
 helper's own work, not the caller's. In `--file` mode it compares the result
 against the original and, when they disagree, sends one more turn in the same
-`agy` conversation naming only what drifted — the document is not resent.
+`agy` conversation naming only what drifted — the document is not resent. That
+turn tells `agy` to build on its own previous answer and not to fall back to
+the source text: worded as "fix these to match the original" instead, the model
+answered with the untouched source in 2 of 5 runs and lost the rewrite in all 5
+(measured 2026-09-17), which passes the fact check while fixing nothing.
 `--max-followups` caps that (default 2). Hitting the cap is not a pass: the
 helper prints what is still wrong and the `--json` payload carries
 `"status": "fact_mismatch_unresolved"`.
