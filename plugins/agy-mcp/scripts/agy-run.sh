@@ -19,9 +19,18 @@
 #     実行できるため、prompt に元ファイルの絶対パスを書くと agy がその場で
 #     元ファイルを直接書き換えた(実測: 呼び出し前後で md5 が変化)。ここでは
 #     prompt にファイル名(basename)だけを渡して絶対パスを書かず、agy の
-#     CWD を呼び出しごとの空ディレクトリへ隔離し、さらに呼び出し後に
-#     元ファイルの内容を退避分と照合して変わっていれば書き戻す。渡し方を
-#     絞ったうえで、それでも破れた場合に検査で戻す二重の構え。
+#     CWD を呼び出しごとの空ディレクトリへ隔離し、環境変数
+#     AGY_RUN_READONLY=1 を立てて書き込み系ツールを deny させ、さらに
+#     呼び出し後に元ファイルの内容を退避分と照合して変わっていれば書き戻す。
+#   - 呼び出しごとに道具を絞る引数は agy に無い(--allowed-tools 相当は
+#     --help にもサブコマンドにも無く、--sandbox は file ツールを縛らず、
+#     --mode plan は強制ではない)。代わりに ~/.gemini/config/hooks.json の
+#     PreToolUse フック(実体は scripts/agy-readonly-hook.sh)が
+#     AGY_RUN_READONLY=1 のときだけ write_to_file / replace_file_content を
+#     deny する。設定は常設・実効は呼び出しごと、という形。
+#     このフックは ~/.gemini/ 側の設定に依存するので、hooks.json が消えれば
+#     無音で deny しなくなる。上の3つ(パスを渡さない・CWD 隔離・事後照合)は
+#     フックとは独立に残す。
 #
 # 呼び出し元(agy-ja-writer / MCP ツール以外で agy を直接叩きたい場面)は、
 # 生の `agy` 文字列を組まず、必ずこのスクリプトを経由すること
@@ -235,8 +244,12 @@ EOF
 	isolated_cwd=$(mktemp -d)
 	_tmp_paths+=("$isolated_cwd")
 
+	# AGY_RUN_READONLY=1 は agy の PreToolUse フックが読む(scripts/agy-readonly-hook.sh)。
+	# この呼び出しの間だけ write_to_file / replace_file_content が deny される。
+	# --file モードだけでなく --prompt / --prompt-file モードでも立てる
+	# —— どちらの用途でも agy にファイルを書かせる理由が無い。
 	local raw
-	raw=$(cd -- "$isolated_cwd" && agy -p="${wrapped}" --model "${model}" --disable-slash-commands)
+	raw=$(cd -- "$isolated_cwd" && AGY_RUN_READONLY=1 agy -p="${wrapped}" --model "${model}" --disable-slash-commands)
 
 	local body
 	body=$(printf '%s\n' "$raw" | awk -v b="$_begin_marker" -v e="$_end_marker" '
@@ -289,10 +302,14 @@ ${original_content}"
 	_call_agy "$body_prompt" >"$tmp_out"
 	printf '\n' >>"$tmp_out"
 
-	# 上の対策(絶対パスを渡さない・CWD を隔離する)で塞いだつもりでも、agy が
-	# 別経路(例えば元々開いていたファイルディスクリプタ)で元ファイルへ到達し
-	# うる以上、最後に実物を照合して契約を保つ。変わっていたら退避してあった
-	# 内容へ戻し、その事実(異常)を stderr に警告する。
+	# 上の対策(絶対パスを渡さない・CWD を隔離する・フックで deny する)で
+	# 塞いだつもりでも、最後に実物を照合して契約を保つ。変わっていたら退避して
+	# あった内容へ戻し、その事実(異常)を stderr に警告する。
+	# 残っている到達経路は絶対パスでの書き込みだけ。agy の run_command は
+	# enableTerminalSandbox: true により CWD が ~/.gemini/antigravity-cli/scratch へ
+	# 固定されるので(実測)、相対パスでは呼び出し元のファイルに届かない。
+	# フックは ~/.gemini/config/hooks.json に依存し、それが消えれば無音で
+	# 効力を失う。この照合はフックが消えても残る最後の段。
 	current_content=$(cat -- "$file")
 	if [ "$current_content" != "$original_content" ]; then
 		printf '%s' "$original_content" >"$file"

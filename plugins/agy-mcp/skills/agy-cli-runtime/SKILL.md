@@ -54,6 +54,13 @@ What the helper absorbs (do not reimplement these elsewhere):
   content against a stashed copy after the call — if it changed anyway, the
   helper restores the stashed content and prints a warning to stderr before
   returning the diff.
+- `AGY_RUN_READONLY=1` on every `agy` invocation (both `--file` and
+  `--prompt`/`--prompt-file`). `agy` has no per-call tool allowlist flag, so
+  the deny lives in a standing `PreToolUse` hook
+  (`~/.gemini/config/hooks.json` → `scripts/agy-readonly-hook.sh`) that denies
+  `write_to_file` and `replace_file_content` only while that variable is `1`.
+  The hook depends on a file outside this repo, so it fails silently if that
+  file goes away; the three defenses above stay in place independently of it.
 
 Command selection:
 - Use `--file` when the input already lives in a repo file. Use `--prompt` /
