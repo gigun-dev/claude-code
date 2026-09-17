@@ -28,8 +28,7 @@ overall_failed=0
 # bash 3.2(macOS の /bin/bash)には連想配列(declare -A)が無いので、
 # 素朴な添字配列と、呼ばれた回数を数えるだけのカウンタで済ませる。
 CHECK_NAMES=(
-	"plugin.json 版数整合性チェック (.claude-plugin ⇔ .codex-plugin)"
-	"marketplace.json プラグイン一覧整合性チェック (.claude-plugin ⇔ .agents)"
+	"生成マニフェストの整合性チェック (scripts/generate_manifests.py --check)"
 	"agy-mcp パース回帰テスト (--selftest-parse)"
 	"ADR の形式チェック"
 	"todo プラグインのテスト (tests/run.sh)"
@@ -64,218 +63,36 @@ check_count_matches() {
 }
 
 # -----------------------------------------------------------------------
-# plugin.json 版数整合性チェック — .claude-plugin ⇔ .codex-plugin
+# 生成マニフェストの整合性チェック
 # -----------------------------------------------------------------------
 # 【何を・なぜ比較するか】
-#   1つのプラグインは plugins/<name>/.claude-plugin/plugin.json(Claude 向け)と
-#   plugins/<name>/.codex-plugin/plugin.json(Codex 向け)の2枚のマニフェストを
-#   同じ内容の別表現として持つ。version は「同じ世代を指しているか」を表す唯一の
-#   フィールドなので、ここがズレると「どちらが最新か分からない配布物」が生まれる
-#   —— 実際に plugins/harness で、片方だけ version を上げて push した状態が
-#   本番の main に存在していた(2026-08-08 の敵対的検証で発覚)。
-#
-# 【"+" 以降(semver のビルドメタデータ)は比較しない】
-#   .codex-plugin 側の一部プラグイン(例: xcode-mcp)は
-#   "1.0.0+codex.20260805161201" のように、生成のたびに変わるタイムスタンプを
-#   ビルドメタデータとして付与している。これは semver の定義上「世代」を表さない
-#   (同じ 1.0.0 の再生成にすぎない)。ここを含めて文字列比較すると、世代が同じ
-#   でも生成し直すたびに verify.sh が赤くなる —— 本当に見たいズレ(世代の違い)
-#   ではなく、無関係な再生成のたびに誤検知する検査になってしまう。
-#   だから比較対象は "+" より前(major.minor.patch 相当)だけに絞る。
-#
-# 【.codex-plugin を持たないプラグインを対象外にする理由】
-#   Codex 未対応のプラグインが .claude-plugin だけを持つのは異常ではない
-#   (このリポジトリは Claude 専用プラグインも配布している)。比較できるのは
-#   両方が揃っているペアだけなので、片方しか無いものは黙って対象から外す。
-#   ただし**ペアが1件も無い**のは別の話 —— このリポジトリには todo を含め
-#   両方を持つプラグインが常に複数存在するため、0件は「対象が無いから合格」
-#   ではなく「収集自体が壊れた疑い」として失敗扱いにする。
-#
-# 【対になる .codex-plugin/plugin.json の実在判定に `[ -f ]` ではなく git ls-files
-#   を使う理由】(2026-08-08 実測して直した)
-#   実際に手元の作業ツリーには、.claude-plugin/plugin.json は git 追跡されているのに
-#   .codex-plugin/plugin.json が**追跡されていない**プラグインが複数ある
-#   (例: chrome-devtools-mcp・dart-mcp 等。scripts/sync_mcp_wrappers.py が
-#   ローカルで生成する未追跡の作業ファイルらしい — この生成物自体は本タスクの対象外)。
-#   `[ -f "$xf" ]` はファイルシステムの実在だけを見るので、こうした未追跡ファイルも
-#   拾って比較対象に混ぜてしまう。すると「push はされない、手元にしか無いファイルの
-#   version が違う」だけで verify.sh が赤くなる —— このスクリプトの冒頭に書いた
-#   「対象の列挙に git ls-files を使う理由」(push されるもの = git が追跡している
-#   ものを検査対象の定義にする)にそのまま反する事故になる。だから対になる側も
-#   git ls-files で追跡有無を判定し、未追跡なら「対象外(片方しか無い)」と同じ扱いで
-#   黙って飛ばす。
+#   同じ「配布するプラグインの集合」と「プラグインごとの版数」は、以前は
+#   2箇所に手で書かれていた:
+#     - plugins/<name>/.claude-plugin/plugin.json の version と
+#       plugins/<name>/.codex-plugin/plugin.json の version(同じ世代を
+#       指しているか。片方だけ version を上げて push した状態が実際に本番の
+#       main に存在していた —— 2026-08-08 の敵対的検証で発覚)
+#     - .claude-plugin/marketplace.json(Claude 向け)と
+#       .agents/plugins/marketplace.json(Codex 向け)のプラグイン一覧
+#   いまはこの2つを scripts/generate_manifests.py が
+#   .claude-plugin/plugin.json と .claude-plugin/marketplace.json を元に
+#   生成する(手順は CLAUDE.md)。この検査は「生成し直した結果が、いま
+#   git に積んである生成物と一致するか」を見る —— 生成を実行し忘れたまま
+#   push したときに気付く手段はこれしかない。
 echo ""
 check_header
-ver_failed=0
 if ! command -v python3 >/dev/null 2>&1; then
 	# python3 が無いのに黙って検査をスキップすると「検査した結果 OK」と区別が付かない。
 	# 未検査を合格扱いにしない。
-	echo "✗ python3 が見つからない — plugin.json の版数整合性を検査できない(未検査を合格扱いにしない)"
-	ver_failed=1
+	echo "✗ python3 が見つからない — 生成マニフェストの整合性を検査できない(未検査を合格扱いにしない)"
+	overall_failed=1
+elif gen_out=$(python3 scripts/generate_manifests.py --check 2>&1); then
+	echo "✓ 生成マニフェストの整合性: 問題なし"
 else
-	claude_manifests=$(git ls-files 'plugins/*/.claude-plugin/plugin.json')
-	if [ -z "$claude_manifests" ]; then
-		echo "✗ 追跡対象の plugins/*/.claude-plugin/plugin.json が1件も見つからない(収集が壊れている可能性)"
-		ver_failed=1
-	else
-		npairs=0
-		while IFS= read -r cf; do
-			# plugins/<name>/.claude-plugin/plugin.json → plugins/<name> を取り出し、
-			# 対になる .codex-plugin/plugin.json を同じ階層で探す。
-			plugin_dir=${cf%/.claude-plugin/plugin.json}
-			xf="$plugin_dir/.codex-plugin/plugin.json"
-			# git 追跡されていなければ対象外(理由は上のコメント「git ls-files を
-			# 使う理由」)。`[ -f ]` ではなく `git ls-files --error-unmatch` で判定する。
-			git ls-files --error-unmatch -- "$xf" >/dev/null 2>&1 || continue
-			npairs=$((npairs + 1))
-			# 両ファイルの version を読み、"+" より前だけを比較する(理由は上のコメント)。
-			# 失敗(JSON 破損・version 欠如)は標準エラーへ出して非0で返す —— JSON が
-			# 壊れていても黙って一致扱いにはしない。
-			diff_out=$(python3 -c '
-import json, sys
-
-def base_version(path):
-    with open(path, encoding="utf-8") as fp:
-        v = json.load(fp)["version"]
-    # semver のビルドメタデータ(+ 以降)は世代を表さない。
-    return v.split("+", 1)[0]
-
-a = base_version(sys.argv[1])
-b = base_version(sys.argv[2])
-if a != b:
-    print(f"{a}\t{b}")
-' "$cf" "$xf" 2>&1)
-			rc=$?
-			if [ "$rc" -ne 0 ]; then
-				echo "✗ [ver]  $plugin_dir: version の読み取りに失敗した"
-				echo "$diff_out" | sed 's/^/    /'
-				ver_failed=1
-			elif [ -n "$diff_out" ]; then
-				claude_v=$(printf '%s' "$diff_out" | cut -f1)
-				codex_v=$(printf '%s' "$diff_out" | cut -f2)
-				echo "✗ [ver]  $plugin_dir: version が不一致(.claude-plugin=$claude_v / .codex-plugin=$codex_v)"
-				ver_failed=1
-			fi
-		done <<<"$claude_manifests"
-		if [ "$npairs" -eq 0 ]; then
-			echo "✗ .claude-plugin と .codex-plugin を両方持つプラグインが1件も見つからない(収集が壊れている可能性)"
-			ver_failed=1
-		fi
-	fi
+	echo "✗ 生成マニフェストが実態とずれている — scripts/generate_manifests.py --write で生成し直すこと"
+	printf '%s\n' "$gen_out" | sed 's/^/    /'
+	overall_failed=1
 fi
-if [ "$ver_failed" -eq 0 ]; then
-	echo "✓ plugin.json 版数整合性: 問題なし"
-fi
-[ "$ver_failed" -ne 0 ] && overall_failed=1
-
-# -----------------------------------------------------------------------
-# marketplace.json プラグイン一覧整合性チェック — .claude-plugin ⇔ .agents
-# -----------------------------------------------------------------------
-# 【何を・なぜ比較するか】
-#   このリポジトリは同じ「配布するプラグインの集合」を2箇所に持つ:
-#     - .claude-plugin/marketplace.json (Claude 向け。plugins[].source は文字列)
-#     - .agents/plugins/marketplace.json (Codex 向け。plugins[].source は
-#       policy/category を持つオブジェクト)
-#   スキーマが違う(上の plugin.json 版数整合性チェックの .claude-plugin/.codex-plugin
-#   と同じ二重管理の形)ので、比較できるのは plugins[].name の集合のみ ——
-#   source や policy の値までは構造が違いすぎて機械的に突き合わせられない。
-#   名前の集合さえ揃っていれば「両方のマーケットプレイスが同じプラグイン一覧を
-#   配布している」という最低限の事実は保証できる。
-#
-#   JSON としてのパース可否だけを見る検査ではこの不一致を検出できない。片方の
-#   marketplace.json にだけプラグインを1件足して他方を更新し忘れても、
-#   両方とも文法的に正しい JSON のままだと素通りしてしまう。この検査が
-#   埋めているのはその隙間。
-#
-# 【この検査を足す根拠 —— なぜ「起きてもいない不整合の先回り」ではないか】
-#   plugin.json 版数整合性チェックで実際にズレた plugins/harness の version
-#   不一致という実例が既に出ており、それが「同じプラグイン集合を指す複数
-#   マニフェストを人手だけで同期している」という構造そのものに起因していた。
-#   marketplace.json の2ファイルはその構造をそのまま持つ既知の危険域であり、
-#   新種の不整合を先回りしているわけではない。
-#
-# 【両ファイルが git 追跡されていて初めて比較する。片方が無ければ「対象外」
-#   ではなく「収集が壊れた疑い」として失敗させる理由】
-#   plugin.json 版数整合性チェックでの .codex-plugin は「Codex 未対応の
-#   プラグインが持たない」のが正常系なので、片方しか無いプラグインは黙って
-#   対象外にしている。だがこの2ファイルは事情が違う —— どちらもリポジトリ全体で
-#   1つしか無いはずのマーケットプレイス定義そのものであり、「一方だけ存在しない」
-#   が起きてよい正常系が無い。もし片方が消えていたら、それはファイル移動・
-#   リネーム等でこのスクリプトのパス指定が追随し損ねた可能性の方が高い。
-#   「対象が無いから比較しない」を「合格」として扱うと、パス指定のミスを
-#   そのまま見逃す最悪の壊れ方になる(検知器は黙って死ぬ前提で検証する)。
-echo ""
-check_header
-mp_failed=0
-claude_mp=".claude-plugin/marketplace.json"
-codex_mp=".agents/plugins/marketplace.json"
-if ! command -v python3 >/dev/null 2>&1; then
-	# python3 が無ければ「検査していない」を「合格」に握りつぶさず、明示的に失敗させる。
-	echo "✗ python3 が見つからない — marketplace.json のプラグイン一覧整合性を検査できない(未検査を合格扱いにしない)"
-	mp_failed=1
-else
-	claude_tracked=1
-	git ls-files --error-unmatch -- "$claude_mp" >/dev/null 2>&1 || claude_tracked=0
-	codex_tracked=1
-	git ls-files --error-unmatch -- "$codex_mp" >/dev/null 2>&1 || codex_tracked=0
-	if [ "$claude_tracked" -eq 0 ] || [ "$codex_tracked" -eq 0 ]; then
-		[ "$claude_tracked" -eq 0 ] && echo "✗ $claude_mp が git 追跡されていない(収集が壊れている可能性)"
-		[ "$codex_tracked" -eq 0 ] && echo "✗ $codex_mp が git 追跡されていない(収集が壊れている可能性)"
-		mp_failed=1
-	else
-		# python3 側は「読み取り自体の失敗(JSON 破損・plugins/name 欠如)」と
-		# 「読み取れた上での差分」を区別する。前者は exit code を非0にして
-		# 例外メッセージをそのまま流し、後者は TSV 1行を標準出力へ積んで
-		# bash 側で判定する(plugin.json 版数整合性チェックの version 比較と同じ役割分担)。
-		diff_out=$(python3 -c '
-import json, sys
-
-def names(path):
-    with open(path, encoding="utf-8") as fp:
-        data = json.load(fp)
-    return set(p["name"] for p in data["plugins"])
-
-claude_names = names(sys.argv[1])
-codex_names = names(sys.argv[2])
-
-# プラグイン名が0件は「一致しているから合格」ではなく、収集そのものが
-# 壊れている疑いとして扱う(plugin.json 版数整合性チェックの npairs -eq 0 と同じパターン)。
-if not claude_names or not codex_names:
-    print(f"EMPTY\t{len(claude_names)}\t{len(codex_names)}")
-else:
-    only_claude = ",".join(sorted(claude_names - codex_names))
-    only_codex = ",".join(sorted(codex_names - claude_names))
-    if only_claude or only_codex:
-        print(f"DIFF\t{only_claude}\t{only_codex}")
-' "$claude_mp" "$codex_mp" 2>&1)
-		rc=$?
-		if [ "$rc" -ne 0 ]; then
-			echo "✗ [mp]   marketplace.json の読み取りに失敗した"
-			echo "$diff_out" | sed 's/^/    /'
-			mp_failed=1
-		elif [ -n "$diff_out" ]; then
-			kind=$(printf '%s' "$diff_out" | cut -f1)
-			if [ "$kind" = "EMPTY" ]; then
-				claude_count=$(printf '%s' "$diff_out" | cut -f2)
-				codex_count=$(printf '%s' "$diff_out" | cut -f3)
-				echo "✗ [mp]   プラグイン名が0件($claude_mp=${claude_count}件 / $codex_mp=${codex_count}件) — 収集が壊れている可能性"
-				mp_failed=1
-			else
-				only_claude=$(printf '%s' "$diff_out" | cut -f2)
-				only_codex=$(printf '%s' "$diff_out" | cut -f3)
-				echo "✗ [mp]   $claude_mp と $codex_mp のプラグイン名の集合が不一致"
-				[ -n "$only_claude" ] && echo "    $claude_mp にしか無い: $only_claude"
-				[ -n "$only_codex" ] && echo "    $codex_mp にしか無い: $only_codex"
-				mp_failed=1
-			fi
-		fi
-	fi
-fi
-if [ "$mp_failed" -eq 0 ]; then
-	echo "✓ marketplace.json プラグイン一覧整合性: 問題なし"
-fi
-[ "$mp_failed" -ne 0 ] && overall_failed=1
-
 # -----------------------------------------------------------------------
 # agy-mcp のパース回帰テスト(agy を呼ばない部分だけ)
 # -----------------------------------------------------------------------

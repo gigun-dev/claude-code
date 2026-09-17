@@ -1,9 +1,13 @@
 {
+  "$versionGeneratedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); only \"version\" is generated here, the rest of this file is hand-edited",
   "name": "telemetry",
   "version": "0.4.0",
   "description": "Review your own coding sessions from real data (time, tokens, tool breakdown, subagents, worktree handling) and decide whether configuration improvements are warranted. Works from local transcripts without credentials, and from Langfuse traces when configured.",
   "author": {
     "name": "gigun",
     "url": "https://github.com/gigun-dev"
+  },
+  "interface": {
+    "category": "Productivity"
   }
 }

@@ -1,4 +1,5 @@
 {
+  "$versionGeneratedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); only \"version\" is generated here, the rest of this file is hand-edited",
   "name": "markitdown-mcp",
   "version": "1.0.0",
   "description": "MarkItDown MCP server (file to markdown conversion)",

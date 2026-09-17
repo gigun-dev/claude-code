@@ -10,6 +10,7 @@ todo / adr / ios-skills / 各種 MCP をプラグインとして配布するモ�
 ## 主要コマンド
 
 - 検証: `bash scripts/verify.sh`。CI・pre-push からは呼ばれない。手で叩く
+- plugin.json の version か marketplace.json を変えたら `python3 scripts/generate_manifests.py --write` で生成し直す(元は `.claude-plugin/plugin.json` の version と `.claude-plugin/marketplace.json`。`.codex-plugin/plugin.json` は version 以外の項目は引き続き手で編集する。`.agents/plugins/marketplace.json` は全体が生成物で手で編集しない)
 - 次にやること: `plugins/todo/bin/todo ready`
 - 既存の決定: `plugins/todo/bin/adr ls`
 

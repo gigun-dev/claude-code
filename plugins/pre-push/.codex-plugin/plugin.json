@@ -1,4 +1,5 @@
 {
+  "$versionGeneratedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); only \"version\" is generated here, the rest of this file is hand-edited",
   "name": "pre-push",
   "version": "0.1.0",
   "description": "Set up and inspect Git pre-push checks using the repository’s CI verification command. Preserve existing hook management; copied hooks run independently of the plugin.",
