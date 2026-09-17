@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# pre-push と CI は同じ検証を呼ぶ。全項目を実行してから失敗を返す。
+# 手で叩く検証。CI と pre-push からは呼ばれない。全項目を実行してから失敗を返す。
 # git ls-files で追跡対象を列挙し、未追跡の作業ファイルを混ぜない。
 
 set -u
-# ⚠️ set -e はあえて使わない。4検査すべてを走らせてから落ちる設計なので、
+# ⚠️ set -e はあえて使わない。全検査を走らせてから落ちる設計なので、
 #    個別コマンドの失敗で即座にスクリプト全体が終了されると困る。
 #    各検査は自分で exit code を拾って overall_failed に積み、
 #    最後にまとめて判定する。
 
 # git ls-files はカレントディレクトリからの相対パスで結果を返す。
-# pre-push はリポジトリ直下で実行される想定だが、手動実行で万一
-# サブディレクトリから呼ばれても壊れないよう、リポジトリ直下に固定する。
+# リポジトリ直下で実行される想定だが、サブディレクトリから呼ばれても
+# 壊れないよう、リポジトリ直下に固定する。
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
 if [ -z "$repo_root" ]; then
 	echo "✗ ここは git リポジトリ内ではない(git rev-parse --show-toplevel が失敗)"
@@ -28,14 +28,9 @@ overall_failed=0
 # bash 3.2(macOS の /bin/bash)には連想配列(declare -A)が無いので、
 # 素朴な添字配列と、呼ばれた回数を数えるだけのカウンタで済ませる。
 CHECK_NAMES=(
-	"スクリプト構文チェック (Shell / Python)"
-	"JSON 妥当性チェック"
-	"todo.txt の形式チェック"
 	"plugin.json 版数整合性チェック (.claude-plugin ⇔ .codex-plugin)"
 	"marketplace.json プラグイン一覧整合性チェック (.claude-plugin ⇔ .agents)"
-	"Codex プラグインキャッシュ整合性チェック (~/.codex/plugins/cache ⇔ リポジトリ)"
 	"agy-mcp パース回帰テスト (--selftest-parse)"
-	"agy-run.sh 事実照合の対照テスト (--selftest-facts)"
 	"ADR の形式チェック"
 	"todo プラグインのテスト (tests/run.sh)"
 	"pre-push プラグインの実 push テスト"
@@ -69,109 +64,7 @@ check_count_matches() {
 }
 
 # -----------------------------------------------------------------------
-# (1) シェル構文チェック — 追跡対象の *.sh すべてに bash -n
-# -----------------------------------------------------------------------
-check_header
-sh_failed=0
-# plugins/*/bin/* も対象に含める理由(2026-09-09 に追加):
-#   plugins/todo/bin/todo は拡張子を持たない実行ファイル(PATH に置かれて
-#   `todo ready` と呼ばれるため)。'*.sh' だけを見ていると、**配布されるシェルなのに
-#   構文チェックを一度も通らない**という穴が空く —— この検査の目的
-#   (「壊れたシェルを事故で main へ push する」を防ぐ)にそのまま反する。
-#   新種の検査を投機で足しているのではなく、既存の検査の対象漏れを塞いでいる。
-sh_files=$(git ls-files '*.sh' 'plugins/*/bin/*')
-if [ -z "$sh_files" ]; then
-	# 0件は「対象が無いので合格」ではなく「収集自体が壊れた疑い」として扱う。
-	# このリポジトリには plugins/todo/tests/run.sh 等、
-	# 追跡対象の *.sh が常に複数存在するため、0件は git ls-files や
-	# 実行ディレクトリの取り違えを疑うべき異常値。
-	# 「検査できなかった」と「合格した」を混同しないために失敗扱いにする。
-	echo "✗ 追跡対象の *.sh が1件も見つからない(git ls-files '*.sh' が空) — 収集が壊れている可能性"
-	sh_failed=1
-else
-	while IFS= read -r f; do
-		# Extensionless plugin CLIs may use Python rather than Shell.
-		if head -1 "$f" | grep -Eq '^#!.*python'; then
-			err=$(python3 -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' "$f" 2>&1)
-		else
-			err=$(bash -n "$f" 2>&1)
-		fi
-		rc=$?
-		if [ "$rc" -ne 0 ]; then
-			echo "✗ [syntax] $f"
-			echo "$err" | sed 's/^/    /'
-			sh_failed=1
-		fi
-	done <<<"$sh_files"
-fi
-if [ "$sh_failed" -eq 0 ]; then
-	echo "✓ スクリプト構文: 問題なし"
-fi
-[ "$sh_failed" -ne 0 ] && overall_failed=1
-
-# -----------------------------------------------------------------------
-# (2) JSON 妥当性チェック — 追跡対象の *.json すべてをパース
-# -----------------------------------------------------------------------
-echo ""
-check_header
-json_failed=0
-if ! command -v python3 >/dev/null 2>&1; then
-	# python3 が無い環境で「JSON チェックを黙ってスキップし、結果として
-	# verify.sh 全体が rc=0 で成功扱いになる」のを最も避けたい。
-	# 「検査できなかった」と「検査して合格した」は意味が違うのに、
-	# 前者を後者として握りつぶす検知器は最悪の壊れ方をする
-	# （検知器が動かなかった場合を成功扱いしない）。
-	# だから python3 が無い場合は明示的に失敗させる。
-	#
-	# ボツ案（Why not）: 「python3 が無ければ JSON チェックをスキップして
-	# 警告だけ出す」という案もあり得たが、警告は pre-push の rc には
-	# 反映されないため、CI 相当の検証としては機能しない。ここでの目的は
-	# 「JSON が壊れたまま main へ push される」を止めることなので、
-	# 検査できない = 安全と言い切れない = 落とす、を選んだ。
-	echo "✗ python3 が見つからない — JSON 妥当性を検査できない(未検査を合格扱いにしない)"
-	json_failed=1
-else
-	json_files=$(git ls-files '*.json')
-	if [ -z "$json_files" ]; then
-		# こちらも (1) と同様、0件は収集が壊れている疑いとして失敗させる。
-		# .claude-plugin/marketplace.json など、追跡対象の JSON は常に存在する。
-		echo "✗ 追跡対象の *.json が1件も見つからない(git ls-files '*.json' が空) — 収集が壊れている可能性"
-		json_failed=1
-	else
-		while IFS= read -r f; do
-			err=$(python3 -c '
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as fp:
-    json.load(fp)
-' "$f" 2>&1)
-			rc=$?
-			if [ "$rc" -ne 0 ]; then
-				echo "✗ [json] $f"
-				echo "$err" | sed 's/^/    /'
-				json_failed=1
-			fi
-		done <<<"$json_files"
-	fi
-fi
-if [ "$json_failed" -eq 0 ]; then
-	echo "✓ JSON 妥当性: 問題なし"
-fi
-[ "$json_failed" -ne 0 ] && overall_failed=1
-
-# タスクの単体テストだけでは、このリポジトリ自身のデータ破損を検出できない。
-echo ""
-check_header
-if [ ! -f todo.txt ] || [ ! -f done.txt ]; then
-    echo "✗ todo.txt または done.txt が見つからない"
-    overall_failed=1
-elif plugins/todo/bin/todo check; then
-    echo "✓ todo.txt: 問題なし"
-else
-    overall_failed=1
-fi
-
-# -----------------------------------------------------------------------
-# (4) plugin.json 版数整合性チェック — .claude-plugin ⇔ .codex-plugin
+# plugin.json 版数整合性チェック — .claude-plugin ⇔ .codex-plugin
 # -----------------------------------------------------------------------
 # 【何を・なぜ比較するか】
 #   1つのプラグインは plugins/<name>/.claude-plugin/plugin.json(Claude 向け)と
@@ -179,8 +72,7 @@ fi
 #   同じ内容の別表現として持つ。version は「同じ世代を指しているか」を表す唯一の
 #   フィールドなので、ここがズレると「どちらが最新か分からない配布物」が生まれる
 #   —— 実際に plugins/harness で、片方だけ version を上げて push した状態が
-#   本番の main に存在していた(2026-08-08 の敵対的検証で発覚。上のヘッダコメント
-#   「4. plugin.json の版数整合性」を参照)。
+#   本番の main に存在していた(2026-08-08 の敵対的検証で発覚)。
 #
 # 【"+" 以降(semver のビルドメタデータ)は比較しない】
 #   .codex-plugin 側の一部プラグイン(例: xcode-mcp)は
@@ -196,8 +88,8 @@ fi
 #   (このリポジトリは Claude 専用プラグインも配布している)。比較できるのは
 #   両方が揃っているペアだけなので、片方しか無いものは黙って対象から外す。
 #   ただし**ペアが1件も無い**のは別の話 —— このリポジトリには todo を含め
-#   両方を持つプラグインが常に複数存在するため、0件は (1)(2) と同様「対象が
-#   無いから合格」ではなく「収集自体が壊れた疑い」として失敗扱いにする。
+#   両方を持つプラグインが常に複数存在するため、0件は「対象が無いから合格」
+#   ではなく「収集自体が壊れた疑い」として失敗扱いにする。
 #
 # 【対になる .codex-plugin/plugin.json の実在判定に `[ -f ]` ではなく git ls-files
 #   を使う理由】(2026-08-08 実測して直した)
@@ -207,7 +99,7 @@ fi
 #   ローカルで生成する未追跡の作業ファイルらしい — この生成物自体は本タスクの対象外)。
 #   `[ -f "$xf" ]` はファイルシステムの実在だけを見るので、こうした未追跡ファイルも
 #   拾って比較対象に混ぜてしまう。すると「push はされない、手元にしか無いファイルの
-#   version が違う」だけで pre-push が赤くなる —— このスクリプトの冒頭に書いた
+#   version が違う」だけで verify.sh が赤くなる —— このスクリプトの冒頭に書いた
 #   「対象の列挙に git ls-files を使う理由」(push されるもの = git が追跡している
 #   ものを検査対象の定義にする)にそのまま反する事故になる。だから対になる側も
 #   git ls-files で追跡有無を判定し、未追跡なら「対象外(片方しか無い)」と同じ扱いで
@@ -216,8 +108,8 @@ echo ""
 check_header
 ver_failed=0
 if ! command -v python3 >/dev/null 2>&1; then
-	# (2) の JSON 妥当性チェックと同じ理由(原則4「検知器は黙って死ぬ前提で検証する」)。
 	# python3 が無いのに黙って検査をスキップすると「検査した結果 OK」と区別が付かない。
+	# 未検査を合格扱いにしない。
 	echo "✗ python3 が見つからない — plugin.json の版数整合性を検査できない(未検査を合格扱いにしない)"
 	ver_failed=1
 else
@@ -237,9 +129,8 @@ else
 			git ls-files --error-unmatch -- "$xf" >/dev/null 2>&1 || continue
 			npairs=$((npairs + 1))
 			# 両ファイルの version を読み、"+" より前だけを比較する(理由は上のコメント)。
-			# 失敗(JSON 破損・version 欠如)は (2) と同じく標準エラーへ出して非0で返す
-			# —— こちらは (2) の JSON 妥当性チェックが既に拾うはずの壊れ方だが、
-			# 万一 (2) をすり抜けた場合でも黙って一致扱いにはしない。
+			# 失敗(JSON 破損・version 欠如)は標準エラーへ出して非0で返す —— JSON が
+			# 壊れていても黙って一致扱いにはしない。
 			diff_out=$(python3 -c '
 import json, sys
 
@@ -278,51 +169,48 @@ fi
 [ "$ver_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
-# (5) marketplace.json プラグイン一覧整合性チェック — .claude-plugin ⇔ .agents
+# marketplace.json プラグイン一覧整合性チェック — .claude-plugin ⇔ .agents
 # -----------------------------------------------------------------------
 # 【何を・なぜ比較するか】
 #   このリポジトリは同じ「配布するプラグインの集合」を2箇所に持つ:
 #     - .claude-plugin/marketplace.json (Claude 向け。plugins[].source は文字列)
 #     - .agents/plugins/marketplace.json (Codex 向け。plugins[].source は
 #       policy/category を持つオブジェクト)
-#   スキーマが違う(上の (4) の .claude-plugin/.codex-plugin と同じ二重管理の形)ので、
-#   比較できるのは plugins[].name の集合のみ —— source や policy の値までは
-#   構造が違いすぎて機械的に突き合わせられない。名前の集合さえ揃っていれば
-#   「両方のマーケットプレイスが同じプラグイン一覧を配布している」という
-#   最低限の事実は保証できる。
+#   スキーマが違う(上の plugin.json 版数整合性チェックの .claude-plugin/.codex-plugin
+#   と同じ二重管理の形)ので、比較できるのは plugins[].name の集合のみ ——
+#   source や policy の値までは構造が違いすぎて機械的に突き合わせられない。
+#   名前の集合さえ揃っていれば「両方のマーケットプレイスが同じプラグイン一覧を
+#   配布している」という最低限の事実は保証できる。
 #
-#   JSON 妥当性チェック((2))はパースできるかしか見ていないので、片方の
+#   JSON としてのパース可否だけを見る検査ではこの不一致を検出できない。片方の
 #   marketplace.json にだけプラグインを1件足して他方を更新し忘れても、
-#   両方とも文法的に正しい JSON のままなので (2) はすり抜ける。この検査が
+#   両方とも文法的に正しい JSON のままだと素通りしてしまう。この検査が
 #   埋めているのはその隙間。
 #
 # 【この検査を足す根拠 —— なぜ「起きてもいない不整合の先回り」ではないか】
-#   このスクリプト冒頭のコメントに書いたとおり、投機的な検査追加は原則2bで
-#   禁止している。この (5) が例外として許されるのは、(4) で実際にズレた
-#   plugins/harness の version 不一致という実例が既に出ており、それが
-#   「同じプラグイン集合を指す複数マニフェストを人手だけで同期している」
-#   という構造そのものに起因していたため。marketplace.json の2ファイルは
-#   その構造をそのまま持つ既知の危険域であり、新種の不整合を先回りしている
-#   わけではない(詳細はスクリプト冒頭のコメント参照)。
+#   plugin.json 版数整合性チェックで実際にズレた plugins/harness の version
+#   不一致という実例が既に出ており、それが「同じプラグイン集合を指す複数
+#   マニフェストを人手だけで同期している」という構造そのものに起因していた。
+#   marketplace.json の2ファイルはその構造をそのまま持つ既知の危険域であり、
+#   新種の不整合を先回りしているわけではない。
 #
 # 【両ファイルが git 追跡されていて初めて比較する。片方が無ければ「対象外」
 #   ではなく「収集が壊れた疑い」として失敗させる理由】
-#   (4) の .codex-plugin は「Codex 未対応のプラグインが持たない」のが正常系
-#   なので、片方しか無いプラグインは黙って対象外にしている。だがこの2ファイルは
-#   事情が違う —— どちらもリポジトリ全体で1つしか無いはずのマーケットプレイス
-#   定義そのものであり、「一方だけ存在しない」が起きてよい正常系が無い。
-#   もし片方が消えていたら、それはファイル移動・リネーム等でこのスクリプトの
-#   パス指定が追随し損ねた可能性の方が高い。「対象が無いから比較しない」を
-#   「合格」として扱うと、パス指定のミスをそのまま見逃す最悪の壊れ方になる
-#   ((1)(2)(4) の 0件時の扱いと同じ規律 —— 原則4「検知器は黙って死ぬ前提で検証する」)。
+#   plugin.json 版数整合性チェックでの .codex-plugin は「Codex 未対応の
+#   プラグインが持たない」のが正常系なので、片方しか無いプラグインは黙って
+#   対象外にしている。だがこの2ファイルは事情が違う —— どちらもリポジトリ全体で
+#   1つしか無いはずのマーケットプレイス定義そのものであり、「一方だけ存在しない」
+#   が起きてよい正常系が無い。もし片方が消えていたら、それはファイル移動・
+#   リネーム等でこのスクリプトのパス指定が追随し損ねた可能性の方が高い。
+#   「対象が無いから比較しない」を「合格」として扱うと、パス指定のミスを
+#   そのまま見逃す最悪の壊れ方になる(検知器は黙って死ぬ前提で検証する)。
 echo ""
 check_header
 mp_failed=0
 claude_mp=".claude-plugin/marketplace.json"
 codex_mp=".agents/plugins/marketplace.json"
 if ! command -v python3 >/dev/null 2>&1; then
-	# (2)(4) と同じ理由(原則4)。python3 が無ければ「検査していない」を
-	# 「合格」に握りつぶさず、明示的に失敗させる。
+	# python3 が無ければ「検査していない」を「合格」に握りつぶさず、明示的に失敗させる。
 	echo "✗ python3 が見つからない — marketplace.json のプラグイン一覧整合性を検査できない(未検査を合格扱いにしない)"
 	mp_failed=1
 else
@@ -338,7 +226,7 @@ else
 		# python3 側は「読み取り自体の失敗(JSON 破損・plugins/name 欠如)」と
 		# 「読み取れた上での差分」を区別する。前者は exit code を非0にして
 		# 例外メッセージをそのまま流し、後者は TSV 1行を標準出力へ積んで
-		# bash 側で判定する((4) の version 比較と同じ役割分担)。
+		# bash 側で判定する(plugin.json 版数整合性チェックの version 比較と同じ役割分担)。
 		diff_out=$(python3 -c '
 import json, sys
 
@@ -351,7 +239,7 @@ claude_names = names(sys.argv[1])
 codex_names = names(sys.argv[2])
 
 # プラグイン名が0件は「一致しているから合格」ではなく、収集そのものが
-# 壊れている疑いとして扱う((4) の npairs -eq 0 と同じパターン)。
+# 壊れている疑いとして扱う(plugin.json 版数整合性チェックの npairs -eq 0 と同じパターン)。
 if not claude_names or not codex_names:
     print(f"EMPTY\t{len(claude_names)}\t{len(codex_names)}")
 else:
@@ -389,160 +277,21 @@ fi
 [ "$mp_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
-# (6) Codex プラグインキャッシュ整合性チェック — ~/.codex/plugins/cache ⇔ リポジトリ
-# -----------------------------------------------------------------------
-# 【何を・なぜ比較するか】
-#   `codex plugin add` はこのリポジトリの plugins/<name> を symlink ではなく
-#   ~/.codex/plugins/cache/<marketplace>/<name>/<version>/ への実体コピーとして
-#   インストールする(実測)。Claude Code はリポジトリを直接読むが、Codex は
-#   このキャッシュのコピーを読む。だから SKILL.md 等をリポジトリ側で直しても、
-#   Codex 側は `codex plugin add <plugin>@<marketplace>` で入れ直すまで古い内容の
-#   ままになる —— 直した直後は2つのハーネスに違う規範が効く期間が生まれる。
-#   この検査はその乖離を検知して知らせるだけで、自動では直さない(~/.codex/ 配下は
-#   読むだけで書き換えない)。
-#
-# 【直すコマンドを `codex plugin marketplace upgrade` にしない理由】
-#   `--help` の説明どおり、これは Git marketplace 専用("Refresh configured Git
-#   marketplace snapshots")で、source_type が local な marketplace には効かない
-#   (実測: `marketplace \`gigun\` is not configured as a Git marketplace`)。
-#   ~/.codex/config.toml を読み、対象 marketplace の source_type が local のときだけ
-#   `codex plugin add <plugin>@<marketplace>` を出力に出す。local でなければ、
-#   効くと確かめていないコマンドを名指しで案内しない。
-#
-# 【codex が無い環境でスキップする理由】
-#   Codex は全開発者が入れている前提ではない(agy-mcp の uv 判定とは事情が
-#   違う —— あちらは「入っているはずのものが無い」、こちらは「そもそも
-#   入れていない」)。command -v codex が失敗したら1行出してスキップする。
-#
-# 【キャッシュのバージョンディレクトリ名を決め打ちしない理由】
-#   plugins/<name>/.codex-plugin/plugin.json の version とキャッシュの
-#   ディレクトリ名は対応するはずだが、決め打ちで組み立てたパスは将来ずれても
-#   検査が無音で通ってしまう。`codex plugin list` からは名前とマーケットプレイス
-#   だけを読み、実際に ~/.codex/plugins/cache/<marketplace>/<name>/ 配下に
-#   存在するディレクトリを列挙してから比較する。
-echo ""
-check_header
-codex_cache_failed=0
-if ! command -v codex >/dev/null 2>&1; then
-	echo "- codex が見つからないので検査しない(このマシンに Codex は入っていない)"
-elif ! command -v python3 >/dev/null 2>&1; then
-	# (2)(4)(5) と同じ理由(原則4)。codex は入っているのに python3 が無くて
-	# 検査できないなら、それは合格ではなく「検査できていない」。
-	echo "✗ python3 が見つからない — Codex プラグインキャッシュ整合性を検査できない(未検査を合格扱いにしない)"
-	codex_cache_failed=1
-else
-	codex_list_out=$(codex plugin list 2>&1)
-	codex_cache_rows=$(printf '%s' "$codex_list_out" | python3 -c '
-import os, re, sys, tomllib
-
-repo_root = sys.argv[1]
-cache_root = sys.argv[2]
-config_path = sys.argv[3]
-target_manifest = os.path.join(repo_root, ".agents/plugins/marketplace.json")
-
-try:
-    with open(config_path, "rb") as fp:
-        config = tomllib.load(fp)
-except OSError:
-    config = {}
-marketplaces_cfg = config.get("marketplaces", {})
-
-lines = sys.stdin.read().splitlines()
-in_target = False
-marketplace_name = ""
-i = 0
-while i < len(lines):
-    m = re.match(r"^Marketplace `([^`]+)`$", lines[i])
-    if m:
-        marketplace_name = m.group(1)
-        manifest_path = lines[i + 1].strip() if i + 1 < len(lines) else ""
-        in_target = manifest_path == target_manifest
-        i += 2
-        continue
-    line = lines[i].strip()
-    if in_target and "@" + marketplace_name in line:
-        fields = re.split(r"\s{2,}", line)
-        if len(fields) >= 2 and fields[1].startswith("installed"):
-            plugin_name = fields[0].rsplit("@", 1)[0]
-            plugin_cache_dir = os.path.join(cache_root, marketplace_name, plugin_name)
-            source_type = marketplaces_cfg.get(marketplace_name, {}).get("source_type", "")
-            fix_cmd = (
-                f"codex plugin add {plugin_name}@{marketplace_name}"
-                if source_type == "local" else ""
-            )
-            if not os.path.isdir(plugin_cache_dir):
-                print(f"NOCACHE\t{plugin_name}\t{plugin_cache_dir}")
-            else:
-                version_dirs = sorted(
-                    d for d in os.listdir(plugin_cache_dir)
-                    if os.path.isdir(os.path.join(plugin_cache_dir, d))
-                )
-                if not version_dirs:
-                    print(f"NOCACHE\t{plugin_name}\t{plugin_cache_dir}")
-                else:
-                    for v in version_dirs:
-                        print(f"CHECK\t{plugin_name}\t{os.path.join(plugin_cache_dir, v)}\t{fix_cmd}")
-    i += 1
-' "$repo_root" "$HOME/.codex/plugins/cache" "$HOME/.codex/config.toml")
-	py_rc=$?
-	if [ "$py_rc" -ne 0 ]; then
-		echo "✗ codex plugin list の出力を読み取れなかった"
-		printf '%s\n' "$codex_cache_rows" | sed 's/^/    /'
-		codex_cache_failed=1
-	elif [ -z "$codex_cache_rows" ]; then
-		# このリポジトリの marketplace(gigun)は常に複数の installed プラグインを
-		# 持つため、0件は「対象が無いから合格」ではなく (1)(2)(4)(5) と同じく
-		# 収集自体が壊れた疑いとして扱う。
-		echo "✗ codex plugin list にこのリポジトリ(gigun marketplace)由来の installed プラグインが1件も見つからない(収集が壊れている可能性)"
-		codex_cache_failed=1
-	else
-		while IFS=$'\t' read -r kind plugin_name cache_path fix_cmd; do
-			[ -z "$kind" ] && continue
-			if [ "$kind" = "NOCACHE" ]; then
-				echo "✗ [codex-cache] $plugin_name: キャッシュ実体が見つからない ($cache_path)"
-				codex_cache_failed=1
-				continue
-			fi
-			repo_dir="plugins/$plugin_name"
-			if [ ! -d "$repo_dir" ]; then
-				echo "✗ [codex-cache] $plugin_name: リポジトリ側に $repo_dir が無い"
-				codex_cache_failed=1
-				continue
-			fi
-			diff_out=$(diff -rq -x .git -N "$repo_dir" "$cache_path" 2>&1)
-			if [ -n "$diff_out" ]; then
-				if [ -n "$fix_cmd" ]; then
-					echo "✗ [codex-cache] $plugin_name: リポジトリと Codex キャッシュ ($cache_path) の内容が不一致 — \`$fix_cmd\` で直せる"
-				else
-					echo "✗ [codex-cache] $plugin_name: リポジトリと Codex キャッシュ ($cache_path) の内容が不一致(marketplace の source_type が local と確認できなかったため、直し方はここでは案内しない)"
-				fi
-				echo "$diff_out" | sed 's/^/    /'
-				codex_cache_failed=1
-			fi
-		done <<<"$codex_cache_rows"
-	fi
-fi
-if [ "$codex_cache_failed" -eq 0 ] && command -v codex >/dev/null 2>&1; then
-	echo "✓ Codex プラグインキャッシュ整合性: 問題なし"
-fi
-[ "$codex_cache_failed" -ne 0 ] && overall_failed=1
-
-# -----------------------------------------------------------------------
 # agy-mcp のパース回帰テスト(agy を呼ばない部分だけ)
 # -----------------------------------------------------------------------
 # 【なぜ smoke.sh 全体ではなく、この一部だけを呼ぶのか】
 #   smoke.sh には性質の違う2種類が同居している:
-#     [1] --selftest-parse … agy を呼ばない・決定論的・1秒。**CI 相当**
+#     [1] --selftest-parse … agy を呼ばない・決定論的・1秒。ここで呼ぶ対象
 #     [2][3][4]            … 実 agy を叩く。80〜100秒・課金枠を要る・
 #                            トークン更新のタイミングで落ちる(2026-08-10 に実際に落ちた)
 #   混ざっているせいで、**決定論的で安いほうまで自動実行できていなかった**
 #   (smoke.sh はどこからも呼ばれておらず、人が思い出したときだけ走っていた)。
-#   落とすのは CI 相当の検証だけ、という線引きに照らすと [1] は入れるべきで、
-#   [2][3][4] は入れてはいけない —— ネットワークと課金枠に依存する検査を関門にすると
-#   「落ちても気にしない」に転んで、関門ごと死ぬ。
+#   ここで呼ぶのは決定論的な検証だけという線引きに照らすと [1] は入れるべきで、
+#   [2][3][4] は入れてはいけない —— ネットワークと課金枠に依存する検査をここに
+#   混ぜると「落ちても気にしない」に転んで、検証そのものが形骸化する。
 #
 # 【なぜ uv が無いときに「スキップ」しないのか】
-#   (2)(4)(5) と同じ理由。**未検査を合格扱いにしない。**
+#   未検査を合格扱いにしない。
 #   agy-mcp が存在するのに検査できないなら、それは合格ではなく「検査できていない」。
 echo ""
 check_header
@@ -566,42 +315,6 @@ else
 	fi
 fi
 [ "$agy_failed" -ne 0 ] && overall_failed=1
-
-# -----------------------------------------------------------------------
-# agy-run.sh の事実照合の対照テスト(agy を呼ばない)
-# -----------------------------------------------------------------------
-# 【性質】
-#   agy-run.sh --selftest-facts は固定の材料に対して照合関数だけを走らせる。
-#   agy を呼ばない・決定論的・1秒未満で、上の --selftest-parse と同じ性質。
-#
-# 【なぜ関門に入れるのか】
-#   agy-run.sh は「数値・URL・箇条書きと見出しの数が元文から変わっていないか」を
-#   機械で照合し、合わなければ agy に聞き直す。この照合が壊れて素通しになっても、
-#   呼び出し元には「合致」としか見えない —— 検知器が黙って死ぬ形そのもの。
-#   --selftest-facts は陰性対照(事実を保った書き直しで鳴らないこと)と
-#   陽性対照(数値と URL が落ちた結果を検出すること)を両方走らせるので、
-#   素通しになった瞬間にここで落ちる。
-#
-# 【uv ではなく python3 を要る理由】
-#   照合は agy-run.sh に埋め込んだ python3 で行う(server.py とは別経路)。
-#   python3 が無ければ agy-run.sh 自身が非0で落ちるので、ここでは追加の
-#   事前判定を置かず、落ちた出力をそのまま見せる。
-echo ""
-check_header
-facts_failed=0
-agy_helper="plugins/agy-mcp/scripts/agy-run.sh"
-if ! git ls-files --error-unmatch -- "$agy_helper" >/dev/null 2>&1; then
-	echo "- $agy_helper が無いので検査しない(このリポジトリに agy-mcp は入っていない)"
-else
-	if facts_out=$(bash "$agy_helper" --selftest-facts 2>&1); then
-		echo "✓ agy-run.sh 事実照合の対照テスト: 問題なし"
-	else
-		echo "✗ agy-run.sh の事実照合の対照テストが失敗した"
-		echo "$facts_out" | tail -20 | sed 's/^/    /'
-		facts_failed=1
-	fi
-fi
-[ "$facts_failed" -ne 0 ] && overall_failed=1
 
 # ADR の単体テストに加え、リポジトリ自身の決定を検査する。
 echo ""
