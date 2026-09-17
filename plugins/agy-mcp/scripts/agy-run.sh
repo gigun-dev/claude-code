@@ -20,6 +20,15 @@
 # 呼び出し元(agy-ja-writer / MCP ツール以外で agy を直接叩きたい場面)は、
 # 生の `agy` 文字列を組まず、必ずこのスクリプトを経由すること
 # (plugins/agy-mcp/skills/agy-cli-runtime/SKILL.md)。
+#
+# 【なぜ agy 本体の skill 機構(skills.json / .agents/)を使わないのか】
+#   一度検討して戻した。~/.gemini/antigravity-cli/builtin/skills/
+#   agy-customizations/SKILL.md の Progressive Disclosure の節にある通り、
+#   skill として登録しても本文が実際に読まれるかはモデルの判断に委ねられる
+#   (「name と description だけが注入され、本文はモデルが要ると判断した
+#   ときだけ読まれる」)。ここでの用途(1回きりの推敲に規範を強制する)は
+#   賭けにできない。本文をこちらから prompt に確実に含めてしまう
+#   `--rules` / `--skill`(内部は同じ経路)の形を採る。
 # =============================================================================
 
 set -euo pipefail
@@ -27,9 +36,9 @@ set -euo pipefail
 usage() {
 	cat >&2 <<'USAGE'
 Usage:
-  agy-run.sh --file PATH [--instruction TEXT|--instruction-file PATH] [--model MODEL]
-  agy-run.sh --prompt TEXT [--model MODEL]
-  agy-run.sh --prompt-file PATH [--model MODEL]
+  agy-run.sh --file PATH [--instruction TEXT|--instruction-file PATH] [--rules PATH ...] [--skill NAME ...] [--model MODEL]
+  agy-run.sh --prompt TEXT [--rules PATH ...] [--skill NAME ...] [--model MODEL]
+  agy-run.sh --prompt-file PATH [--rules PATH ...] [--skill NAME ...] [--model MODEL]
 
 --file モード(主):
   元ファイルを読み、instruction(省略時は日本語校正の既定指示)に従って
@@ -41,6 +50,16 @@ Usage:
 
 Options:
   --model MODEL              既定: gemini-3.8-flash-high
+  --rules PATH                固定の文章規範ファイルを instruction / prompt の後ろに
+                               連結する。複数回指定でき、指定順に連結する
+                               (--skill で引いたファイルとも同じ列に混ざる)。
+                               instruction(タスク固有の指示)と両立させるための口
+                               ——依頼者が個別に却下した語の一覧など、配布物の
+                               skill には無い断片もここで渡せる。
+  --skill NAME                 このリポジトリの plugins/*/skills/NAME/SKILL.md を
+                               名前だけで引き当て、--rules と同じ経路(prompt への
+                               連結)へ流す。複数回指定できる。呼び出し側は
+                               プラグイン名を知らなくてよい。
 USAGE
 	exit 1
 }
@@ -58,6 +77,8 @@ instruction=""
 instruction_file=""
 prompt=""
 prompt_file=""
+rules_files=()
+skill_names=()
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -75,6 +96,14 @@ while [ $# -gt 0 ]; do
 		;;
 	--instruction-file)
 		instruction_file="$2"
+		shift 2
+		;;
+	--rules)
+		rules_files+=("$2")
+		shift 2
+		;;
+	--skill)
+		skill_names+=("$2")
 		shift 2
 		;;
 	--prompt)
@@ -98,6 +127,58 @@ done
 if ! command -v agy >/dev/null 2>&1; then
 	echo "agy-run.sh: agy が PATH にない" >&2
 	exit 1
+fi
+
+# --skill は名前から実ファイルを引き当て、--rules と同じ列(rules_files)へ
+# 積む。ここで解決を終わらせ、以降の連結処理を1本にする(同じ文字列が
+# 2通りの経路で入ると、片方だけ直す事故が起きる)。
+if [ "${#skill_names[@]}" -gt 0 ]; then
+	script_dir=$(cd -- "$(dirname -- "$0")" && pwd)
+	# plugins/agy-mcp/scripts から3つ上がこのリポジトリの root
+	# (plugins/agy-mcp/scripts → plugins/agy-mcp → plugins → root)。
+	repo_root=$(cd -- "$script_dir/../../.." && pwd)
+
+	for skill_name in "${skill_names[@]}"; do
+		hit=""
+		for candidate in "$repo_root"/plugins/*/skills/"$skill_name"/SKILL.md; do
+			[ -f "$candidate" ] || continue
+			if [ -n "$hit" ]; then
+				echo "agy-run.sh: skill '$skill_name' が複数の plugin に見つかった(あいまい): $hit / $candidate" >&2
+				exit 1
+			fi
+			hit="$candidate"
+		done
+		if [ -z "$hit" ]; then
+			echo "agy-run.sh: skill が見つからない: $skill_name (plugins/*/skills/$skill_name/SKILL.md を探した)" >&2
+			exit 1
+		fi
+		rules_files+=("$hit")
+	done
+fi
+
+# --rules / --skill は指定順に連結する。全文を渡す(要点への圧縮はしない)。理由:
+# 規範文書(例: japanese-tech-writing の SKILL.md)は「AI っぽい表現」「翻訳調の
+# 比喩」などを個別の禁止語ではなく判定手順(字義どおりの動作を想像できるか→
+# 主体と対象を具体語で言い直せるか)で定めていることが多い。要点だけを抜くと
+# 判定手順が失われ、抜き出した禁止語リストだけが残って結局「別の難しい言葉への
+# 置換」を誘発する(このリポジトリが既に踏んだ失敗のパターン)。渡すファイルは
+# 数百行程度の想定で、1回の書き直し呼び出しあたりのトークン費用は無視できる
+# 規模であり、費用を理由に要約しない。
+rules_text=""
+if [ "${#rules_files[@]}" -gt 0 ]; then
+	for _rf in "${rules_files[@]}"; do
+		[ -f "$_rf" ] || {
+			echo "agy-run.sh: rules file not found: $_rf" >&2
+			exit 1
+		}
+		if [ -n "$rules_text" ]; then
+			rules_text="${rules_text}
+
+$(cat -- "$_rf")"
+		else
+			rules_text="$(cat -- "$_rf")"
+		fi
+	done
 fi
 
 # マーカーは衝突しにくい固定文字列にする。本文に元々この文字列が含まれることは
@@ -158,6 +239,11 @@ if [ -n "$file" ]; then
 		instruction=$(cat -- "$instruction_file")
 	fi
 	[ -n "$instruction" ] || instruction="$_DEFAULT_INSTRUCTION"
+	if [ -n "$rules_text" ]; then
+		instruction="$instruction
+
+$rules_text"
+	fi
 
 	original_content=$(cat -- "$file")
 	body_prompt="$instruction
@@ -197,6 +283,12 @@ if [ -n "$prompt_file" ]; then
 elif [ -z "$prompt" ]; then
 	echo "agy-run.sh: --file か --prompt か --prompt-file のいずれかが必須" >&2
 	usage
+fi
+
+if [ -n "$rules_text" ]; then
+	prompt="$prompt
+
+$rules_text"
 fi
 
 _call_agy "$prompt"

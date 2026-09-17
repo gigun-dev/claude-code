@@ -12,9 +12,22 @@ hand-rolled `agy` CLI strings, or any other Bash activity that shells out to `ag
 The `codex:agy-ja-writer` agent must call the helper, not `agy` directly.
 
 Primary helper:
-- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --file <path> [--instruction <text>|--instruction-file <path>] [--model <model>]`
-- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --prompt <text> [--model <model>]`
-- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --prompt-file <path> [--model <model>]`
+- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --file <path> [--instruction <text>|--instruction-file <path>] [--rules <path> ...] [--skill <name> ...] [--model <model>]`
+- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --prompt <text> [--rules <path> ...] [--skill <name> ...] [--model <model>]`
+- `"${CLAUDE_PLUGIN_ROOT}/scripts/agy-run.sh" --prompt-file <path> [--rules <path> ...] [--skill <name> ...] [--model <model>]`
+
+`--rules <path>` appends a fixed document (e.g. a writing-style skill's
+`SKILL.md`, or a plain text file listing terms the caller has individually
+rejected) after the instruction/prompt, verbatim, in the order given. It can
+be repeated. `--skill <name>` is a name-based shortcut for the same path:
+it resolves `<name>` against this repo's `plugins/*/skills/<name>/SKILL.md`
+(the caller doesn't need to know which plugin owns it) and feeds the
+resolved file into the same `--rules` pipe — there is only one concatenation
+implementation, so `--rules` and `--skill` entries interleave in the order
+given. `agy` itself has a skill mechanism (`skills.json`/`.agents/`), but
+its skills use progressive disclosure — the body is only read if the model
+decides to — which is not reliable enough for a single rewrite call to bet
+on; `--rules`/`--skill` force the text into the prompt instead.
 
 What the helper absorbs (do not reimplement these elsewhere):
 - The `-p=<text>` join. `agy -p "..." --model X` lets `-p` swallow `--model` as
