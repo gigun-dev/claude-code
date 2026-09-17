@@ -9,7 +9,7 @@ todo / adr / ios-skills / 各種 MCP をプラグインとして配布するモ�
 
 ## 主要コマンド
 
-- 検証: `bash scripts/verify.sh`(pre-push と CI で同じものを実行する)
+- 検証: `bash scripts/verify.sh`。CI・pre-push からは呼ばれない。手で叩く
 - 次にやること: `plugins/todo/bin/todo ready`
 - 既存の決定: `plugins/todo/bin/adr ls`
 
@@ -42,7 +42,7 @@ todo / adr / ios-skills / 各種 MCP をプラグインとして配布するモ�
 - **1コミット = 1論理変更。**
 - **短命ブランチ = 着手順の1項目。** 依存を跨がせない(A が B を待つなら1本にしない)。
 - **並行するなら worktree。** 同じ作業ツリーで2つ動かさない。
-- **push 前に `bash scripts/verify.sh`。**
+- **触ったプラグインの検証は手で叩く**(`bash scripts/verify.sh`。CI・pre-push は無い)。
 - **他人(他セッション)の未コミットの変更が混ざっていたら、自分の変更と分けてコミットする。**
 
 ## 情報の書き分け
