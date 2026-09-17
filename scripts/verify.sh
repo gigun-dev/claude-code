@@ -33,6 +33,7 @@ CHECK_NAMES=(
 	"todo.txt の形式チェック"
 	"plugin.json 版数整合性チェック (.claude-plugin ⇔ .codex-plugin)"
 	"marketplace.json プラグイン一覧整合性チェック (.claude-plugin ⇔ .agents)"
+	"Codex プラグインキャッシュ整合性チェック (~/.codex/plugins/cache ⇔ リポジトリ)"
 	"agy-mcp パース回帰テスト (--selftest-parse)"
 	"ADR の形式チェック"
 	"todo プラグインのテスト (tests/run.sh)"
@@ -385,6 +386,120 @@ if [ "$mp_failed" -eq 0 ]; then
 	echo "✓ marketplace.json プラグイン一覧整合性: 問題なし"
 fi
 [ "$mp_failed" -ne 0 ] && overall_failed=1
+
+# -----------------------------------------------------------------------
+# (6) Codex プラグインキャッシュ整合性チェック — ~/.codex/plugins/cache ⇔ リポジトリ
+# -----------------------------------------------------------------------
+# 【何を・なぜ比較するか】
+#   `codex plugin add` はこのリポジトリの plugins/<name> を symlink ではなく
+#   ~/.codex/plugins/cache/<marketplace>/<name>/<version>/ への実体コピーとして
+#   インストールする(実測)。Claude Code はリポジトリを直接読むが、Codex は
+#   このキャッシュのコピーを読む。だから SKILL.md 等をリポジトリ側で直しても、
+#   Codex 側は `codex plugin marketplace upgrade` を叩くまで古い内容のままになる
+#   —— 直した直後は2つのハーネスに違う規範が効く期間が生まれる。この検査は
+#   その乖離を検知して知らせるだけで、自動では直さない(~/.codex/ 配下は
+#   読むだけで書き換えない)。
+#
+# 【codex が無い環境でスキップする理由】
+#   Codex は全開発者が入れている前提ではない(agy-mcp の uv 判定とは事情が
+#   違う —— あちらは「入っているはずのものが無い」、こちらは「そもそも
+#   入れていない」)。command -v codex が失敗したら1行出してスキップする。
+#
+# 【キャッシュのバージョンディレクトリ名を決め打ちしない理由】
+#   plugins/<name>/.codex-plugin/plugin.json の version とキャッシュの
+#   ディレクトリ名は対応するはずだが、決め打ちで組み立てたパスは将来ずれても
+#   検査が無音で通ってしまう。`codex plugin list` からは名前とマーケットプレイス
+#   だけを読み、実際に ~/.codex/plugins/cache/<marketplace>/<name>/ 配下に
+#   存在するディレクトリを列挙してから比較する。
+echo ""
+check_header
+codex_cache_failed=0
+if ! command -v codex >/dev/null 2>&1; then
+	echo "- codex が見つからないので検査しない(このマシンに Codex は入っていない)"
+elif ! command -v python3 >/dev/null 2>&1; then
+	# (2)(4)(5) と同じ理由(原則4)。codex は入っているのに python3 が無くて
+	# 検査できないなら、それは合格ではなく「検査できていない」。
+	echo "✗ python3 が見つからない — Codex プラグインキャッシュ整合性を検査できない(未検査を合格扱いにしない)"
+	codex_cache_failed=1
+else
+	codex_list_out=$(codex plugin list 2>&1)
+	codex_cache_rows=$(printf '%s' "$codex_list_out" | python3 -c '
+import os, re, sys
+
+repo_root = sys.argv[1]
+cache_root = sys.argv[2]
+target_manifest = os.path.join(repo_root, ".agents/plugins/marketplace.json")
+
+lines = sys.stdin.read().splitlines()
+in_target = False
+marketplace_name = ""
+i = 0
+while i < len(lines):
+    m = re.match(r"^Marketplace `([^`]+)`$", lines[i])
+    if m:
+        marketplace_name = m.group(1)
+        manifest_path = lines[i + 1].strip() if i + 1 < len(lines) else ""
+        in_target = manifest_path == target_manifest
+        i += 2
+        continue
+    line = lines[i].strip()
+    if in_target and "@" + marketplace_name in line:
+        fields = re.split(r"\s{2,}", line)
+        if len(fields) >= 2 and fields[1].startswith("installed"):
+            plugin_name = fields[0].rsplit("@", 1)[0]
+            plugin_cache_dir = os.path.join(cache_root, marketplace_name, plugin_name)
+            if not os.path.isdir(plugin_cache_dir):
+                print(f"NOCACHE\t{plugin_name}\t{plugin_cache_dir}")
+            else:
+                version_dirs = sorted(
+                    d for d in os.listdir(plugin_cache_dir)
+                    if os.path.isdir(os.path.join(plugin_cache_dir, d))
+                )
+                if not version_dirs:
+                    print(f"NOCACHE\t{plugin_name}\t{plugin_cache_dir}")
+                else:
+                    for v in version_dirs:
+                        print(f"CHECK\t{plugin_name}\t{os.path.join(plugin_cache_dir, v)}")
+    i += 1
+' "$repo_root" "$HOME/.codex/plugins/cache")
+	py_rc=$?
+	if [ "$py_rc" -ne 0 ]; then
+		echo "✗ codex plugin list の出力を読み取れなかった"
+		printf '%s\n' "$codex_cache_rows" | sed 's/^/    /'
+		codex_cache_failed=1
+	elif [ -z "$codex_cache_rows" ]; then
+		# このリポジトリの marketplace(gigun)は常に複数の installed プラグインを
+		# 持つため、0件は「対象が無いから合格」ではなく (1)(2)(4)(5) と同じく
+		# 収集自体が壊れた疑いとして扱う。
+		echo "✗ codex plugin list にこのリポジトリ(gigun marketplace)由来の installed プラグインが1件も見つからない(収集が壊れている可能性)"
+		codex_cache_failed=1
+	else
+		while IFS=$'\t' read -r kind plugin_name cache_path; do
+			[ -z "$kind" ] && continue
+			if [ "$kind" = "NOCACHE" ]; then
+				echo "✗ [codex-cache] $plugin_name: キャッシュ実体が見つからない ($cache_path)"
+				codex_cache_failed=1
+				continue
+			fi
+			repo_dir="plugins/$plugin_name"
+			if [ ! -d "$repo_dir" ]; then
+				echo "✗ [codex-cache] $plugin_name: リポジトリ側に $repo_dir が無い"
+				codex_cache_failed=1
+				continue
+			fi
+			diff_out=$(diff -rq -x .git -N "$repo_dir" "$cache_path" 2>&1)
+			if [ -n "$diff_out" ]; then
+				echo "✗ [codex-cache] $plugin_name: リポジトリと Codex キャッシュ ($cache_path) の内容が不一致 — codex plugin marketplace upgrade で直せる"
+				echo "$diff_out" | sed 's/^/    /'
+				codex_cache_failed=1
+			fi
+		done <<<"$codex_cache_rows"
+	fi
+fi
+if [ "$codex_cache_failed" -eq 0 ] && command -v codex >/dev/null 2>&1; then
+	echo "✓ Codex プラグインキャッシュ整合性: 問題なし"
+fi
+[ "$codex_cache_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
 # agy-mcp のパース回帰テスト(agy を呼ばない部分だけ)
