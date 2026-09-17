@@ -395,10 +395,18 @@ fi
 #   ~/.codex/plugins/cache/<marketplace>/<name>/<version>/ への実体コピーとして
 #   インストールする(実測)。Claude Code はリポジトリを直接読むが、Codex は
 #   このキャッシュのコピーを読む。だから SKILL.md 等をリポジトリ側で直しても、
-#   Codex 側は `codex plugin marketplace upgrade` を叩くまで古い内容のままになる
-#   —— 直した直後は2つのハーネスに違う規範が効く期間が生まれる。この検査は
-#   その乖離を検知して知らせるだけで、自動では直さない(~/.codex/ 配下は
+#   Codex 側は `codex plugin add <plugin>@<marketplace>` で入れ直すまで古い内容の
+#   ままになる —— 直した直後は2つのハーネスに違う規範が効く期間が生まれる。
+#   この検査はその乖離を検知して知らせるだけで、自動では直さない(~/.codex/ 配下は
 #   読むだけで書き換えない)。
+#
+# 【直すコマンドを `codex plugin marketplace upgrade` にしない理由】
+#   `--help` の説明どおり、これは Git marketplace 専用("Refresh configured Git
+#   marketplace snapshots")で、source_type が local な marketplace には効かない
+#   (実測: `marketplace \`gigun\` is not configured as a Git marketplace`)。
+#   ~/.codex/config.toml を読み、対象 marketplace の source_type が local のときだけ
+#   `codex plugin add <plugin>@<marketplace>` を出力に出す。local でなければ、
+#   効くと確かめていないコマンドを名指しで案内しない。
 #
 # 【codex が無い環境でスキップする理由】
 #   Codex は全開発者が入れている前提ではない(agy-mcp の uv 判定とは事情が
@@ -424,11 +432,19 @@ elif ! command -v python3 >/dev/null 2>&1; then
 else
 	codex_list_out=$(codex plugin list 2>&1)
 	codex_cache_rows=$(printf '%s' "$codex_list_out" | python3 -c '
-import os, re, sys
+import os, re, sys, tomllib
 
 repo_root = sys.argv[1]
 cache_root = sys.argv[2]
+config_path = sys.argv[3]
 target_manifest = os.path.join(repo_root, ".agents/plugins/marketplace.json")
+
+try:
+    with open(config_path, "rb") as fp:
+        config = tomllib.load(fp)
+except OSError:
+    config = {}
+marketplaces_cfg = config.get("marketplaces", {})
 
 lines = sys.stdin.read().splitlines()
 in_target = False
@@ -448,6 +464,11 @@ while i < len(lines):
         if len(fields) >= 2 and fields[1].startswith("installed"):
             plugin_name = fields[0].rsplit("@", 1)[0]
             plugin_cache_dir = os.path.join(cache_root, marketplace_name, plugin_name)
+            source_type = marketplaces_cfg.get(marketplace_name, {}).get("source_type", "")
+            fix_cmd = (
+                f"codex plugin add {plugin_name}@{marketplace_name}"
+                if source_type == "local" else ""
+            )
             if not os.path.isdir(plugin_cache_dir):
                 print(f"NOCACHE\t{plugin_name}\t{plugin_cache_dir}")
             else:
@@ -459,9 +480,9 @@ while i < len(lines):
                     print(f"NOCACHE\t{plugin_name}\t{plugin_cache_dir}")
                 else:
                     for v in version_dirs:
-                        print(f"CHECK\t{plugin_name}\t{os.path.join(plugin_cache_dir, v)}")
+                        print(f"CHECK\t{plugin_name}\t{os.path.join(plugin_cache_dir, v)}\t{fix_cmd}")
     i += 1
-' "$repo_root" "$HOME/.codex/plugins/cache")
+' "$repo_root" "$HOME/.codex/plugins/cache" "$HOME/.codex/config.toml")
 	py_rc=$?
 	if [ "$py_rc" -ne 0 ]; then
 		echo "✗ codex plugin list の出力を読み取れなかった"
@@ -474,7 +495,7 @@ while i < len(lines):
 		echo "✗ codex plugin list にこのリポジトリ(gigun marketplace)由来の installed プラグインが1件も見つからない(収集が壊れている可能性)"
 		codex_cache_failed=1
 	else
-		while IFS=$'\t' read -r kind plugin_name cache_path; do
+		while IFS=$'\t' read -r kind plugin_name cache_path fix_cmd; do
 			[ -z "$kind" ] && continue
 			if [ "$kind" = "NOCACHE" ]; then
 				echo "✗ [codex-cache] $plugin_name: キャッシュ実体が見つからない ($cache_path)"
@@ -489,7 +510,11 @@ while i < len(lines):
 			fi
 			diff_out=$(diff -rq -x .git -N "$repo_dir" "$cache_path" 2>&1)
 			if [ -n "$diff_out" ]; then
-				echo "✗ [codex-cache] $plugin_name: リポジトリと Codex キャッシュ ($cache_path) の内容が不一致 — codex plugin marketplace upgrade で直せる"
+				if [ -n "$fix_cmd" ]; then
+					echo "✗ [codex-cache] $plugin_name: リポジトリと Codex キャッシュ ($cache_path) の内容が不一致 — \`$fix_cmd\` で直せる"
+				else
+					echo "✗ [codex-cache] $plugin_name: リポジトリと Codex キャッシュ ($cache_path) の内容が不一致(marketplace の source_type が local と確認できなかったため、直し方はここでは案内しない)"
+				fi
 				echo "$diff_out" | sed 's/^/    /'
 				codex_cache_failed=1
 			fi
