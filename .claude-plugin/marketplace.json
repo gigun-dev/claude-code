@@ -1,5 +1,6 @@
 {
   "name": "gigun",
+  "description": "Plugins for Claude Code and Codex, including skills and development tools.",
   "owner": {
     "name": "gigun",
     "email": "gu.univ.morita@gmail.com"
@@ -79,6 +80,16 @@
       "name": "worktree",
       "source": "./plugins/worktree",
       "description": "Manage git worktrees a subagent used: integrate (squash-merge, verify the commit landed, then clean up) as the primary path, sweep (judge removable / human-decides / hands-off) to catch the rest. Never guesses squash status and never force-deletes without a machine-verified reason."
+    },
+    {
+      "name": "langfuse",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/langfuse/skills.git",
+        "ref": "main"
+      },
+      "description": "Work with Langfuse tracing, prompts, datasets, evaluations, and documentation.",
+      "category": "Developer Tools"
     }
   ]
 }

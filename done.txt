@@ -9,3 +9,4 @@ x 2026-09-10 2026-09-10 本文に採番の記法を書くと add が拒否する
 x 2026-09-11 2026-09-11 session-breakdown を /telemetry:review から呼べるようにする。いまは bin を直接叩くしかなく、Langfuse 未設定のときに代替として選ばれない +plugins @unattended see:docs/telemetry/2026-09-11-subagent-time-breakdown.md id:0032
 x 2026-09-11 2026-09-11 telemetry のプラグインに、セッションを辿る道具の使い分けを書く。探すのは cman(search_all で横断)、所要と内訳を数えるのは session-breakdown、それでも足りないときだけ生の JSONL。Claude Code と Codex でログの形が違うので、個々のタスクではなくプラグインが持つべき知識 +plugins @unattended id:0035
 x 2026-09-14 2026-09-14 telemetryのCodexローカル集計と期間境界を実装し、取得範囲とレビュー指示を修正して回帰検証する +telemetry id:0037
+x 2026-09-22 2026-09-22 Langfuse上流をgigun marketplaceから参照し、Claude CodeとCodexの両方でプラグインとして導入できるようにする +plugins id:0038

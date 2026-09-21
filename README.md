@@ -26,6 +26,8 @@ codex plugin marketplace add gigun-dev/claude-code
 codex plugin add <plugin>@gigun
 ```
 
+Langfuse は上流の Git リポジトリを両カタログから直接参照する。`claude plugin install langfuse@gigun` / `codex plugin add langfuse@gigun` で導入し、更新時は各ホストの marketplace とプラグインを更新する。上流のソースはこのリポジトリへ複製しない。
+
 ## Claude Code / Codex 共通の構成
 
 | 内容 | 置き場 | 扱い |

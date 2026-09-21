@@ -13,7 +13,7 @@ Two things used to be written by hand in two places:
        to "name" says which fields are generated and which are not.
 
   2. the published plugin list
-     source: .claude-plugin/marketplace.json (name, source path, order,
+     source: .claude-plugin/marketplace.json (name, source, order,
        and each entry's marketing "description" — the two-line blurb that
        is allowed to read differently from plugin.json's own description
        and does not get generated)
@@ -177,12 +177,23 @@ def generate_codex_marketplace() -> str:
     entries = []
     for p in claude_mp["plugins"]:
         name = p["name"]
+        source = p["source"]
+        if isinstance(source, str):
+            codex_source = {"source": "local", "path": source}
+            category = load_category(name)
+        elif isinstance(source, dict) and source.get("source") == "url":
+            codex_source = source
+            category = p.get("category")
+            if not category:
+                raise SystemExit(f"{name}: external plugin needs a marketplace category")
+        else:
+            raise SystemExit(f"{name}: unsupported marketplace source {source!r}")
         entries.append(
             {
                 "name": name,
-                "source": {"source": "local", "path": p["source"]},
+                "source": codex_source,
                 "policy": CODEX_POLICY,
-                "category": load_category(name),
+                "category": category,
             }
         )
     data = {
