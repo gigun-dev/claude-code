@@ -30,10 +30,19 @@ EOF
 }
 
 ENV_FILE="${HOME}/.config/claude-code/langfuse.env"
+ENDPOINTS_FILE="${HOME}/.config/claude-code/langfuse-endpoints.env"
 [ -r "$ENV_FILE" ] || { echo "Langfuse 未設定: $ENV_FILE"; exit 0; }
 # shellcheck disable=SC1090
-set -a; . "$ENV_FILE"; set +a
-BASE="${LANGFUSE_BASE_URL:-https://cloud.langfuse.com}"
+set -a; . "$ENV_FILE"; [ ! -r "$ENDPOINTS_FILE" ] || . "$ENDPOINTS_FILE"; set +a
+if [ -z "${LANGFUSE_PUBLIC_KEY:-}" ] || [ -z "${LANGFUSE_SECRET_KEY:-}" ]; then
+  echo "Langfuse API keys are missing from $ENV_FILE"
+  exit 0
+fi
+BASE="${LANGFUSE_BASE_URL:-${LANGFUSE_HOST:-}}"
+if [ -z "$BASE" ]; then
+  echo "Langfuse API endpoint is missing; configure $ENDPOINTS_FILE"
+  exit 0
+fi
 AUTH=$(printf '%s:%s' "$LANGFUSE_PUBLIC_KEY" "$LANGFUSE_SECRET_KEY" | base64 | tr -d '\n')
 
 api() { curl -s --max-time 30 -H "Authorization: Basic $AUTH" "$@"; }

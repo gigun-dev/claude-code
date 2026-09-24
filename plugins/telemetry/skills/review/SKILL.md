@@ -70,7 +70,10 @@ reasoning output はそれぞれの部分集合として扱う。期間内に us
   "rror" 文字列一致で誤検知したものが ERROR として積まれていた(実測で実際の 64 倍)。古い期間を
   集計に混ぜると嘘の傾向が出る。
 - 未設定・ネットワーク不通なら Langfuse の集計はスキップされる(その旨を報告する)。資格情報は
-  `~/.config/claude-code/langfuse.env`(600・git 管理外)。
+  `~/.config/claude-code/langfuse.env`(600・git 管理外)、接続先は dotfiles 管理の
+  `~/.config/claude-code/langfuse-endpoints.env`。REST API の `LANGFUSE_BASE_URL` と送信専用の
+  `LANGFUSE_OTLP_ENDPOINT` は別設定。読み取りスクリプトは Metrics / Observations API を直接使い、
+  グローバルCLIを要求しない。
 - ローカル集計の例: `bin/session-breakdown --source claude --session <session-id> --from <ISO> --to <ISO> --main --json`
 - Codex 集計の例: `bin/session-breakdown --source codex --session <thread-id> --from <ISO> --to <ISO> --json`
 - 出力の `elapsed` は記録区間、`tool` は対応付けた tool の和集合、`wait` は明示的な待機、

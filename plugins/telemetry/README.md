@@ -21,8 +21,13 @@ hook はツールの前後しか知らず、LLM の出力もトークン数も�
 している。この復元が無いと generation と usage は送られず、ローカルログだけから思考時間を
 復元することもできない。
 
-資格情報は `~/.config/claude-code/langfuse.env`(600・git 管理外)に置く。Langfuse の集計を
-明示的に要求された場合だけ読み、未設定またはネットワーク不通ならその旨を出して終了する。
+資格情報は `~/.config/claude-code/langfuse.env`(600・git 管理外)、接続先は dotfiles が管理する
+`~/.config/claude-code/langfuse-endpoints.env` に分ける。`LANGFUSE_BASE_URL` は REST API / CLI 用、
+`LANGFUSE_OTLP_ENDPOINT` は送信専用で、別々のホストを指定できる。Langfuse の集計を明示的に要求
+された場合だけ読み、未設定またはネットワーク不通ならその旨を出して終了する。
+
+`summary.sh` と `query.sh` は用途別の Metrics / Observations API を直接読むので、CLI の導入は不要。
+対話的なCLIアクセスにはdotfilesの `langfuse` 関数があり、`bunx @langfuse/cli` で起動する。
 
 ## bin/session-breakdown — transcript だけで時間の内訳を出す
 

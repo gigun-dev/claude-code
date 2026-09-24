@@ -21,19 +21,24 @@ set -uo pipefail
 
 DAYS="${1:-7}"   # 集計期間(日)。既定7日
 ENV_FILE="${HOME}/.config/claude-code/langfuse.env"
+ENDPOINTS_FILE="${HOME}/.config/claude-code/langfuse-endpoints.env"
 
 if [ ! -r "$ENV_FILE" ]; then
   echo "(Langfuse 未設定: $ENV_FILE が無いため集計をスキップ)"
   exit 0
 fi
 # shellcheck disable=SC1090
-set -a; . "$ENV_FILE"; set +a
+set -a; . "$ENV_FILE"; [ ! -r "$ENDPOINTS_FILE" ] || . "$ENDPOINTS_FILE"; set +a
 if [ -z "${LANGFUSE_PUBLIC_KEY:-}" ] || [ -z "${LANGFUSE_SECRET_KEY:-}" ]; then
   echo "(Langfuse の鍵が空のため集計をスキップ)"
   exit 0
 fi
 
-BASE="${LANGFUSE_BASE_URL:-https://cloud.langfuse.com}"
+BASE="${LANGFUSE_BASE_URL:-${LANGFUSE_HOST:-}}"
+if [ -z "$BASE" ]; then
+  echo "(Langfuse API endpoint is missing; configure $ENDPOINTS_FILE)"
+  exit 0
+fi
 AUTH=$(printf '%s:%s' "$LANGFUSE_PUBLIC_KEY" "$LANGFUSE_SECRET_KEY" | base64 | tr -d '\n')
 FROM=$(python3 -c "import datetime;print((datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(days=$DAYS)).strftime('%Y-%m-%dT%H:%M:%SZ'))" 2>/dev/null) || exit 0
 TO=$(python3 -c "import datetime;print(datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))" 2>/dev/null) || exit 0
