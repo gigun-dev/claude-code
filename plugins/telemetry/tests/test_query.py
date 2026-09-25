@@ -21,9 +21,11 @@ class QueryTests(unittest.TestCase):
             needle = 'ENV_FILE="${HOME}/.config/claude-code/langfuse.env"'
             self.assertIn(needle, source)
             query.write_text(source.replace(needle, 'ENV_FILE="${TELEMETRY_TEST_ENV}"'))
+            # totalCost is the current API field (see query.sh's 2026-09-25 comment);
+            # the legacy calculatedTotalCost/totalPrice names are no longer returned.
             payload = json.dumps({'data': [
                 {'id': str(n), 'name': f'fixture-{n}', 'type': 'GENERATION',
-                 'latency': n, 'calculatedTotalCost': n}
+                 'latency': n, 'totalCost': n, 'usageDetails': {'total': n * 100}}
                 for n in range(1, count + 1)
             ]})
             curl = root / 'curl'
