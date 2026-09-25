@@ -8,10 +8,11 @@
 # ADR の置き場を**カレントディレクトリからの探索**で決めるコマンドなので、
 # 呼び出しは必ず作業場へ cd したサブシェルから行う。
 #
-# 書式は 2026-09-25 に軽量 ADR として再定義した(正は
-# skills/adr/references/ADR-FORMAT.md)。テストが書くファイルはその書式
-# (Date: / Implementation: / 任意の Status: / 本文 1〜3 段落(文脈・決定・
-# 帰結)/ 任意の Rejected: と Replaces:)に合わせる。
+# 書式は 2026-09-25 に、実測(9 リポジトリ 249 件の ADR)を踏まえて軽量 ADR
+# として再定義した(正は skills/adr/references/ADR-FORMAT.md)。テストが書く
+# ファイルはその書式(Date: / Implementation: / 任意の Status: / 本文 1〜3
+# 段落(文脈・決定・理由)/ `Accepting:` 最低 1 行 / 任意の Rejected:(理由
+# 必須)・Revisit:・Replaces:)に合わせる。
 # =============================================================================
 
 set -u
@@ -60,11 +61,11 @@ write() {
 	printf '%s\n' "$@" >"$p"
 }
 
-# 書式に沿った 1 件を書く(check を通る最小形)。
+# 書式に沿った 1 件を書く(check を通る最小形。Accepting: を含む)。
 # adrfile <相対パス> <題> <Implementation: done|pending>
 adrfile() {
 	write "$1" "# $2" '' "Date: 2026-09-10" "Implementation: $3" '' \
-		"文脈があって、決定して、理由がある。"
+		"文脈があって、決定して、理由がある。" '' "Accepting: 受け入れた代償"
 }
 
 # ---------------------------------------------------------------------------
@@ -108,7 +109,7 @@ t "Status: 行を読む" "proposed" "$(adr ls | awk '$2 ~ /0002/ { print $3 }')"
 setup check_ok
 adrfile docs/adr/0001-pick-postgres.md "Pick Postgres" done
 adrfile docs/adr/0002-use-sqlite.md "Use SQLite for the CLI" pending
-write docs/adr/0003-status.md '# Something' '' 'Date: 2026-09-12' 'Implementation: pending' 'Status: proposed' '' '文脈があって、決定して、理由がある。'
+write docs/adr/0003-status.md '# Something' '' 'Date: 2026-09-12' 'Implementation: pending' 'Status: proposed' '' '文脈があって、決定して、理由がある。' '' 'Accepting: 受け入れた代償'
 out=$(adr check 2>&1)
 rc=$?
 t "健全なファイルで check は 0" "0" "$rc"
@@ -212,8 +213,8 @@ write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '
 t "Status: superseded はもう語彙に無いので指摘される" "2" "$(adr check >/dev/null 2>&1; echo $?)"
 
 setup check_status_vocab_ok
-write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' 'Status: proposed'
-write docs/adr/0002-b.md '# B' '' 'Date: 2026-09-11' 'Implementation: done' 'Status: accepted'
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' 'Status: proposed' '' 'Accepting: X'
+write docs/adr/0002-b.md '# B' '' 'Date: 2026-09-11' 'Implementation: done' 'Status: accepted' '' 'Accepting: X'
 t "proposed と accepted は通る" "0" "$(adr check >/dev/null 2>&1; echo $?)"
 
 # ---------------------------------------------------------------------------
@@ -226,6 +227,35 @@ rc=$?
 t "'Superseded by' の残骸は 2 で指摘する" "2" "$rc"
 t "残骸のメッセージ" "1" \
 	"$(printf '%s\n' "$out" | grep -c "'Superseded by' はもう使わない語彙")"
+
+# ---------------------------------------------------------------------------
+# check — Accepting: と Rejected: の理由(2026-09-25 実測を踏まえて追加。
+# Zimmermann の Free Lunch Coupon / Fairy Tale を機械的に締め出す)
+# ---------------------------------------------------------------------------
+setup check_accepting_missing
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '本文。'
+out=$(adr check 2>&1)
+t "Accepting: が無ければ 2 で指摘する" "2" "$(adr check >/dev/null 2>&1; echo $?)"
+t "指摘のメッセージ" "1" "$(printf '%s\n' "$out" | grep -c 'Accepting: が無い')"
+
+setup check_accepting_present
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '本文。' '' 'Accepting: 受け入れた代償'
+t "Accepting: が 1 行あれば通る" "0" "$(adr check >/dev/null 2>&1; echo $?)"
+
+setup check_rejected_noreason
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '本文。' '' 'Accepting: X' 'Rejected: 案 A(区切りが無い)'
+out=$(adr check 2>&1)
+t "Rejected: に理由(空白+emダッシュ+空白)が無ければ 2 で指摘する" "2" "$(adr check >/dev/null 2>&1; echo $?)"
+t "指摘のメッセージ" "1" "$(printf '%s\n' "$out" | grep -c 'Rejected: に理由が無い')"
+
+setup check_rejected_withreason
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '本文。' '' 'Accepting: X' 'Rejected: 案 A — 理由'
+t "Rejected: に理由があれば通る" "0" "$(adr check >/dev/null 2>&1; echo $?)"
+
+setup check_accepting_not_counted_as_paragraph
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '段落 1。' '' '段落 2。' '' '段落 3。' '' 'Accepting: X' 'Rejected: Y — Z' 'Revisit: 条件'
+t "Accepting/Rejected/Revisit は段落に数えない(本文 3 段落のまま通る)" "0" \
+	"$(adr check >/dev/null 2>&1; echo $?)"
 
 # ---------------------------------------------------------------------------
 # check — 構造(見出し・箇条書き・表・コードフェンス・引用・4 段落以上)
@@ -267,22 +297,22 @@ t "引用は 2 で指摘する" "2" "$(adr check >/dev/null 2>&1; echo $?)"
 t "引用のメッセージ" "1" "$(printf '%s\n' "$out" | grep -c '引用(>)は使えない')"
 
 setup check_two_paragraphs_ok
-write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '文脈段落。' '' '決定段落。'
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '文脈段落。' '' '決定段落。' '' 'Accepting: X'
 t "本文 2 段落(文脈・決定)は通る" "0" "$(adr check >/dev/null 2>&1; echo $?)"
 
 setup check_three_paragraphs_ok
-write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '文脈段落。' '' '決定段落。' '' '帰結段落。'
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '文脈段落。' '' '決定段落。' '' '帰結段落。' '' 'Accepting: X'
 t "本文 3 段落(文脈・決定・帰結)まで通る" "0" "$(adr check >/dev/null 2>&1; echo $?)"
 
 setup check_four_paragraphs
-write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '1 段落目。' '' '2 段落目。' '' '3 段落目。' '' '4 段落目。'
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '1 段落目。' '' '2 段落目。' '' '3 段落目。' '' '4 段落目。' '' 'Accepting: X'
 out=$(adr check 2>&1)
 t "本文が 4 段落以上なら 2 で指摘する" "2" "$(adr check >/dev/null 2>&1; echo $?)"
 t "4 段落以上のメッセージ" "1" "$(printf '%s\n' "$out" | grep -c '本文の段落が 4 つ以上ある')"
 
 setup check_structure_ok
-write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '1 段落だけの本文。' '' 'Rejected: X — Y'
-t "1 段落 + Rejected: は構造検査を通る" "0" "$(adr check >/dev/null 2>&1; echo $?)"
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '1 段落だけの本文。' '' 'Accepting: X' 'Rejected: X — Y'
+t "1 段落 + Accepting + Rejected: は構造検査を通る" "0" "$(adr check >/dev/null 2>&1; echo $?)"
 
 # ---------------------------------------------------------------------------
 # check — 内容([実測 / [検査: / id: / Date: 行以外の日付)
@@ -314,7 +344,7 @@ t "日付のメッセージ" "1" "$(printf '%s\n' "$out" | grep -c "'Date:' 行�
 # 2026-09-25 実測: MCP はプロトコルの版を日付そのもので識別する。経緯の日付
 # ではなく値なので、コードスパンに入れれば指摘しない(見出しは skill にも書く)。
 setup check_content_date_codespan
-write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' 'MCP の `2026-07-28` 版を前提にする。'
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' 'MCP の `2026-07-28` 版を前提にする。' '' 'Accepting: X'
 t "コードスパンの中の日付は指摘しない" "0" "$(adr check >/dev/null 2>&1; echo $?)"
 
 setup check_content_date_outside_codespan
@@ -351,7 +381,7 @@ t "ADR ディレクトリが無ければ check も 0" "0" "$(adr check >/dev/nul
 # ---------------------------------------------------------------------------
 setup adrdir_override
 write docs/adr/0001-ignored.md '# Ignored' '' 'Date: 2026-09-10' 'Implementation: pending'
-write records/0001-picked.md '# Picked' '' 'Date: 2026-09-11' 'Implementation: pending'
+write records/0001-picked.md '# Picked' '' 'Date: 2026-09-11' 'Implementation: pending' '' '本文。' '' 'Accepting: X'
 export ADR_DIR=records
 t "ADR_DIR は探索より優先する" "2026-09-11 0001-picked accepted Picked" "$(adr ls)"
 t "ADR_DIR の中身を check する" "check: 問題なし (1 件)" "$(adr check)"
@@ -372,7 +402,7 @@ t "知らないコマンドは 2" "2" "$(adr nope >/dev/null 2>&1; echo $?)"
 # 素の /bin/sh — macOS ではこれが bash 3.2 で、新しい shell が通す書き方を落とす
 # ---------------------------------------------------------------------------
 setup binsh
-write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending'
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '本文。' '' 'Accepting: X'
 if [ -x /bin/sh ]; then
 	t "/bin/sh で読める(構文エラーが無い)" "0" \
 		"$( (cd "$W" && /bin/sh "$ADRBIN" --help >/dev/null 2>&1); echo $?)"
@@ -412,7 +442,12 @@ t "new が書くのは題・日付・Implementation: pending の 3 行だけ(決
 
 Date: 2026-09-10
 Implementation: pending" "$(cat "$W/docs/adr/0001-pick-postgres.md")"
-t "new が書いたファイルは check を通る" "check: 問題なし (1 件)" "$(adr check)"
+out=$(adr check 2>&1)
+t "new が書いた直後は Accepting: が無いので check を通らない(本文と一緒に書き手が足す)" "2" \
+	"$(adr check >/dev/null 2>&1; echo $?)"
+t "その指摘は Accepting: を名指しする" "1" "$(printf '%s\n' "$out" | grep -c 'Accepting: が無い')"
+printf '\n本文。\n\nAccepting: 受け入れた代償\n' >>"$W/docs/adr/0001-pick-postgres.md"
+t "本文と Accepting: を足せば check を通る" "check: 問題なし (1 件)" "$(adr check)"
 
 setup new_first_stderr
 t "置き場を作ったことは stderr に言う(stdout はパスだけ)" "1" \
@@ -573,8 +608,9 @@ t "古い方は消える" "1" "$(test -e "$W/docs/adr/0001-old.md"; echo $?)"
 
 # ---------------------------------------------------------------------------
 # stats — 報告のみ(ゲートではない)。文字数の多い順、末尾に合計。
-# 2026-09-25 に文数・最長文の文字数を足した(段落数だけでは「1〜3 文」という
-# 目標からの逸脱に気づけないため)。
+# 2026-09-25 に文数・最長文の文字数を足し、同日さらに語数(wc -w 相当)を
+# 足した(段落数だけでは「短い段落を最大 3 つ、120〜200 語」という目標からの
+# 逸脱に気づけないため)。
 # ---------------------------------------------------------------------------
 setup stats_basic
 write docs/adr/0001-short.md '# S' '' 'Date: 2026-09-10' 'Implementation: pending' '' '短い。'
@@ -590,6 +626,14 @@ t "stats は段落数も出す(0002 は 2 段落)" "1" \
 	"$(printf '%s\n' "$out" | grep -c '2 段落  2 文(最長 14 文字)  docs/adr/0002-long.md')"
 t "stats は 1 文だけのファイルの文数・最長文も出す" "1" \
 	"$(printf '%s\n' "$out" | grep -c '1 段落  1 文(最長 3 文字)  docs/adr/0001-short.md')"
+
+# 語数はファイル全体(wc -m と同じ数え方)。題やフィールド行の語も数える ——
+# 字数との一貫性を優先した(字数も本文だけでなくファイル全体を数えている)。
+setup stats_wordcount
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' 'one two three four five'
+out=$(adr stats)
+t "stats は語数(wc -w 相当。ファイル全体)を文字数の次に出す" "1" \
+	"$(printf '%s\n' "$out" | grep -c '文字  11 語  1 段落')"
 
 setup stats_sentence_split
 write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '一文目。二文目は少し長め。三文目。'

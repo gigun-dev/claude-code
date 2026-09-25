@@ -53,7 +53,7 @@ usage: adr <command>      — Architecture Decision Record を一覧・検査・
 
   ls                       1 行 1 件で `<date> <slug> <status> <title>` を番号順に出す
   check                    書式を検査する。指摘があれば stdout に出して 2 で終わる
-  stats                    ファイルごとの文字数・段落数・文数・最長文を多い/長い順に出す(ゲートではない)
+  stats                    ファイルごとの文字数・語数・段落数・文数・最長文を出す(ゲートではない)
   new "<題>" [<slug>]      次の番号でファイルを作り、パスを出す。本文は書かない
   replace <古い> <新しい>  新しい方に `Replaces: <古い番号>` を足し、古い方を削除する
 
@@ -82,8 +82,9 @@ replace は新しい方が既に実在し題を持つことを確かめてから
   │ Date: 2026-09-10
   │ Implementation: done
   │
-  │ ORM は N+1 を隠す。手で書いた SQL ならクエリが見える。
+  │ ORM は N+1 を隠す。手で書いた SQL ならクエリは見えるが、増える。
   │
+  │ Accepting: SQL を手で書く量が増える
   │ Rejected: ORM — N+1 を隠すため
   └─────────────────────────────────────────────
 
@@ -94,7 +95,9 @@ replace は新しい方が既に実在し題を持つことを確かめてから
   日付        `Date: YYYY-MM-DD` の 1 行のみ(本文中の日付は指摘される)
   Implementation:  done | pending
   Status:     任意。proposed のみ(既定は accepted。deprecated / superseded は語彙に無い)
-  Rejected:   任意。複数可。`Rejected: <捨てた案> — <理由>`
+  Accepting:  **必須(最低 1 行)**。`Accepting: <受け入れた代償>`
+  Rejected:   任意。複数可。`Rejected: <捨てた案> — <理由>`(理由は必須)
+  Revisit:    任意。`Revisit: <この決定を見直す条件>`
   Replaces:   任意。複数可。`Replaces: <古い番号>`。`adr replace` が書く
 
 check が見るもの:
@@ -105,20 +108,26 @@ check が見るもの:
   - `Implementation:` があり done|pending か
   - Status: の語彙が proposed|accepted のどれかか(deprecated / superseded / それ以外は指摘)
   - `Superseded by` の残骸があれば指摘(この語彙はもう無い。`adr replace` で消すこと)
+  - `Accepting:` が最低 1 行あるか(無ければ指摘。costs 抜きの Free Lunch
+    Coupon を機械的に締め出す)
+  - `Rejected:` の行に ` — 理由` があるか(無ければ指摘)
   - 構造: `##` 以上の見出し・箇条書き・番号付きリスト・表・コードフェンス・
     引用・本文段落が 4 つ以上、のいずれかがあれば指摘(段落 3 つまでは
-    構造上の後備えの上限であって目標ではない。目標は本文 1〜3 文。下記)
+    構造上の後備えであって目標ではない。目標は下記)
   - 内容: `[実測`・`[検査:`・`id:0123` のような todo id・`Date:` 行以外の日付
     (コードスパン `...` の中の日付は識別子として除外)、が本文にあれば指摘
     (それらは measurements / テスト名 / todo.txt / コミットメッセージに置く)
 
-本文は文脈・決定・理由を 1〜3 文で(元は mattpocock/skills 由来の題+1〜3 文
-という形。文の数は check が数えない —— 数えて縛ると、段落を縛ったときと同じ
-理由で長い 1 文に押し込む結果になる)。short sentences; 収まらないなら複数の
-決定が同居しているか、実装の詳細でコードコメント行き。
+本文の目標は文脈→決定→理由の短い段落を最大 3 つ、120〜200 語(check は
+数えない。数えて縛ると同じ単位に長文を詰め込む結果になる。実測: 9 リポジトリ
+249 件の ADR で最も軽い部類の中央値が約 160 語)。書きすぎ(Mega-ADR。関係ない
+背景や手順まで書く)にも、削りすぎ(costs や理由を削って前提ごと消す)にも
+寄らない。収まらないなら複数の決定が同居しているか、実装の詳細でコードの
+そばのコメント行き。
 
 stats は check と違って通らせる/落とすの判定をしない(常に 0 で終わる)。
-ファイルごとに文字数(`wc -m` 相当)・段落数・文数・最長の文の文字数を出し、
+ファイルごとに文字数(`wc -m` 相当)・語数(`wc -w` 相当。空白区切りなので
+分かち書きしない言語では過小に出る)・段落数・文数・最長の文の文字数を出し、
 文字数の多い順に並べる。文の切れ目は `。.!?` 相当。突出したものを split の
 候補として折に触れて見る。
 
@@ -342,7 +351,7 @@ check_structure() { # check_structure <ファイル>
 
 		# フィールド行(Date: / Implementation: / Status: / Rejected: / Replaces:)
 		# は本文にもリスト等の見た目チェックにも数えない。
-		if (t ~ /^(Date|Implementation|Status|Rejected|Replaces):/) { inpar = 0; next }
+		if (t ~ /^(Date|Implementation|Status|Accepting|Rejected|Revisit|Replaces):/) { inpar = 0; next }
 
 		if (t ~ /^#{2,}[ \t]/) { print "見出し(## 以上)は使えない: " t; inpar = 0; next }
 		if (t ~ /^(-|\*|\+)[ \t]/) { print "箇条書きは使えない: " t; inpar = 0; next }
@@ -359,11 +368,35 @@ check_structure() { # check_structure <ファイル>
 	' "$1"
 }
 
-# 軽さの報告(ゲートではない)。ファイルごとの文字数(wc -m 相当)・段落数・
-# 文数・最長の文の文字数を、文字数の多い順に 1 行 1 件出し、末尾に合計を出す。
-# `adr check` が通っていても長さは別に見る価値がある —— 目標の「1〜3 文」を
-# check は数えないので、増える方向に緩んでも check だけでは気づけない。
-# 突出したものを split の候補として扱う。
+# トレーラの検査 —— Zimmermann の Y-statement / Definition of Done、Nygard の
+# 「良いことだけでなく結果をすべて挙げる」に沿って、2 つだけ機械的に見る:
+# `Accepting:`(受け入れた代償)が最低 1 行あるか、`Rejected:` の行に理由
+# (` — 理由`)があるか。costs 抜きの「Free Lunch Coupon」、pros だけの
+# 「Fairy Tale」(どちらも Zimmermann の言い方)を機械的に締め出す最小限の
+# 関門で、本文の質(costs が本物か)までは判定しない。1 行 1 指摘を stdout に
+# 出す(ファイル名は呼び出し側が付ける)。
+check_trailers() { # check_trailers <ファイル>
+	awk '
+	{
+		line = $0
+		sub(/\r$/, "", line)
+		if (line ~ /^Accepting:[ \t]*/) have_accepting = 1
+		if (line ~ /^Rejected:[ \t]*/) {
+			if (line !~ / — /) print "Rejected: に理由が無い(半角スペース+emダッシュ+半角スペース+理由を付けること): " line
+		}
+	}
+	END {
+		if (!have_accepting) print "Accepting: が無い(受け入れた代償を最低 1 行。Free Lunch Coupon にしない)"
+	}
+	' "$1"
+}
+
+# 軽さの報告(ゲートではない)。ファイルごとの文字数(wc -m 相当)・語数
+# (wc -w 相当)・段落数・文数・最長の文の文字数を、文字数の多い順に 1 行
+# 1 件出し、末尾に合計を出す。`adr check` が通っていても長さは別に見る
+# 価値がある —— 目標の「120〜200 語」「短い文で」を check は数えないので、
+# 増える方向に緩んでも check だけでは気づけない。突出したものを split の
+# 候補として扱う。
 cmd_stats() { # cmd_stats
 	[ $# -eq 0 ] || die "usage: adr stats   (引数は取らない)"
 	dir=$(adr_dir)
@@ -376,6 +409,7 @@ cmd_stats() { # cmd_stats
 
 	adr_files "$dir" | while IFS= read -r f; do
 		chars=$(wc -m <"$f" | tr -d ' ')
+		words=$(wc -w <"$f" | tr -d ' ')
 		pars=$(check_structure_paragraphs "$f")
 		nsent=0
 		longest=0
@@ -386,10 +420,10 @@ cmd_stats() { # cmd_stats
 		nsent=$(wc -l <"${TMPDIR:-/tmp}/adr-stats-sentlens.$$" | tr -d ' ')
 		[ "$nsent" -gt 0 ] && longest=$(LC_ALL=C sort -rn "${TMPDIR:-/tmp}/adr-stats-sentlens.$$" | head -1)
 		rm -f "${TMPDIR:-/tmp}/adr-stats-sentlens.$$"
-		printf '%d\t%d\t%d\t%d\t%s\n' "$chars" "$pars" "$nsent" "$longest" "$f"
+		printf '%d\t%d\t%d\t%d\t%d\t%s\n' "$chars" "$words" "$pars" "$nsent" "$longest" "$f"
 	done | LC_ALL=C sort -rn -k1,1 | awk -F'\t' '
 	{
-		printf "%6d 文字  %d 段落  %d 文(最長 %d 文字)  %s\n", $1, $2, $3, $4, $5
+		printf "%6d 文字  %d 語  %d 段落  %d 文(最長 %d 文字)  %s\n", $1, $2, $3, $4, $5, $6
 		total += $1; n++
 	}
 	END {
@@ -407,7 +441,7 @@ check_structure_paragraphs() { # check_structure_paragraphs <ファイル>
 		sub(/\r$/, "", t)
 		sub(/^[ \t]+/, "", t)
 		if (t == "") { inpar = 0; next }
-		if (t ~ /^(Date|Implementation|Status|Rejected|Replaces):/) { inpar = 0; next }
+		if (t ~ /^(Date|Implementation|Status|Accepting|Rejected|Revisit|Replaces):/) { inpar = 0; next }
 		if (!inpar) { parcount++; inpar = 1 }
 	}
 	END { print parcount + 0 }
@@ -428,7 +462,7 @@ body_sentences() { # body_sentences <ファイル>
 		sub(/\r$/, "", t)
 		sub(/^[ \t]+/, "", t)
 		if (t == "") next
-		if (t ~ /^(Date|Implementation|Status|Rejected|Replaces):/) next
+		if (t ~ /^(Date|Implementation|Status|Accepting|Rejected|Revisit|Replaces):/) next
 		body = body (body == "" ? "" : " ") t
 	}
 	END {
@@ -540,6 +574,10 @@ cmd_check() {
 				[ -n "$msg" ] || continue
 				printf '✗ %s\n    %s\n' "$msg" "$f"
 			done
+			check_trailers "$f" | while IFS= read -r msg; do
+				[ -n "$msg" ] || continue
+				printf '✗ %s\n    %s\n' "$msg" "$f"
+			done
 		done
 	} >"$tmpf"
 	if [ -s "$tmpf" ]; then
@@ -552,11 +590,12 @@ cmd_check() {
 # ---------------------------------------------------------------------------
 # new — 番号を採り、題・日付・Implementation: pending だけのファイルを作る
 # ---------------------------------------------------------------------------
-# 決定の本文(1 段落)は書かない。書くと、埋めるために創作が始まる(README の
-# 方針)。CLI が持つのは、手でやると間違える部分 —— 採番とファイル名の形 ——
-# だけ。Implementation: pending は既定として書く(新しい ADR は大抵まだ実装前
-# で、これは日付と同じく判断を要らない値。実装済みの決定を後から記録するなら
-# 書き手が done に書き換える)。
+# 決定の本文と Accepting: は書かない。書くと、埋めるために創作が始まる
+# (README の方針)。CLI が持つのは、手でやると間違える部分 —— 採番とファイル
+# 名の形 —— だけ。Implementation: pending は既定として書く(新しい ADR は
+# 大抵まだ実装前で、これは日付と同じく判断を要らない値。実装済みの決定を
+# 後から記録するなら書き手が done に書き換える)。new が作った直後のファイルは
+# Accepting: が無いので `adr check` を通らない —— 本文と一緒に書き手が足す。
 
 # 題から slug を作る。作れなければ 1 で返す(呼び出し側が slug を要求する)。
 # 非 ASCII を 1 文字でも含む題からは作らない —— 実際の題は日本語で、ASCII の
