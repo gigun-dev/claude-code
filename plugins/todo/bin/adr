@@ -53,6 +53,7 @@ usage: adr <command>      — Architecture Decision Record を一覧・検査・
 
   ls                       1 行 1 件で `<date> <slug> <status> <title>` を番号順に出す
   check                    書式を検査する。指摘があれば stdout に出して 2 で終わる
+  stats                    ファイルごとの文字数・段落数を多い順に出す(ゲートではない)
   new "<題>" [<slug>]      次の番号でファイルを作り、パスを出す。本文は書かない
   replace <古い> <新しい>  新しい方に `Replaces: <古い番号>` を足し、古い方を削除する
 
@@ -81,7 +82,9 @@ replace は新しい方が既に実在し題を持つことを確かめてから
   │ Date: 2026-09-10
   │ Implementation: done
   │
-  │ <何が文脈で、何を決めて、なぜか。1 段落>
+  │ <文脈。1 段落>
+  │
+  │ <決定と理由。1 段落。長くなるなら分けるべき決定が同居している合図>
   │
   │ Rejected: ORM — N+1 を隠すため
   └─────────────────────────────────────────────
@@ -105,11 +108,17 @@ check が見るもの:
   - Status: の語彙が proposed|accepted のどれかか(deprecated / superseded / それ以外は指摘)
   - `Superseded by` の残骸があれば指摘(この語彙はもう無い。`adr replace` で消すこと)
   - 構造: `##` 以上の見出し・箇条書き・番号付きリスト・表・コードフェンス・
-    引用・本文段落が複数、のいずれかがあれば指摘(1 決定 = 題 + 数行のフィールド +
-    1 段落 + 任意のトレーラ、という形を外れているということ)
-  - 内容: `[実測`・`[検査:`・`id:0123` のような todo id・`Date:` 行以外の日付、
-    が本文にあれば指摘(それらは measurements / テスト名 / todo.txt /
-    コミットメッセージに置く)
+    引用・本文段落が 4 つ以上、のいずれかがあれば指摘(1 決定 = 題 + 数行の
+    フィールド + 本文 1〜3 段落(文脈・決定・帰結)+ 任意のトレーラ、という
+    形を外れているということ)
+  - 内容: `[実測`・`[検査:`・`id:0123` のような todo id・`Date:` 行以外の日付
+    (コードスパン `...` の中の日付は識別子として除外)、が本文にあれば指摘
+    (それらは measurements / テスト名 / todo.txt / コミットメッセージに置く)
+
+stats は check と違って通らせる/落とすの判定をしない(常に 0 で終わる)。
+文字数(`wc -m` 相当)の多い順にファイルごと 1 行、末尾に合計と件数を出す。
+軽さは時間とともに緩みうるので、定期的に見て突出したものを split の候補に
+する用途 —— 3 段落まで許す分、check だけでは増加に気づけない。
 
 対象ディレクトリは $ADR_DIR。未指定なら docs/adr → docs/decisions → adr →
 decisions の順に最初に見つかったもの。どれも無ければ何もせず 0 で終わる。
@@ -309,10 +318,13 @@ cmd_ls() {
 	done | LC_ALL=C sort | cut -f2-
 }
 
-# 構造の検査 —— 1 決定 = 題 + フィールド数行 + 本文 1 段落 + 任意のトレーラ、
-# という形から外れていないか。軽さは文字数の上限ではなく形で強制する
-# (2026-09-25 の裁定: 文字数に原理的な根拠が無い。形はどんな言語でも同じ)。
-# 1 行 1 指摘を stdout に出す(ファイル名は付けない。呼び出し側が付ける)。
+# 構造の検査 —— 1 決定 = 題 + フィールド数行 + 本文 1〜3 段落(文脈・決定・
+# 帰結。Nygard の節構成)+ 任意のトレーラ、という形から外れていないか。軽さは
+# 文字数の上限ではなく形で強制する(2026-09-25 の裁定: 文字数に原理的な根拠が
+# 無い。形はどんな言語でも同じ)。3 段落までにしたのは 2026-09-25 の裁定 ——
+# 1 段落だけだと文脈・決定・帰結を 1 文に押し込んだ、読みにくい長文になった
+# ため。4 段落目からは指摘する(長さの合図は `adr stats` が出す。ゲートでは
+# ない)。1 行 1 指摘を stdout に出す(ファイル名は付けない。呼び出し側が付ける)。
 check_structure() { # check_structure <ファイル>
 	awk '
 	{
@@ -339,8 +351,53 @@ check_structure() { # check_structure <ファイル>
 		if (!inpar) { parcount++; inpar = 1 }
 	}
 	END {
-		if (parcount > 1) print "本文の段落が複数ある(1 段落にまとめること。数えたのは " parcount " 段落)"
+		if (parcount > 3) print "本文の段落が 4 つ以上ある(文脈・決定・帰結の 3 段落までにまとめること。数えたのは " parcount " 段落)"
 	}
+	' "$1"
+}
+
+# 軽さの報告(ゲートではない)。ファイルごとの文字数(wc -m 相当)と段落数を
+# 文字数の多い順に 1 行 1 件出し、末尾に合計を出す。`adr check` が通っていても
+# 長さは別に見る価値がある —— 3 段落まで許すようにした分、増える方向にだけ
+# 緩んでいる。突出したものを split の候補として扱う。
+cmd_stats() { # cmd_stats
+	[ $# -eq 0 ] || die "usage: adr stats   (引数は取らない)"
+	dir=$(adr_dir)
+	rc=$?
+	[ "$rc" -eq "$EX_NODIR" ] && {
+		printf '%s: ADR ディレクトリが無い(docs/adr などを探した)。まだ 1 件も無い\n' "$PROG" >&2
+		return 0
+	}
+	[ "$rc" -eq 0 ] || exit "$rc" # die は既にメッセージを出している
+
+	adr_files "$dir" | while IFS= read -r f; do
+		chars=$(wc -m <"$f" | tr -d ' ')
+		pars=$(check_structure_paragraphs "$f")
+		printf '%d\t%d\t%s\n' "$chars" "$pars" "$f"
+	done | LC_ALL=C sort -rn -k1,1 | awk -F'\t' '
+	{
+		printf "%6d 文字  %d 段落  %s\n", $1, $2, $3
+		total += $1; n++
+	}
+	END {
+		if (n == 0) { print "(0 件)"; exit }
+		printf "計 %d 文字 / %d 件\n", total, n
+	}'
+}
+
+# 段落数だけを数えて出す(stats が使う。check_structure と数え方を共有する)。
+check_structure_paragraphs() { # check_structure_paragraphs <ファイル>
+	awk '
+	NR == 1 { next }
+	{
+		t = $0
+		sub(/\r$/, "", t)
+		sub(/^[ \t]+/, "", t)
+		if (t == "") { inpar = 0; next }
+		if (t ~ /^(Date|Implementation|Status|Rejected|Replaces):/) { inpar = 0; next }
+		if (!inpar) { parcount++; inpar = 1 }
+	}
+	END { print parcount + 0 }
 	' "$1"
 }
 
@@ -679,6 +736,7 @@ shift
 case $cmd in
 ls | list) cmd_ls "$@" ;;
 check) cmd_check "$@" ;;
+stats) cmd_stats "$@" ;;
 new) cmd_new "$@" ;;
 replace | supersede) cmd_replace "$@" ;; # supersede は旧名。安く保てるので alias で残す
 help | -h | --help) usage ;;

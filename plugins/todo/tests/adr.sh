@@ -10,8 +10,8 @@
 #
 # 書式は 2026-09-25 に軽量 ADR として再定義した(正は
 # skills/adr/references/ADR-FORMAT.md)。テストが書くファイルはその書式
-# (Date: / Implementation: / 任意の Status: / 1 段落の本文 / 任意の
-# Rejected: と Replaces:)に合わせる。
+# (Date: / Implementation: / 任意の Status: / 本文 1〜3 段落(文脈・決定・
+# 帰結)/ 任意の Rejected: と Replaces:)に合わせる。
 # =============================================================================
 
 set -u
@@ -228,7 +228,7 @@ t "残骸のメッセージ" "1" \
 	"$(printf '%s\n' "$out" | grep -c "'Superseded by' はもう使わない語彙")"
 
 # ---------------------------------------------------------------------------
-# check — 構造(見出し・箇条書き・表・コードフェンス・引用・複数段落)
+# check — 構造(見出し・箇条書き・表・コードフェンス・引用・4 段落以上)
 # ---------------------------------------------------------------------------
 setup check_heading
 write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '## 見出し' '' '本文。'
@@ -266,11 +266,19 @@ out=$(adr check 2>&1)
 t "引用は 2 で指摘する" "2" "$(adr check >/dev/null 2>&1; echo $?)"
 t "引用のメッセージ" "1" "$(printf '%s\n' "$out" | grep -c '引用(>)は使えない')"
 
-setup check_multi_paragraph
-write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '1 段落目。' '' '2 段落目。'
+setup check_two_paragraphs_ok
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '文脈段落。' '' '決定段落。'
+t "本文 2 段落(文脈・決定)は通る" "0" "$(adr check >/dev/null 2>&1; echo $?)"
+
+setup check_three_paragraphs_ok
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '文脈段落。' '' '決定段落。' '' '帰結段落。'
+t "本文 3 段落(文脈・決定・帰結)まで通る" "0" "$(adr check >/dev/null 2>&1; echo $?)"
+
+setup check_four_paragraphs
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '1 段落目。' '' '2 段落目。' '' '3 段落目。' '' '4 段落目。'
 out=$(adr check 2>&1)
-t "本文が複数段落なら 2 で指摘する" "2" "$(adr check >/dev/null 2>&1; echo $?)"
-t "複数段落のメッセージ" "1" "$(printf '%s\n' "$out" | grep -c '本文の段落が複数ある')"
+t "本文が 4 段落以上なら 2 で指摘する" "2" "$(adr check >/dev/null 2>&1; echo $?)"
+t "4 段落以上のメッセージ" "1" "$(printf '%s\n' "$out" | grep -c '本文の段落が 4 つ以上ある')"
 
 setup check_structure_ok
 write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '1 段落だけの本文。' '' 'Rejected: X — Y'
@@ -562,6 +570,34 @@ adrfile docs/adr/0001-old.md "Old" done
 adrfile docs/adr/0002-new.md "New" pending
 t "supersede は replace の別名として動く" "docs/adr/0002-new.md" "$(adr supersede 1 2)"
 t "古い方は消える" "1" "$(test -e "$W/docs/adr/0001-old.md"; echo $?)"
+
+# ---------------------------------------------------------------------------
+# stats — 報告のみ(ゲートではない)。文字数の多い順、末尾に合計。
+# ---------------------------------------------------------------------------
+setup stats_basic
+write docs/adr/0001-short.md '# S' '' 'Date: 2026-09-10' 'Implementation: pending' '' '短い。'
+write docs/adr/0002-long.md '# L' '' 'Date: 2026-09-10' 'Implementation: pending' '' '長い文脈の段落がここに入る。' '' '長い決定の段落がここに入る。'
+out=$(adr stats)
+rc=$?
+t "stats は常に 0 で返る(ゲートではない)" "0" "$rc"
+t "stats は文字数の多い順(長い方が先)" "1" \
+	"$(printf '%s\n' "$out" | head -1 | grep -c '0002-long.md')"
+t "stats は末尾に合計と件数を出す" "1" \
+	"$(printf '%s\n' "$out" | tail -1 | grep -c '^計 [0-9]* 文字 / 2 件$')"
+t "stats は段落数も出す(0002 は 2 段落)" "1" \
+	"$(printf '%s\n' "$out" | grep -c '2 段落  docs/adr/0002-long.md')"
+
+setup stats_none
+t "ADR ディレクトリが無ければ stats は何も出さず 0" "" "$(adr stats 2>/dev/null)"
+t "ADR ディレクトリが無くても stats は 0 で返る" "0" "$(adr stats >/dev/null 2>&1; echo $?)"
+
+setup stats_even_when_check_fails
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' '' '本文。'
+t "check が指摘を出す状態でも stats は 0 で返る(ゲートではない)" "0" \
+	"$(adr stats >/dev/null 2>&1; echo $?)"
+
+setup stats_usage
+t "stats は引数を取らない" "1" "$(adr stats extra >/dev/null 2>&1; echo $?)"
 
 # ---------------------------------------------------------------------------
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
