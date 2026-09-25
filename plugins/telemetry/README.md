@@ -29,6 +29,33 @@ hook はツールの前後しか知らず、LLM の出力もトークン数も�
 `summary.sh` と `query.sh` は用途別の Metrics / Observations API を直接読むので、CLI の導入は不要。
 対話的なCLIアクセスにはdotfilesの `langfuse` 関数があり、`bunx @langfuse/cli` で起動する。
 
+### events_only モードで使える経路 / 塞がっている経路
+
+自前配置は Langfuse v4 の **events_only** モードで動く。**正典は配置自身が出す OpenAPI**
+(`${LANGFUSE_BASE_URL}/generated/api/openapi.yml`。self-host はインストール版と一致するので
+langfuse.com の docs より優先する)。同じ内容の対話用リファレンスは `/api/docs` にもある。
+OpenAPI の `info.description` に明記されている通り、リアルタイムに読める経路は
+**Observations API v2**(`GET /api/public/v2/observations`)と **Metrics API v2** の2つだけで、
+他の read/write は反映まで約10分遅延しうる。
+
+events_only では次のレガシー経路が **404** で塞がれ、本文
+`{"message":"This endpoint is not available on deployments running in Langfuse v4 events_only
+mode..."}` を返す(2026-09-25 に実機で確認):
+
+- `GET /api/public/traces`
+- `GET /api/public/observations`、`GET /api/public/observations/{id}`(単体取得)
+- `GET /api/public/v2/scores`
+
+代わりに使える経路:
+
+- 観測点の一覧・単体相当の絞り込みは `GET /api/public/v2/observations`(`filter` パラメータで
+  `id` 等の列を条件指定すれば1件に絞れる。`query.sh gen` がこれを使う)
+- score の読み取りは `GET /api/public/v3/scores`(v2 ではなく v3 が現行)
+- score の書き込みは `POST /api/public/scores`(未検証。telemetry のスクリプト群は読み取り専用)
+
+このエラー本文は `query.sh` の全サブコマンドが利用者に表示する(2026-09-25 以前は `id` の
+有無だけで「見つからない」と誤診し、バックエンドの拒否をユーザー入力ミスとして報告していた)。
+
 ## bin/session-breakdown — transcript だけで時間の内訳を出す
 
 `/telemetry:review` は必要なときだけ Langfuse を読む。`bin/session-breakdown` は資格情報も

@@ -58,13 +58,23 @@ reasoning output はそれぞれの部分集合として扱う。期間内に us
 
 ## 読むときの注意(データの癖)
 
-- 中身を見るときは単体取得を使う。一覧 API `/api/public/v2/observations` のレスポンスには
-  model / usage / input / output が**含まれない**。一覧だけ見て「コストが送れていない」と誤診
-  しやすい(実際に一度誤診した)。`query.sh gen <id>` が単体取得
-  `/api/public/observations/{id}` を使うので、中身はそちらで見る。
+- 一覧 API `/api/public/v2/observations` は `fields` パラメータの**既定値が `core,basic` のみ**
+  で、model / usage / input / output を含まない。2026-08-08 に既定値のままそれを見て
+  「コストが送れていない」と誤診した(実際に誤診した)。**現行 API では
+  `fields=io,usage,model` 等を明示すれば一覧 API だけで入出力本文・usage・cost まで取れる**
+  (2026-09-25 に実機で確認。当時の誤診は既定値の落とし穴であって、一覧 API の構造的な限界
+  ではなかった)。単体取得 `/api/public/observations/{id}` は配置が events_only 化した後
+  404 で使えなくなったため、`query.sh gen <id>` は `v2/observations` に
+  `filter=[{"type":"string","column":"id","operator":"=","value":<id>}]` を渡して1件に絞る
+  方式に変えてある。
 - 単位が非対称で、metrics API はミリ秒、observations API は秒(Langfuse 側の仕様)。
 - API のバージョン表記が紛らわしい。製品の Langfuse v3 が非推奨で v4 が現行、そして v4 では
-  `/api/public/v2/*` を使う。パス無し(`/api/public/traces`)は旧世代。
+  `/api/public/v2/*` を使う。パス無し(`/api/public/traces`)は旧世代で、自前配置(events_only)
+  では 404 になる。塞がっている経路と使える経路の一覧は `plugins/telemetry/README.md`。
+- `cost` はコストの金額が0件になることがあるが、それは API の欠落ではなく Langfuse の
+  `/api/public/models` にそのモデルの単価が未登録なケースがほとんど(実測:
+  `claude-opus-5-5` は未登録、`claude-opus-5` は登録済みで金額が出る)。トークン数は
+  usageDetails に必ず入るので、金額が無くても件数の傾向は読める。
 - 2026-08-08 より前のデータは信用しない。それ以前は (a) generation を送っておらずコストが全部 0、
   (b) ツール失敗は PostToolUseFailure を購読していなかったので1件も記録されず、代わりに出力の
   "rror" 文字列一致で誤検知したものが ERROR として積まれていた(実測で実際の 64 倍)。古い期間を
