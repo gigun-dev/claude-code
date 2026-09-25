@@ -2,13 +2,14 @@
 # =============================================================================
 # adr — リポジトリの Architecture Decision Record を一覧し、検査し、採番する
 # =============================================================================
-# 書式の正は skills/adr/references/ADR-FORMAT.md(mattpocock/skills から逐語で
-# vendor。MIT)。このスクリプトは上流の書式をそのまま検査するだけで、独自の
-# 規則を足さない —— 足せば、上流を読んで書いた ADR が落ちる。
+# 書式の正は skills/adr/references/ADR-FORMAT.md(このプラグイン自身が定義する。
+# 2026-09-25 に軽量 ADR として再定義した —— 上流 mattpocock/skills の vendor は
+# やめた。理由は同ファイルの冒頭に書いてある)。このスクリプトはその書式を
+# 検査するだけで、書式そのものの正は references/ADR-FORMAT.md 側に置く。
 #
 # 本文を**書く**のはエージェントの仕事で、CLI は書かない(埋める欄があると、
 # 埋めるために創作が始まる)。CLI が持つのは、間違えると記録そのものが壊れる
-# 2 つの操作だけ: 採番(new)と、受理済み ADR に許された唯一の編集(supersede)。
+# 2 つの操作だけ: 採番(new)と、差し替え(replace。旧 supersede)。
 #
 # POSIX sh + awk のみ。bash 固有機能・python・jq に依存しない。
 # =============================================================================
@@ -53,19 +54,23 @@ usage: adr <command>      — Architecture Decision Record を一覧・検査・
   ls                       1 行 1 件で `<date> <slug> <status> <title>` を番号順に出す
   check                    書式を検査する。指摘があれば stdout に出して 2 で終わる
   new "<題>" [<slug>]      次の番号でファイルを作り、パスを出す。本文は書かない
-  supersede <古い> <新しい>  古い方の先頭に `Superseded by <slug>` を 1 行足す
+  replace <古い> <新しい>  新しい方に `Replaces: <古い番号>` を足し、古い方を削除する
 
-new が作るのは題と日付の 2 行だけ(本文は書き手が書く。埋める欄を作らない)。
-番号は既存の最大値 + 1 で、欠番は埋めない。置き場が無ければ docs/adr を作る。
-slug は題から作る —— 小文字にして a-z0-9 以外を - に畳む。題が非 ASCII を
-1 文字でも含むなら作らずに拒み、第 2 引数を求める(ASCII の断片だけを拾うと、
-改名できない slug が残るため)。**同じ番号のファイルや NNNN-<slug>.md でない
-名前が 1 つでもあれば new は書かない**(採番の当てにできないので)。
+new が作るのは題・日付・`Implementation: pending` の 3 行だけ(決定の本文は
+書き手が書く。埋める欄を作らない)。番号は既存の最大値 + 1 で、欠番は埋めない
+(`Replaces:` が名指しした番号も max に数える。削除後も再利用しない)。
+置き場が無ければ docs/adr を作る。slug は題から作る —— 小文字にして a-z0-9
+以外を - に畳む。題が非 ASCII を 1 文字でも含むなら作らずに拒み、第 2 引数を
+求める(ASCII の断片だけを拾うと、改名できない slug が残るため)。**同じ番号の
+ファイルや NNNN-<slug>.md でない名前が 1 つでもあれば new は書かない**
+(採番の当てにできないので)。
 
-supersede は古い方に 1 行足すだけで、整形も書き換えもしない。新しい方が実在し
-題を持つこと・古い方がまだ `Superseded by` を持たず先頭行が題であることを
-確かめ、一つでも欠ければ何も書かずに 1 で終わる。古い方・新しい方は番号
-(0004 / 4)でも slug でも指せる。
+replace は新しい方が既に実在し題を持つことを確かめてから、新しい方に
+`Replaces: <古い番号>` を 1 行足し(既にあれば番号を追記)、古い方のファイルを
+消す(git 管理下なら `git rm`、そうでなければ `rm`)。**古いファイルは残さない**
+—— 置いたままだと、次にこのリポジトリを読むエージェントが「現在なお有効な
+決定」として本文を読み込む(記録は git の履歴に残るので消しても失われない)。
+古い方・新しい方は番号(0004 / 4)でも slug でも指せる。
 
 ファイルの形 (正は skills/adr/references/ADR-FORMAT.md):
 
@@ -73,27 +78,38 @@ supersede は古い方に 1 行足すだけで、整形も書き換えもしな�
   ┌─────────────────────────────────────────────
   │ # Use manual SQL instead of an ORM
   │
-  │ 2026-09-10。<何が文脈で、何を決めて、なぜか。1〜3 文>
+  │ Date: 2026-09-10
+  │ Implementation: done
+  │
+  │ <何が文脈で、何を決めて、なぜか。1 段落>
+  │
+  │ Rejected: ORM — N+1 を隠すため
   └─────────────────────────────────────────────
 
   ファイル名  NNNN-<小文字ケバブの slug>.md。番号は 4 桁で、既存の最大値 + 1
-              (`adr ls` の一番下が最大値)。**採番後に改名しない**
+              (`adr ls` の一番下 と、既存ファイルが名指しする `Replaces:` の
+              最大値)。**採番後に改名しない**
   題          1 行目の `# ...`
-  日付        YYYY-MM-DD。本文の書き出しか、`Date: 2026-09-10` の 1 行
-  Status:     任意。proposed | accepted | deprecated | superseded(既定は accepted)
-  Superseded by <slug>
-              差し替えられた ADR の先頭行。**受理済み ADR への編集はこれだけ**。
-              新しい決定は新しいファイルに書き、そこから古い方を名指しする。
-              この行があれば ls の status は superseded(Status: が優先)。
-              書くのは `adr supersede <古い> <新しい>`(手で足さない)
+  日付        `Date: YYYY-MM-DD` の 1 行のみ(本文中の日付は指摘される)
+  Implementation:  done | pending
+  Status:     任意。proposed のみ(既定は accepted。deprecated / superseded は語彙に無い)
+  Rejected:   任意。複数可。`Rejected: <捨てた案> — <理由>`
+  Replaces:   任意。複数可。`Replaces: <古い番号>`。`adr replace` が書く
 
 check が見るもの:
   - ファイル名が NNNN-<小文字ケバブの slug>.md か
   - 同じ番号を 2 つ以上のファイルが持っていないか(**改名はしない。指摘だけ**)
   - 題(`# ...`)があるか
-  - 日付があり YYYY-MM-DD か
-  - `Superseded by <slug>` の指す先が実在するか
-  - Status: の語彙が proposed|accepted|deprecated|superseded のどれかか
+  - `Date:` があり YYYY-MM-DD か
+  - `Implementation:` があり done|pending か
+  - Status: の語彙が proposed|accepted のどれかか(deprecated / superseded / それ以外は指摘)
+  - `Superseded by` の残骸があれば指摘(この語彙はもう無い。`adr replace` で消すこと)
+  - 構造: `##` 以上の見出し・箇条書き・番号付きリスト・表・コードフェンス・
+    引用・本文段落が複数、のいずれかがあれば指摘(1 決定 = 題 + 数行のフィールド +
+    1 段落 + 任意のトレーラ、という形を外れているということ)
+  - 内容: `[実測`・`[検査:`・`id:0123` のような todo id・`Date:` 行以外の日付、
+    が本文にあれば指摘(それらは measurements / テスト名 / todo.txt /
+    コミットメッセージに置く)
 
 対象ディレクトリは $ADR_DIR。未指定なら docs/adr → docs/decisions → adr →
 decisions の順に最初に見つかったもの。どれも無ければ何もせず 0 で終わる。
@@ -103,7 +119,7 @@ decisions の順に最初に見つかったもの。どれも無ければ何も�
 
 終了コード:
   0  成功(check は指摘なし)
-  1  引数・状態の誤り(usage、new / supersede の拒否)
+  1  引数・状態の誤り(usage、new / replace の拒否)
   2  check が指摘を出した
 EOF
 }
@@ -173,11 +189,16 @@ num_of() {
 	esac
 }
 
-# 1 ファイルから title / date / status / superseded を取り出し、US 区切りの
-# 1 行で返す:  date US status US superseded US title
+# 1 ファイルから title / date / status / superseded / implementation を取り出し、
+# US 区切りの 1 行で返す:  date US status US superseded US title US implementation
 # 見つからない項目は空。日付が YYYY-MM-DD でないときは頭に "!" を付けて返す。
 # 抽出は ls と check で共有する —— 二重化すると、check が通る書き方と ls が
 # 読める書き方がずれる。
+#
+# 日付は `Date:` の 1 行だけを読む(本文中の書き出しに置く旧い書き方はもう
+# 読まない —— それを読んでしまうと「`Date:` 行以外の日付を指摘する」内容検査と
+# 矛盾する)。frontmatter(`---` で挟む書き方)も読まない —— 新しい書式は
+# フィールドを本文にそのまま書く。
 PARSE='
 function isdate(s,   m, d) {
 	if (s !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) return 0
@@ -188,22 +209,13 @@ function isdate(s,   m, d) {
 	line = $0
 	sub(/\r$/, "", line)
 
-	# --- frontmatter ------------------------------------------------------
-	# 1 行目が --- なら、次の --- までを frontmatter として status を拾う。
-	if (NR == 1 && line == "---") { fm = 1; next }
-	if (fm && line == "---") { fm = 0; next }
-	if (fm) {
-		if (tolower(line) ~ /^status:[ \t]*/) { sub(/^[^:]*:[ \t]*/, "", line); status = line }
-		next
-	}
-
 	# --- 題 ---------------------------------------------------------------
 	if (title == "" && line ~ /^#[ \t]+/) {
 		sub(/^#[ \t]+/, "", line); sub(/[ \t]+$/, "", line); title = line
 		next
 	}
 
-	# --- Superseded by <slug> ---------------------------------------------
+	# --- Superseded by <slug>(もう使わない語彙。check が残骸として指摘する)
 	if (super == "" && line ~ /^[ \t]*(\*\*)?[Ss]uperseded by[ \t]+/) {
 		sub(/^[ \t]*(\*\*)?[Ss]uperseded by[ \t]+/, "", line)
 		gsub(/[*`<>]/, "", line); sub(/[ \t.]+$/, "", line); sub(/\.md$/, "", line)
@@ -218,36 +230,37 @@ function isdate(s,   m, d) {
 		next
 	}
 
-	# --- 日付 -------------------------------------------------------------
-	# `Date:` の 1 行を優先し、無ければ本文に最初に出てくる YYYY-MM-DD を採る
-	# (書き出しの文に日付を置く書き方を認めるため)。
+	# --- Implementation: ---------------------------------------------------
+	if (impl == "" && line ~ /^[ \t]*(\*\*)?[Ii]mplementation(\*\*)?:[ \t]*/) {
+		sub(/^[^:]*:[ \t]*/, "", line); gsub(/[*`]/, "", line); sub(/[ \t]+$/, "", line)
+		impl = line
+		next
+	}
+
+	# --- 日付 (Date: の 1 行だけ) -------------------------------------------
 	if (datefield == "" && line ~ /^[ \t]*(\*\*)?[Dd]ate(\*\*)?:[ \t]*/) {
 		sub(/^[^:]*:[ \t]*/, "", line); gsub(/[*`]/, "", line)
 		sub(/^[ \t]+/, "", line); sub(/[ \t.]+$/, "", line)
 		datefield = line
 		next
 	}
-	if (date == "") {
-		n = split(line, a, /[^0-9-]+/)
-		for (i = 1; i <= n; i++) if (isdate(a[i])) { date = a[i]; break }
-	}
 }
 END {
-	if (datefield != "") date = isdate(datefield) ? datefield : ("!" datefield)
-	printf "%s%s%s%s%s%s%s\n", date, us, status, us, super, us, title
+	date = (datefield == "") ? "" : (isdate(datefield) ? datefield : ("!" datefield))
+	printf "%s%s%s%s%s%s%s%s%s\n", date, us, status, us, super, us, title, us, impl
 }
 '
 
 parse_file() { awk -v us="$US" "$PARSE" "$1"; }
 
-# parse_file の結果を date / status / super / title へ展開する(呼び出し側の
-# 変数に置く。sh に局所変数は無いので、そのまま呼び出し側から見える)。
+# parse_file の結果を date / status / super / title / impl へ展開する(呼び出し
+# 側の変数に置く。sh に局所変数は無いので、そのまま呼び出し側から見える)。
 #
 # ⚠️ ここで `read ... <<EOF` を使わないこと。macOS の /bin/sh は bash 3.2 で、
 # `$( … )` の中に heredoc があると構文解析を誤る —— 2026-09-10 に実測した:
 # `/bin/sh plugins/adr/bin/adr check` が「line 265: syntax error near
 # unexpected token ';;'」で落ちた(テストが `sh` = Nix の新しい shell で
-# 呼んでいたため気づけなかった)。読むのは 4 フィールドだけなので、
+# 呼んでいたため気づけなかった)。読むのは 5 フィールドだけなので、
 # `set --` による POSIX の分割で足りる。
 set_fields() { # set_fields <ファイル>
 	_parsed=$(parse_file "$1")
@@ -262,6 +275,7 @@ set_fields() { # set_fields <ファイル>
 	status=${2:-}
 	super=${3:-}
 	title=${4:-}
+	impl=${5:-}
 }
 
 # ---------------------------------------------------------------------------
@@ -281,15 +295,78 @@ cmd_ls() {
 		# きっかけが check を走らせたときにしか無くなる。並びは末尾へ回る。
 		num=$(num_of "$slug")
 		[ -n "$num" ] || num=99999999
+		# printf の組み込み %d は先頭 0 の文字列を 8 進として読もうとし、8/9 を
+		# 含む番号(例: 0528)で "invalid number" を出す(2026-09-25 実測)。
+		# awk の数値変換(+0)は常に 10 進なので、そこを経由してから渡す。
+		num=$(printf '%s' "$num" | awk '{ print $0 + 0 }')
 		case $date in
 		'' | '!'*) date='????-??-??' ;;
 		esac
-		if [ -z "$status" ]; then
-			if [ -n "$super" ]; then status=superseded; else status=accepted; fi
-		fi
+		# status の既定は accepted(超過分の語彙 = deprecated/superseded は無い)。
+		[ -n "$status" ] || status=accepted
 		[ -n "$title" ] || title='(題が無い)'
 		printf '%08d\t%s %s %s %s\n' "$num" "$date" "$slug" "$status" "$title"
 	done | LC_ALL=C sort | cut -f2-
+}
+
+# 構造の検査 —— 1 決定 = 題 + フィールド数行 + 本文 1 段落 + 任意のトレーラ、
+# という形から外れていないか。軽さは文字数の上限ではなく形で強制する
+# (2026-09-25 の裁定: 文字数に原理的な根拠が無い。形はどんな言語でも同じ)。
+# 1 行 1 指摘を stdout に出す(ファイル名は付けない。呼び出し側が付ける)。
+check_structure() { # check_structure <ファイル>
+	awk '
+	{
+		line = $0
+		sub(/\r$/, "", line)
+	}
+	NR == 1 { next } # 題の行(形式は別の場所で検査する)
+	{
+		t = line
+		sub(/^[ \t]+/, "", t)
+		if (t == "") { inpar = 0; next }
+
+		# フィールド行(Date: / Implementation: / Status: / Rejected: / Replaces:)
+		# は本文にもリスト等の見た目チェックにも数えない。
+		if (t ~ /^(Date|Implementation|Status|Rejected|Replaces):/) { inpar = 0; next }
+
+		if (t ~ /^#{2,}[ \t]/) { print "見出し(## 以上)は使えない: " t; inpar = 0; next }
+		if (t ~ /^(-|\*|\+)[ \t]/) { print "箇条書きは使えない: " t; inpar = 0; next }
+		if (t ~ /^[0-9]+[.)][ \t]/) { print "番号付きリストは使えない: " t; inpar = 0; next }
+		if (t ~ /^```/) { print "コードフェンスは使えない: " t; inpar = 0; next }
+		if (t ~ /^>/) { print "引用(>)は使えない: " t; inpar = 0; next }
+		if (t ~ /\|/) { print "表(|)は使えない: " t; inpar = 0; next }
+
+		if (!inpar) { parcount++; inpar = 1 }
+	}
+	END {
+		if (parcount > 1) print "本文の段落が複数ある(1 段落にまとめること。数えたのは " parcount " 段落)"
+	}
+	' "$1"
+}
+
+# 内容の検査 —— measurements / テスト名 / todo id / 日付は本文の外に置く語彙。
+# `Date:` の行そのものは対象外(日付を書く唯一の場所なので)。
+#
+# 日付だけは、バッククォートで囲んだコードスパン(` `...` `)の中は見ない
+# —— 2026-09-25 実測: MCP の仕様バージョンは日付そのもの(例: `2026-07-28`)を
+# 識別子として使う。それは経緯の記述ではなく仕様が固定した値なので、
+# コードスパンに入れて書けば指摘しない(このコードスパンの扱いは skill にも
+# 書いてある)。
+check_content() { # check_content <ファイル>
+	awk '
+	{
+		line = $0
+		sub(/\r$/, "", line)
+		if (line ~ /^[ \t]*(\*\*)?[Dd]ate(\*\*)?:[ \t]*/) next
+		if (line ~ /\[実測/) print "'"'"'[実測'"'"' は本文に置かない(measurements/*.jsonl へ): " line
+		if (line ~ /\[検査:/) print "'"'"'[検査:'"'"' はテスト名の参照。本文に置かない(コミットメッセージ/テストへ): " line
+		if (line ~ /id:[0-9]/) print "todo の id: 参照は本文に置かない(todo.txt の see: を使う): " line
+
+		nocode = line
+		gsub(/`[^`]*`/, "", nocode)
+		if (nocode ~ /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/) print "'"'"'Date:'"'"' 行以外に日付がある(measurements かコミットメッセージへ。コードスパン `...` の中の日付は識別子として除外する): " line
+	}
+	' "$1"
 }
 
 # 検査。指摘は stdout(データではなく結果そのものなので)、1 件 2 行で出す。
@@ -303,11 +380,6 @@ cmd_check() {
 	}
 	[ "$rc" -eq 0 ] || exit "$rc" # die は既にメッセージを出している
 
-	# slug の集合を先に作る。Superseded by の指す先を「同じディレクトリに実在
-	# するか」だけで判定するため —— 中身は見ない(古い方を読みに行かせない)。
-	# ループを回さず awk で組むのは、シェル変数を跨いで持ち出す必要があるから
-	# (パイプの while はサブシェルで、抜けた後に値が残らない)。
-	slugs=,$(adr_files "$dir" | awk '{ sub(/.*\//, ""); sub(/\.md$/, ""); printf "%s,", $0 }')
 	n=$(adr_files "$dir" | awk 'END { print NR + 0 }')
 
 	# 同じ番号を持つファイルの一覧(番号だけを見る。改名はしない)。
@@ -342,20 +414,32 @@ cmd_check() {
 			[ -n "$title" ] || printf '✗ %s\n    %s\n' "題(1 行目の '# ...')が無い" "$f"
 			case $date in
 			'') printf '✗ %s\n    %s\n' \
-				"日付が無い。本文の書き出しか 'Date: YYYY-MM-DD' の 1 行に置くこと" "$f" ;;
+				"日付が無い。'Date: YYYY-MM-DD' の 1 行を置くこと" "$f" ;;
 			'!'*) printf '✗ 日付 '\''%s'\'' が YYYY-MM-DD でない\n    %s\n' "${date#!}" "$f" ;;
 			esac
-			if [ -n "$super" ]; then
-				case $slugs in
-				*",$super,"*) ;;
-				*) printf '✗ '\''Superseded by %s'\'' の指す先が %s に無い\n    %s\n' "$super" "$dir" "$f" ;;
-				esac
-			fi
+			case $impl in
+			done | pending) ;;
+			'') printf '✗ %s\n    %s\n' "Implementation: が無い(done か pending のどちらか)" "$f" ;;
+			*) printf '✗ Implementation: '\''%s'\'' は語彙外(done|pending)\n    %s\n' "$impl" "$f" ;;
+			esac
 			case $status in
-			'' | proposed | accepted | deprecated | superseded) ;;
-			*) printf '✗ Status: '\''%s'\'' は語彙外(proposed|accepted|deprecated|superseded)\n    %s\n' \
+			'' | proposed | accepted) ;;
+			*) printf '✗ Status: '\''%s'\'' は語彙外(proposed|accepted。無指定なら accepted 扱い)\n    %s\n' \
 				"$status" "$f" ;;
 			esac
+			if [ -n "$super" ]; then
+				printf '✗ %s\n    %s\n' \
+					"'Superseded by' はもう使わない語彙。'adr replace <古い> <新しい>' が古い方を削除するので、残っているなら手で消すか replace をやり直すこと" "$f"
+			fi
+
+			check_structure "$f" | while IFS= read -r msg; do
+				[ -n "$msg" ] || continue
+				printf '✗ %s\n    %s\n' "$msg" "$f"
+			done
+			check_content "$f" | while IFS= read -r msg; do
+				[ -n "$msg" ] || continue
+				printf '✗ %s\n    %s\n' "$msg" "$f"
+			done
 		done
 	} >"$tmpf"
 	if [ -s "$tmpf" ]; then
@@ -366,10 +450,13 @@ cmd_check() {
 }
 
 # ---------------------------------------------------------------------------
-# new — 番号を採り、題と日付だけのファイルを作る
+# new — 番号を採り、題・日付・Implementation: pending だけのファイルを作る
 # ---------------------------------------------------------------------------
-# 本文は書かない。書くと、埋めるために創作が始まる(README の方針)。CLI が持つ
-# のは、手でやると間違える部分 —— 採番と、ファイル名の形 —— だけ。
+# 決定の本文(1 段落)は書かない。書くと、埋めるために創作が始まる(README の
+# 方針)。CLI が持つのは、手でやると間違える部分 —— 採番とファイル名の形 ——
+# だけ。Implementation: pending は既定として書く(新しい ADR は大抵まだ実装前
+# で、これは日付と同じく判断を要らない値。実装済みの決定を後から記録するなら
+# 書き手が done に書き換える)。
 
 # 題から slug を作る。作れなければ 1 で返す(呼び出し側が slug を要求する)。
 # 非 ASCII を 1 文字でも含む題からは作らない —— 実際の題は日本語で、ASCII の
@@ -390,13 +477,24 @@ slugify() { # slugify <題>
 	}'
 }
 
+# 既存ファイルすべての `Replaces: N[,N...]` が名指しする番号(削除済みの古い
+# 番号を含む)。1 行 1 番号で出す。
+replaced_nums() { # replaced_nums <ディレクトリ>
+	adr_files "$1" | while IFS= read -r f; do
+		awk '/^Replaces:[ \t]*/ { sub(/^Replaces:[ \t]*/, ""); print }' "$f"
+	done | tr ',' '\n'
+}
+
 # 既存の最大値 + 1 を 4 桁で。欠番は埋めない —— 番号は採ったら永久で、欠番を
-# 埋めると、退避されたファイル名や git の履歴が指す番号と食い違う。
+# 埋めると、退避されたファイル名や git の履歴が指す番号と食い違う。max は
+# ファイル名だけでなく、現存ファイルが `Replaces:` で名指しする(= 既に
+# `adr replace` で消された)番号も見る —— 消した番号を再利用しないため。
 next_num() { # next_num <ディレクトリ>
-	adr_files "$1" | awk '
-	{ b = $0; sub(/.*\//, "", b)
-	  if (match(b, /^[0-9]+-/)) { n = substr(b, 1, RLENGTH - 1) + 0; if (n > max) max = n } }
-	END { printf "%04d\n", max + 1 }'
+	{
+		adr_files "$1" | awk '{ b = $0; sub(/.*\//, "", b)
+			if (match(b, /^[0-9]+-/)) print substr(b, 1, RLENGTH - 1) }'
+		replaced_nums "$1"
+	} | awk '{ n = $0 + 0; if (n > max) max = n } END { printf "%04d\n", max + 1 }'
 }
 
 cmd_new() {
@@ -449,7 +547,7 @@ cmd_new() {
 	[ -e "$file" ] && die "$file は既にある(上書きしない)"
 
 	tmp=$file.$$
-	printf '# %s\n\nDate: %s\n' "$title" "$TODAY" >"$tmp" || {
+	printf '# %s\n\nDate: %s\nImplementation: pending\n' "$title" "$TODAY" >"$tmp" || {
 		rm -f "$tmp"
 		die "$tmp を書けない"
 	}
@@ -461,10 +559,14 @@ cmd_new() {
 }
 
 # ---------------------------------------------------------------------------
-# supersede — 受理済み ADR に許された唯一の編集を、両方そろって初めて書く
+# replace — 新しい方に Replaces: を足し、古い方のファイルを消す(旧 supersede)
 # ---------------------------------------------------------------------------
-# 触るのは古い方の先頭に 1 行足すことだけ。整形も改行の詰め直しもしない。
-# 書式どおりに見えないファイルは、推測せずに拒む。
+# 2026-09-25 の裁定: 差し替えられた決定はファイルとして残さない。エージェントは
+# コンテキストに載っているものを「今も有効」として扱う(ClashEval 2024 が
+# 示した、新旧の矛盾する情報を渡されたときにモデルが古い方を選ぶ挙動。
+# Claude Code の memory ドキュメントが「相反する指示を残さない」と言うのも
+# 同じ理由)。だから deprecated / superseded という「まだそこにあるが無効」の
+# 状態は作らない —— 置き場から消し、記録は git の履歴に譲る。
 
 # 番号(0004 / 4)でも slug でもファイル名でも引ける。
 # 0=1 件 / 1=見つからない / 2=複数に当たる(番号が重複している)。
@@ -483,8 +585,39 @@ resolve_ref() { # resolve_ref <ディレクトリ> <参照>
 	}'
 }
 
-cmd_supersede() {
-	[ $# -eq 2 ] || die 'usage: adr supersede <古い ADR> <新しい ADR>   (番号でも slug でもよい)'
+# 新しい方に `Replaces: <古い番号>` を確実に持たせる。無ければ末尾に足し、
+# あれば古い番号がまだ無いときだけカンマで追記する(2 回目の replace で
+# 同じ新しい ADR が複数の古い ADR を差し替えられるように)。冪等。
+ensure_replaces() { # ensure_replaces <ファイル> <古い番号>
+	f=$1
+	old=$2
+	tmp=$f.$$
+	awk -v old="$old" '
+	/^Replaces:[ \t]*/ {
+		line = $0
+		sub(/^Replaces:[ \t]*/, "", line)
+		n = split(line, a, /,/)
+		found = 0
+		for (i = 1; i <= n; i++) if (a[i] == old) found = 1
+		if (!found) line = line "," old
+		print "Replaces: " line
+		seen = 1
+		next
+	}
+	{ print }
+	END { if (!seen) print "\nReplaces: " old }
+	' "$f" >"$tmp" || {
+		rm -f "$tmp"
+		die "$tmp を書けない"
+	}
+	mv "$tmp" "$f" || {
+		rm -f "$tmp"
+		die "$f を置き換えられない"
+	}
+}
+
+cmd_replace() {
+	[ $# -eq 2 ] || die 'usage: adr replace <古い ADR> <新しい ADR>   (番号でも slug でもよい)'
 	oldref=${1##*/}
 	oldref=${oldref%.md}
 	newref=${2##*/}
@@ -510,34 +643,30 @@ cmd_supersede() {
 	newslug=$(slug_of "$newf")
 	name_is_bad "$oldslug" && die "$oldf のファイル名が NNNN-<slug>.md でない。書式どおりでないので触らない"
 	name_is_bad "$newslug" && die "$newf のファイル名が NNNN-<slug>.md でない。指す先にできない"
+	oldnum=$(num_of "$oldslug")
 
-	# 新しい方が本当に ADR か(題があるか)を見てから、古い方を触る。
+	# 新しい方が本当に ADR か(題があるか)を見てから、古い方を消す。
 	set_fields "$newf"
 	[ -n "$title" ] || die "$newf に題(1 行目の '# ...')が無い。指す先にできない"
 
-	set_fields "$oldf"
-	[ -z "$super" ] || die "$oldf は既に 'Superseded by $super' を持っている。受理済み ADR への編集はこの 1 行だけで、書き換えない"
-	[ -n "$title" ] || die "$oldf に題(1 行目の '# ...')が無い。書式どおりでないので触らない"
-	first=$(head -n 1 "$oldf")
-	case $first in
-	'# '* | '#	'*) ;;
-	*) die "$oldf の先頭行が題(# ...)でない。どこに足すか推測せずに拒む: $first" ;;
+	ensure_replaces "$newf" "$oldnum"
+	# 書いた行を読み返す(書き手と読み手をずらさない)。カンマ区切りの一覧の
+	# どこかに古い番号があればよい。
+	replaces_line=$(awk '/^Replaces:[ \t]*/{ sub(/^Replaces:[ \t]*/, ""); print; exit }' "$newf")
+	case ",$replaces_line," in
+	*",$oldnum,"*) ;;
+	*) die "書いた 'Replaces: $oldnum' を読み返せない($newf を確認すること)" ;;
 	esac
 
-	tmp=$oldf.$$
-	{ printf 'Superseded by %s\n\n' "$newslug" && cat "$oldf"; } >"$tmp" || {
-		rm -f "$tmp"
-		die "$tmp を書けない"
-	}
-	mv "$tmp" "$oldf" || {
-		rm -f "$tmp"
-		die "$oldf を置き換えられない"
-	}
-	# 書いた行を、check と同じ読み手で読み返す(書き手と読み手をずらさない)。
-	set_fields "$oldf"
-	[ "$super" = "$newslug" ] ||
-		die "書いた 'Superseded by $newslug' を読み返せない($oldf を確認すること)"
-	printf '%s\n' "$oldf"
+	# 古い方を消す。git 管理下(コミット済み)なら git rm、それ以外は rm ——
+	# 消しても記録は git の履歴に残る(README・skill に書いてある前提)。
+	if git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
+		git -C "$dir" ls-files --error-unmatch "$(basename "$oldf")" >/dev/null 2>&1; then
+		git -C "$dir" rm -q -- "$(basename "$oldf")" || die "$oldf を git rm できない"
+	else
+		rm -f "$oldf" || die "$oldf を消せない"
+	fi
+	printf '%s\n' "$newf"
 }
 
 # ---------------------------------------------------------------------------
@@ -551,7 +680,7 @@ case $cmd in
 ls | list) cmd_ls "$@" ;;
 check) cmd_check "$@" ;;
 new) cmd_new "$@" ;;
-supersede) cmd_supersede "$@" ;;
+replace | supersede) cmd_replace "$@" ;; # supersede は旧名。安く保てるので alias で残す
 help | -h | --help) usage ;;
 *)
 	printf '%s: 知らないコマンド: %s\n' "$PROG" "$cmd" >&2

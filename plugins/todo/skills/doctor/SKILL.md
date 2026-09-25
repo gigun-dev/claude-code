@@ -19,7 +19,7 @@ metadata:
 
 ## docs/adr の指摘の読み方
 
-`adr check` はファイル名・番号の重複・題・日付・`Superseded by` の指す先・`Status:` の語彙を見る。書式は `../adr/references/ADR-FORMAT.md` が正。直し方はファイルを編集するだけで、受理済み ADR は編集しない(差し替えは新しい番号で書き、先頭に `Superseded by <slug>` を足す)。
+`adr check` はファイル名・番号の重複・題・`Date:`・`Implementation:` の語彙・`Status:` の語彙・`Superseded by` の残骸・構造(見出し・箇条書き・表・コードフェンス・引用・複数段落)・内容(`[実測`・`[検査:`・`id:` 参照・`Date:` 行以外の日付)を見る。書式は `../adr/references/ADR-FORMAT.md` が正。受理済み ADR は、短くする・`Implementation:` を更新する以外では編集しない。決定が変わったら `adr replace <古い> <新しい>` で新しい番号にする —— 古い方はファイルごと削除される(git 管理下なら `git rm`。記録は git の履歴に残る)ので、`Superseded by` や `Status: deprecated`/`superseded` を手で足さない(その語彙はもう無い)。
 
 ## 指示と実体の食い違い(`doctor check`)
 

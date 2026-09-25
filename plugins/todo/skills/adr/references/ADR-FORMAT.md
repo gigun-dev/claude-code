@@ -1,51 +1,123 @@
-<!-- Vendored verbatim from https://github.com/mattpocock/skills/blob/main/skills/engineering/domain-modeling/ADR-FORMAT.md
-     upstream commit 3cca18b (fetched 2026-09-10). Do not edit — re-copy to update.
-     MIT, see LICENSE-mattpocock-skills in this directory. -->
+<!-- このプラグイン自身が定義する書式。2026-09-25 に軽量 ADR として再定義した
+     (裁定は 2026-09-25。それ以前は mattpocock/skills の ADR-FORMAT.md を逐語で
+     vendor していたが、その書式は「差し替えたら古い方に Status: superseded /
+     deprecated を付けて残す」前提で、このプラグインはその前提を採らない
+     —— 理由は下の「差し替え」節。書式の正はここ 1 箇所。`bin/adr check` は
+     ここに書いた検査だけを行い、独自の規則を検査コードだけに足さない。 -->
 
-# ADR Format
+# ADR Format(軽量)
 
-ADRs live in `docs/adr/` and use sequential numbering: `0001-slug.md`, `0002-slug.md`, etc.
+参考にしたのは 3 つ: Michael Nygard, "Documenting Architecture Decisions"
+(2011)—— ADR は 1〜2 ページで足りるという原型。ThoughtWorks Technology Radar
+の "Lightweight Architecture Decision Records"(Adopt 段階)—— 埋める欄を
+増やさない設計。Microsoft Azure Well-Architected の ADR ガイダンス ——
+記録するのは「覆すのが難しい選択」だけという線引き。三つとも「決定は 1 ファイル
+1 段落で足りる」という点で一致している。
 
-Create the `docs/adr/` directory lazily: only when the first ADR is needed.
+このプラグインが一致しないのは 1 点だけ: 上の 3 つはいずれも「差し替えられた
+決定はファイルに残し、Status を書き換える(deprecated / superseded)」ことを
+前提にしている。ここではそれをしない —— 差し替えたら**ファイルごと消す**
+(`adr replace`。git の履歴には残る)。理由は下の「差し替え」節。
 
-## Template
+## 書式
 
 ```md
-# {Short title of the decision}
+# {決定の題}
 
-{1-3 sentences: what's the context, what did we decide, and why.}
+Date: {YYYY-MM-DD}
+Implementation: {done | pending}
+
+{1 段落: 何が文脈で、何を決めて、なぜか。この順で。}
+
+Rejected: {捨てた案} — {捨てた理由}
 ```
 
-That's it. An ADR can be a single paragraph. The value is in recording *that* a decision was made and *why*, not in filling out sections.
+- **題** は 1 行目の `# ...`。
+- **`Date:`** は決定した日。この 1 行だけに書く —— 本文の中に別の日付を
+  置かない(それは measurements かコミットメッセージの役目)。
+- **`Implementation:`** は `done`(もう実装されている)か `pending`(まだ)の
+  どちらか。省略できない —— 状態を一言で示す場が無いと、決定と実装の乖離が
+  ADR を読むだけでは分からなくなる。
+- **`Status:`** は省略できる。書けるのは `proposed` だけ(書かなければ
+  `accepted` として扱う)。`deprecated` / `superseded` は語彙に無い ——
+  差し替えられた決定はファイルごと消すので、そういう状態が存在しない。
+- **本文は 1 段落だけ**。文脈 → 決定 → 理由、の順で書く。複数の論点がある
+  なら、それは 1 つの決定ではない ——分けて別々の ADR に書く。
+- **`Rejected: <案> — <理由>`** は任意・複数可。捨てた選択肢を書く場所は
+  ここだけ(本文の段落に混ぜない)。
+- **`Replaces: <古い番号>`** は任意・複数可。`adr replace` が書く(手で
+  書かない)。この ADR が置き換えた古い番号を並べる(古いファイル自体はもう
+  無い)。
 
-## Optional sections
+## 軽さの強制の仕方
 
-Only include these when they add genuine value. Most ADRs won't need them.
+文字数の上限は置かない —— 「1 段落に何文字までか」に原理的な根拠が無く、
+言語(日本語 / 英語)でも文字あたりの情報量が違う。軽さは**形**で強制する:
+`adr check` は次を指摘する。
 
-- **Status** frontmatter (`proposed | accepted | deprecated | superseded by ADR-NNNN`): useful when decisions are revisited
-- **Considered Options**: only when the rejected alternatives are worth remembering
-- **Consequences**: only when non-obvious downstream effects need to be called out
+- `##` 以上の見出し
+- 箇条書き・番号付きリスト
+- 表(`|`)
+- コードフェンス(` ``` `)
+- 引用(`>`)
+- 本文の段落が 2 つ以上
 
-## Numbering
+見出しや箇条書きが要る決定は、実際には複数の決定か、決定というより手順書
+(それは docs や README の役目)。
 
-Scan `docs/adr/` for the highest existing number and increment by one.
+## 内容の線引き
 
-## When to offer an ADR
+ADR の本文に置かないもの(`adr check` が指摘する):
 
-All three of these must be true:
+- 測定値・実測ログへの参照(`[実測 ...]`)。行き先は `measurements/*.jsonl`。
+- テスト名への参照(`[検査: ...]`)。行き先はコミットメッセージかテストその
+  もの。
+- todo の id 参照(`id:0123`)。決定から生じた作業は todo.txt の 1 行にし、
+  そちらから `see:docs/adr/NNNN-slug.md` で ADR を指す(逆向きの矢印は張らない)。
+- `Date:` の行以外に置かれた日付。経緯は commit メッセージか measurements
+  に書く。ADR が持つ日付は「決定した日」の 1 つだけでよい。ただし
+  バッククォートのコードスパン(`` `2026-07-28` ``)の中は見ない ——
+  仕様やプロトコルがバージョンを日付そのもので識別する場合(例: MCP)が
+  あり、それは経緯ではなく値なので、コードスパンに入れて書けば指摘しない。
 
-1. **Hard to reverse**: the cost of changing your mind later is meaningful
-2. **Surprising without context**: a future reader will look at the code and wonder "why on earth did they do it this way?"
-3. **The result of a real trade-off**: there were genuine alternatives and you picked one for specific reasons
+## 採番
 
-If a decision is easy to reverse, skip it: you'll just reverse it. If it's not surprising, nobody will wonder why. If there was no real alternative, there's nothing to record beyond "we did the obvious thing."
+既存ファイルの番号の最大値 + 1。4 桁ゼロ詰め。欠番は埋めない —— 番号は採ったら
+永久で、`Replaces:` が名指しする(= 既に消えた)番号も含めて max を取る
+(`adr new` が両方を見る)。
 
-### What qualifies
+## 差し替え(replace)
 
-- **Architectural shape.** "We're using a monorepo." "The write model is event-sourced, the read model is projected into Postgres."
-- **Integration patterns between contexts.** "Ordering and Billing communicate via domain events, not synchronous HTTP."
-- **Technology choices that carry lock-in.** Database, message bus, auth provider, deployment target. Not every library: just the ones that would take a quarter to swap out.
-- **Boundary and scope decisions.** "Customer data is owned by the Customer context; other contexts reference it by ID only." The explicit no-s are as valuable as the yes-s.
-- **Deliberate deviations from the obvious path.** "We're using manual SQL instead of an ORM because X." Anything where a reasonable reader would assume the opposite. These stop the next engineer from "fixing" something that was deliberate.
-- **Constraints not visible in the code.** "We can't use AWS because of compliance requirements." "Response times must be under 200ms because of the partner API contract."
-- **Rejected alternatives when the rejection is non-obvious.** If you considered GraphQL and picked REST for subtle reasons, record it; otherwise someone will suggest GraphQL again in six months.
+決定が変わったら、新しい ADR を `adr new` で書き、`adr replace <古い> <新しい>`
+を実行する。これが行うのは 2 つ: 新しい方に `Replaces: <古い番号>` を書き足す
+こと、古い方のファイルを消すこと(git 管理下なら `git rm`)。
+
+**古いファイルを deprecated / superseded のまま残さない。** 理由は、エージェント
+は自分のコンテキストに載っているものを「今も有効な情報」として扱う傾向がある
+—— 新旧の矛盾する情報を同時に渡されたときにモデルがどちらを選ぶかを調べた
+研究(ClashEval, 2024)は、この種の食い違いが読み手を誤らせることを示している。
+Claude Code の memory ドキュメントが「相反する指示を残さない」と勧めるのも
+同じ理由。置き場(`docs/adr/` など)には**今も有効な決定だけ**を残し、消した
+決定は git の履歴が持つ(`git log -- docs/adr/0001-....md` で読める)。
+
+部分的な差し替え(決定の一部だけが変わった)は、古い ADR の残りの決定を
+新しい ADR に書き直すか、古い ADR 自体を短くしてから `adr replace` する ——
+**編集するか消すか、どちらかにする。差し替えた文面を置き場に残さない。**
+
+## 受理済み ADR を編集してよい範囲
+
+短くする(段落を削らず言い換えて縮める)ことと、`Implementation:` を
+`pending` → `done` に更新することだけ。**決定そのものが変わったら、それは
+このファイルの編集ではなく `adr replace` で新しい番号にする。**
+
+## いつ書くか
+
+書くのは次の三つが全部そろうときだけ(Nygard / Azure と同じ基準):
+
+1. **覆すのが高い**。後から考え直す費用が大きい。
+2. **文脈が無いと驚く**。将来の読み手がコードを見て「なぜこうした」と思う。
+3. **本物の取引の結果**。実在する代替案があり、理由を持って片方を選んだ。
+
+一つでも欠けたら書かない。覆すのが安いなら、そのとき覆せばよい。驚かないなら
+誰も理由を尋ねない。代替案が無いなら「そうするしかなかった」以上に書くことが
+無い。
