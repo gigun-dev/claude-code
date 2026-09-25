@@ -573,6 +573,8 @@ t "古い方は消える" "1" "$(test -e "$W/docs/adr/0001-old.md"; echo $?)"
 
 # ---------------------------------------------------------------------------
 # stats — 報告のみ(ゲートではない)。文字数の多い順、末尾に合計。
+# 2026-09-25 に文数・最長文の文字数を足した(段落数だけでは「1〜3 文」という
+# 目標からの逸脱に気づけないため)。
 # ---------------------------------------------------------------------------
 setup stats_basic
 write docs/adr/0001-short.md '# S' '' 'Date: 2026-09-10' 'Implementation: pending' '' '短い。'
@@ -585,7 +587,17 @@ t "stats は文字数の多い順(長い方が先)" "1" \
 t "stats は末尾に合計と件数を出す" "1" \
 	"$(printf '%s\n' "$out" | tail -1 | grep -c '^計 [0-9]* 文字 / 2 件$')"
 t "stats は段落数も出す(0002 は 2 段落)" "1" \
-	"$(printf '%s\n' "$out" | grep -c '2 段落  docs/adr/0002-long.md')"
+	"$(printf '%s\n' "$out" | grep -c '2 段落  2 文(最長 14 文字)  docs/adr/0002-long.md')"
+t "stats は 1 文だけのファイルの文数・最長文も出す" "1" \
+	"$(printf '%s\n' "$out" | grep -c '1 段落  1 文(最長 3 文字)  docs/adr/0001-short.md')"
+
+setup stats_sentence_split
+write docs/adr/0001-a.md '# A' '' 'Date: 2026-09-10' 'Implementation: pending' '' '一文目。二文目は少し長め。三文目。'
+out=$(adr stats)
+t "1 段落の中でも句点ごとに文を数える(3 文)" "1" \
+	"$(printf '%s\n' "$out" | grep -c '1 段落  3 文')"
+t "最長は「二文目は少し長め。」" "1" \
+	"$(printf '%s\n' "$out" | grep -c '最長 9 文字')"
 
 setup stats_none
 t "ADR ディレクトリが無ければ stats は何も出さず 0" "" "$(adr stats 2>/dev/null)"

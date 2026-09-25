@@ -53,7 +53,7 @@ usage: adr <command>      — Architecture Decision Record を一覧・検査・
 
   ls                       1 行 1 件で `<date> <slug> <status> <title>` を番号順に出す
   check                    書式を検査する。指摘があれば stdout に出して 2 で終わる
-  stats                    ファイルごとの文字数・段落数を多い順に出す(ゲートではない)
+  stats                    ファイルごとの文字数・段落数・文数・最長文を多い/長い順に出す(ゲートではない)
   new "<題>" [<slug>]      次の番号でファイルを作り、パスを出す。本文は書かない
   replace <古い> <新しい>  新しい方に `Replaces: <古い番号>` を足し、古い方を削除する
 
@@ -82,9 +82,7 @@ replace は新しい方が既に実在し題を持つことを確かめてから
   │ Date: 2026-09-10
   │ Implementation: done
   │
-  │ <文脈。1 段落>
-  │
-  │ <決定と理由。1 段落。長くなるなら分けるべき決定が同居している合図>
+  │ ORM は N+1 を隠す。手で書いた SQL ならクエリが見える。
   │
   │ Rejected: ORM — N+1 を隠すため
   └─────────────────────────────────────────────
@@ -108,17 +106,21 @@ check が見るもの:
   - Status: の語彙が proposed|accepted のどれかか(deprecated / superseded / それ以外は指摘)
   - `Superseded by` の残骸があれば指摘(この語彙はもう無い。`adr replace` で消すこと)
   - 構造: `##` 以上の見出し・箇条書き・番号付きリスト・表・コードフェンス・
-    引用・本文段落が 4 つ以上、のいずれかがあれば指摘(1 決定 = 題 + 数行の
-    フィールド + 本文 1〜3 段落(文脈・決定・帰結)+ 任意のトレーラ、という
-    形を外れているということ)
+    引用・本文段落が 4 つ以上、のいずれかがあれば指摘(段落 3 つまでは
+    構造上の後備えの上限であって目標ではない。目標は本文 1〜3 文。下記)
   - 内容: `[実測`・`[検査:`・`id:0123` のような todo id・`Date:` 行以外の日付
     (コードスパン `...` の中の日付は識別子として除外)、が本文にあれば指摘
     (それらは measurements / テスト名 / todo.txt / コミットメッセージに置く)
 
+本文は文脈・決定・理由を 1〜3 文で(元は mattpocock/skills 由来の題+1〜3 文
+という形。文の数は check が数えない —— 数えて縛ると、段落を縛ったときと同じ
+理由で長い 1 文に押し込む結果になる)。short sentences; 収まらないなら複数の
+決定が同居しているか、実装の詳細でコードコメント行き。
+
 stats は check と違って通らせる/落とすの判定をしない(常に 0 で終わる)。
-文字数(`wc -m` 相当)の多い順にファイルごと 1 行、末尾に合計と件数を出す。
-軽さは時間とともに緩みうるので、定期的に見て突出したものを split の候補に
-する用途 —— 3 段落まで許す分、check だけでは増加に気づけない。
+ファイルごとに文字数(`wc -m` 相当)・段落数・文数・最長の文の文字数を出し、
+文字数の多い順に並べる。文の切れ目は `。.!?` 相当。突出したものを split の
+候補として折に触れて見る。
 
 対象ディレクトリは $ADR_DIR。未指定なら docs/adr → docs/decisions → adr →
 decisions の順に最初に見つかったもの。どれも無ければ何もせず 0 で終わる。
@@ -318,13 +320,14 @@ cmd_ls() {
 	done | LC_ALL=C sort | cut -f2-
 }
 
-# 構造の検査 —— 1 決定 = 題 + フィールド数行 + 本文 1〜3 段落(文脈・決定・
-# 帰結。Nygard の節構成)+ 任意のトレーラ、という形から外れていないか。軽さは
-# 文字数の上限ではなく形で強制する(2026-09-25 の裁定: 文字数に原理的な根拠が
-# 無い。形はどんな言語でも同じ)。3 段落までにしたのは 2026-09-25 の裁定 ——
-# 1 段落だけだと文脈・決定・帰結を 1 文に押し込んだ、読みにくい長文になった
-# ため。4 段落目からは指摘する(長さの合図は `adr stats` が出す。ゲートでは
-# ない)。1 行 1 指摘を stdout に出す(ファイル名は付けない。呼び出し側が付ける)。
+# 構造の検査 —— 1 決定 = 題 + フィールド数行 + 本文(目標は 1〜3 文)+ 任意の
+# トレーラ、という形から外れていないか。軽さは文字数や文の数の上限ではなく
+# 形で強制する(2026-09-25 の裁定: 数に原理的な根拠が無い。数えて縛ると、
+# 縛った単位の中に押し込む長文になる —— 1 段落だけを許した最初の版が実際に
+# それで壊れた)。**段落 3 つまで**はその埋め合わせの後備え(4 段落目から
+# 指摘)であって目標ではない —— 目標の 1〜3 文は check が数えず、skill と
+# `adr stats` の役目にする。1 行 1 指摘を stdout に出す(ファイル名は呼び出し
+# 側が付ける)。
 check_structure() { # check_structure <ファイル>
 	awk '
 	{
@@ -356,10 +359,11 @@ check_structure() { # check_structure <ファイル>
 	' "$1"
 }
 
-# 軽さの報告(ゲートではない)。ファイルごとの文字数(wc -m 相当)と段落数を
-# 文字数の多い順に 1 行 1 件出し、末尾に合計を出す。`adr check` が通っていても
-# 長さは別に見る価値がある —— 3 段落まで許すようにした分、増える方向にだけ
-# 緩んでいる。突出したものを split の候補として扱う。
+# 軽さの報告(ゲートではない)。ファイルごとの文字数(wc -m 相当)・段落数・
+# 文数・最長の文の文字数を、文字数の多い順に 1 行 1 件出し、末尾に合計を出す。
+# `adr check` が通っていても長さは別に見る価値がある —— 目標の「1〜3 文」を
+# check は数えないので、増える方向に緩んでも check だけでは気づけない。
+# 突出したものを split の候補として扱う。
 cmd_stats() { # cmd_stats
 	[ $# -eq 0 ] || die "usage: adr stats   (引数は取らない)"
 	dir=$(adr_dir)
@@ -373,10 +377,19 @@ cmd_stats() { # cmd_stats
 	adr_files "$dir" | while IFS= read -r f; do
 		chars=$(wc -m <"$f" | tr -d ' ')
 		pars=$(check_structure_paragraphs "$f")
-		printf '%d\t%d\t%s\n' "$chars" "$pars" "$f"
+		nsent=0
+		longest=0
+		body_sentences "$f" | while IFS= read -r s; do
+			slen=$(printf '%s' "$s" | wc -m | tr -d ' ')
+			printf '%d\n' "$slen"
+		done >"${TMPDIR:-/tmp}/adr-stats-sentlens.$$"
+		nsent=$(wc -l <"${TMPDIR:-/tmp}/adr-stats-sentlens.$$" | tr -d ' ')
+		[ "$nsent" -gt 0 ] && longest=$(LC_ALL=C sort -rn "${TMPDIR:-/tmp}/adr-stats-sentlens.$$" | head -1)
+		rm -f "${TMPDIR:-/tmp}/adr-stats-sentlens.$$"
+		printf '%d\t%d\t%d\t%d\t%s\n' "$chars" "$pars" "$nsent" "$longest" "$f"
 	done | LC_ALL=C sort -rn -k1,1 | awk -F'\t' '
 	{
-		printf "%6d 文字  %d 段落  %s\n", $1, $2, $3
+		printf "%6d 文字  %d 段落  %d 文(最長 %d 文字)  %s\n", $1, $2, $3, $4, $5
 		total += $1; n++
 	}
 	END {
@@ -398,6 +411,36 @@ check_structure_paragraphs() { # check_structure_paragraphs <ファイル>
 		if (!inpar) { parcount++; inpar = 1 }
 	}
 	END { print parcount + 0 }
+	' "$1"
+}
+
+# 本文(題・フィールド行・トレーラを除いた段落)を文単位で 1 行 1 文出す
+# (stats が使う)。文字数は `wc -m` で数える必要がある(このスクリプトの
+# 他の場所と同じ理由: awk の length() は多バイト文字を正しく数える保証が無い)
+# ので、ここでは「どこで切るか」だけを awk に任せ、数えるのは呼び出し側に譲る。
+# 切れ目は句点・ピリオド・感嘆符・疑問符(全角/半角)の直後。多少の誤爆
+# (小数点や省略記号)は許容する —— 報告用であって検査ではない。
+body_sentences() { # body_sentences <ファイル>
+	awk '
+	NR == 1 { next }
+	{
+		t = $0
+		sub(/\r$/, "", t)
+		sub(/^[ \t]+/, "", t)
+		if (t == "") next
+		if (t ~ /^(Date|Implementation|Status|Rejected|Replaces):/) next
+		body = body (body == "" ? "" : " ") t
+	}
+	END {
+		gsub(/[。.!?!?]/, "&\n", body)
+		n = split(body, ls, "\n")
+		for (i = 1; i <= n; i++) {
+			s = ls[i]
+			gsub(/^[ \t]+/, "", s)
+			gsub(/[ \t]+$/, "", s)
+			if (s != "") print s
+		}
+	}
 	' "$1"
 }
 
