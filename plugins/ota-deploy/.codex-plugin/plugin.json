@@ -1,0 +1,36 @@
+{
+  "$generatedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); generates name/version/description/author here — homepage, repository, keywords, the mcpServers/skills pointer, and interface stay hand-edited in this file",
+  "name": "ota-deploy",
+  "version": "0.1.0",
+  "description": "Build iOS (ad-hoc .ipa) and Android (.apk) apps and install them on your phone from a browser via a Tailscale-served install page, without TestFlight or Play Console. Vendored verbatim from mariosaputra/ota-deploy (MIT).",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
+  "homepage": "https://github.com/gigun-dev/claude-code/tree/main/plugins/ota-deploy",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "keywords": [
+    "ios",
+    "android",
+    "ota",
+    "tailscale",
+    "ad-hoc"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "OTA Deploy",
+    "shortDescription": "Tailscale 経由でビルドをスマホへ配る",
+    "longDescription": "iOS の ad-hoc .ipa と Android の .apk をビルドし、Tailscale の HTTPS 上にインストールページと git 由来の変更履歴を生成して、手元のスマホのブラウザから直接インストールできるようにする。TestFlight・Play Console を使わない。",
+    "developerName": "gigun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/gigun-dev/claude-code/tree/main/plugins/ota-deploy",
+    "defaultPrompt": [
+      "このアプリをビルドして、Tailscale 経由でスマホにインストールできるようにして"
+    ]
+  }
+}

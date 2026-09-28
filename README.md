@@ -73,6 +73,7 @@ MCPサーバーのコード・テスト・配布方法までこのリポジト�
 | `pre-push` | pre-push | Git の push 前検証の導入・点検 |
 | `telemetry` | review | Langfuse のトレースから自分のセッションを実測し、設定改善に回す |
 | `ios-skills` | ios-app-icon, ios-simulator, ios-device-build, appstoreconnect-upload | `.icon`生成・Simulator操作・実機build・App Store Connect upload |
+| `ota-deploy` | ota-deploy | iOS(ad-hoc)/Android のビルドを Tailscale 経由のインストールページでスマホへ配る(上流 mariosaputra/ota-deploy から逐語でvendor、MIT) |
 | `japanese-tech-writing` | japanese-tech-writing | 日本語の技術文書・書籍原稿を書く / 推敲するときの文章規範(上流のgistから逐語でvendor、Unlicense) |
 
 Supabase・Vercel など公式マーケットプレイスに既にMCP内包プラグインがあるものは重複させず、`claude-plugins-official` 側を使う方針。

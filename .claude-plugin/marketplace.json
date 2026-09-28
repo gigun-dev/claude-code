@@ -57,6 +57,11 @@
       "description": "iOS app icon authoring, Simulator control, physical-device builds, and App Store Connect uploads."
     },
     {
+      "name": "ota-deploy",
+      "source": "./plugins/ota-deploy",
+      "description": "Build iOS (ad-hoc) / Android apps and install them on your phone from a browser via a Tailscale-served install page (vendored verbatim from mariosaputra/ota-deploy, MIT)"
+    },
+    {
       "name": "todo",
       "source": "./plugins/todo",
       "description": "Durable repository context an agent reads: tasks in todo.txt (list what is ready, record every state change) and decisions in docs/adr (read what is decided, record new ones)"

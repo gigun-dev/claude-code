@@ -1,0 +1,9 @@
+{
+  "name": "ota-deploy",
+  "version": "0.1.0",
+  "description": "Build iOS (ad-hoc .ipa) and Android (.apk) apps and install them on your phone from a browser via a Tailscale-served install page, without TestFlight or Play Console. Vendored verbatim from mariosaputra/ota-deploy (MIT).",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  }
+}

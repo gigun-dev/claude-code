@@ -1,0 +1,55 @@
+# ota-deploy config — copy to "ota.conf" (or myapp.conf) and edit.
+# Shell syntax: KEY="value". Only set what you use.
+
+# ---- identity -----------------------------------------------------------
+APP_NAME="My App"          # shown on the install page
+# APP_SLUG="myapp"         # URL path + state dir. Default = sanitized APP_NAME.
+                           # MUST be unique per project (it's the /<slug>/ in the URL).
+
+PLATFORMS="ios android"    # which to build: "ios", "android", or "ios android"
+
+# ---- serving (usually identical across all your projects) ---------------
+TS_HOST="your-mac.tailnet.ts.net"   # the MagicDNS name of THIS Mac (tailscale status)
+PORT="8787"                        # local proxy port; keep the SAME for all projects
+                                   # (one server serves every project's subfolder)
+
+# ---- iOS (ad-hoc) -------------------------------------------------------
+IOS_PROJECT="/Users/you/Projects/MyApp/iosApp/iosApp.xcodeproj"
+# IOS_WORKSPACE="/Users/you/Projects/MyApp/MyApp.xcworkspace"   # use instead of IOS_PROJECT
+IOS_SCHEME="iosApp"
+IOS_BUNDLE_ID="com.you.myapp"
+IOS_TEAM_ID="ABCDE12345"
+IOS_EXPORT_METHOD="release-testing"   # Xcode 16+/26 name for ad-hoc. Older Xcode: "ad-hoc"
+
+# ---- Android (APK sideload) --------------------------------------------
+ANDROID_PROJECT_DIR="/Users/you/Projects/MyApp"          # dir containing ./gradlew
+ANDROID_GRADLE_TASK=":androidApp:assembleDebug"          # or :app:assembleRelease, etc.
+ANDROID_APK_GLOB="androidApp/build/outputs/apk/debug/*.apk"   # relative to ANDROID_PROJECT_DIR
+
+# ---- custom build hooks (Mode B: any framework) -------------------------
+# Use these to drive non-native frameworks (Flutter, .NET MAUI, Unity, Tauri…)
+# fully hands-off. When a *_BUILD_CMD is set, it REPLACES xcodebuild/gradle;
+# the tool runs your command, then picks up the artifact via the glob.
+
+# PRE_BUILD="flutter pub get"          # runs once before any platform (codegen, deps)
+# PRE_BUILD_DIR=""                     # cwd for PRE_BUILD (default GIT_REPO)
+
+# iOS — replaces xcodebuild archive+export:
+# IOS_BUILD_CMD="flutter build ipa --release"
+# IOS_BUILD_DIR=""                     # cwd (default GIT_REPO)
+# IOS_IPA_GLOB="build/ios/ipa/*.ipa"   # where the .ipa lands, relative to IOS_BUILD_DIR
+
+# Android — replaces ./gradlew:
+# ANDROID_BUILD_CMD="flutter build apk --release"
+# ANDROID_BUILD_DIR=""                 # cwd (default ANDROID_PROJECT_DIR, else GIT_REPO)
+# ANDROID_APK_GLOB="build/app/outputs/flutter-apk/*.apk"   # relative to the build dir
+
+# ---- changelog source ---------------------------------------------------
+# git repo to read commit messages from. Defaults to the Android/iOS project dir.
+# GIT_REPO="/Users/you/Projects/MyApp"
+
+# ---- optional Telegram "build ready" ping ------------------------------
+# Make a bot via @BotFather; get chat id from
+# https://api.telegram.org/bot<token>/getUpdates after messaging it once.
+TELEGRAM_BOT_TOKEN=""
+TELEGRAM_CHAT_ID=""

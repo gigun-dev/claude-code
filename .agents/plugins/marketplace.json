@@ -126,6 +126,18 @@
       "category": "Developer Tools"
     },
     {
+      "name": "ota-deploy",
+      "source": {
+        "source": "local",
+        "path": "./plugins/ota-deploy"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
       "name": "todo",
       "source": {
         "source": "local",
