@@ -1,17 +1,16 @@
 ---
 name: todo
 description: >-
-  Manage repository tasks in todo.txt: read ready work at the start of work in a
-  repository, and update tasks whenever one starts, finishes, splits, or changes —
-  including when the user never says "todo". Tasks live in this repository's todo.txt
-  and done.txt, driven by the `todo` CLI. Also on '/todo:todo'.
+  Track repository work in todo.txt and done.txt. Use when starting or updating
+  work, or answering progress, remaining-task, and who-is-waiting questions —
+  even without "todo". Also on '/todo:todo'.
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 このスキルのディレクトリから `../../bin/todo` の絶対パスを求め、対象リポジトリのルートで `ready` を実行する。以下の `todo` は、その同梱 CLI を引用符で囲んだ絶対パスで呼ぶことを指す。作業ディレクトリは対象リポジトリに保つ。
 
-`ready` に並ぶのが、依存の解けた open な行、つまりいま着手できるものだ。並列に実行するものもこの中から選ぶ。行の手前に決定の索引（`docs/adr/` にある題の一覧）が出ることがある。触れる領域がそこに当たるなら、従うか、新しい ADR で覆すことを提案する。題だけなので、当たるものがあれば本体を読む。`✗` が出ていればファイルが壊れているので、一覧を読む前にそれを直す。
+`ready` は依存の解けた未完一覧。進捗確認では `todo.txt` と `done.txt` も読み、依存待ちを落とさない。先頭の決定索引に該当する領域を変更するときは ADR 本文を読む。`✗` は形式違反。
 
 行の読み方は todo.txt の仕様どおりで、`(A)` から `(Z)` が重要度（行頭のみ。進行中の意味は持たない）、その次が作成日、`+project` が束ね、`@context` がその作業に要る状況（`@device` `@user` `@unattended`）。このプラグインはそこに四つを足している。
 
@@ -25,7 +24,7 @@ metadata:
 
 `key:value` の形をしたトークンが**タグ**で、`replace` はタグをまとめて引き継ぐ（本文とみなすのは `+project` と `@context` まで）。外すのは、新しい本文に同じ key を書いて上書きするか、`--drop <key>` で名指しするかのどちらか。書かずに外れることはなく、外れた key は stderr に出る。
 
-タスクに言及するときは id だけで済ませず、「main.c の送信経路の切り出し（`id:0007`）」のように内容を先に置く。読み手が todo.txt を開いているとは限らず、`id:0007` とだけ言われるとそのたびに参照し直すことになる。一覧をそのまま貼るときは別で、そこは id が並んでいてよい。
+報告はユーザーが困っていることを先に置き、対応・検証済みの範囲・残りを伝える。本人の判断待ちとエージェントが進められる作業を区別し、タスクは id だけでなく内容で示す。
 
 `ls` と `ready` は重要度の順に並び、同じ重要度の中はファイルに書かれた順になる。行が仕様上どう読まれるか分からないときだけ `references/todo-txt-format.md`（上流の仕様そのまま）を読む。
 
@@ -42,8 +41,8 @@ todo projects           # 束ごとの件数（断片化）
 
 `todo --help` が正で、終了コードは 0 成功、1 引数や状態の誤り、2 形式違反、3 ID 不明。
 
-todo.txt / done.txt は本線で更新する。worktree 側は台帳の更新内容を親へ伝える。`do` は完了条件を検証した時点で実行する。やっていないものに `do` を実行しない —— 前提が崩れて問いごと消えたなら `drop` で、理由は自分の言葉で書く。`replace` は前の記述を上書きするので、変更前の行が stderr に出る。残す価値があればそこからコミットメッセージか docs へ転記する。それ以外のコマンドは、状態が変わったその瞬間に実行する。コミットの区切りまで溜めない。
+todo.txt / done.txt は本線で更新し、worktree 側は変更内容を親へ伝える。`start` / `stop` / `do` / `replace` は状態が変わったときに実行する。`do` は完了条件を検証したもの、`drop` は前提が崩れたもの。変更前の記述は `replace` の stderr と Git 履歴で辿れる。
 
-一行に書くのは、終わったと言える具体的な次の一手だけにする。終わりを言えないなら分割する。学んだことや経緯は書かず、docs とコミットメッセージに回す（`drop` の理由は例外で、閉じた行にだけ残る）。todo.txt に残すのはこれからやることだけで、行を直接編集してもよく、壊れていれば次の `ls` か `ready` が教える。
+一行は終わりを確認できる次の一手にする。大きすぎれば分割する。知識は専門 docs、経緯はコミットメッセージへ残す。
 
 `todo.txt` が無ければ未導入と伝える。空の一覧を「仕事が無い」と解釈せず、導入を求められた場合は隣の `../doctor/SKILL.md` を読む。
