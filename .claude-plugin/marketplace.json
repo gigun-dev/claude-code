@@ -90,6 +90,11 @@
       },
       "description": "Work with Langfuse tracing, prompts, datasets, evaluations, and documentation.",
       "category": "Developer Tools"
+    },
+    {
+      "name": "hallmark",
+      "source": "./plugins/hallmark",
+      "description": "Distinctive UI design, audit, redesign and design study (Nutlope/hallmark v1.1.0, MIT)."
     }
   ]
 }

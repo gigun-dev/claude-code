@@ -1,0 +1,34 @@
+{
+  "$generatedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); generates name/version/description/author here — homepage, repository, keywords, the mcpServers/skills pointer, and interface stay hand-edited in this file",
+  "name": "hallmark",
+  "version": "1.1.0",
+  "description": "Hallmark: distinctive UI design, audit and redesign from Nutlope/hallmark",
+  "author": {
+    "name": "Nutlope",
+    "url": "https://github.com/Nutlope"
+  },
+  "skills": "./skills/",
+  "homepage": "https://github.com/Nutlope/hallmark",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "keywords": [
+    "design",
+    "ui",
+    "audit",
+    "redesign"
+  ],
+  "interface": {
+    "displayName": "Hallmark",
+    "shortDescription": "画面の設計・監査・再設計",
+    "longDescription": "新規画面の設計、既存UIの監査・再設計、参考デザインの分析。共通スキル本文と全参照資料を両ホストで使用します。",
+    "developerName": "Nutlope",
+    "category": "Design",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/Nutlope/hallmark",
+    "defaultPrompt": [
+      "この画面をHallmarkで監査して"
+    ]
+  }
+}

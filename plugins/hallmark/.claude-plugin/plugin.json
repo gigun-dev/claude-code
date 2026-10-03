@@ -1,0 +1,12 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "hallmark",
+  "version": "1.1.0",
+  "description": "Hallmark: distinctive UI design, audit and redesign from Nutlope/hallmark",
+  "author": {
+    "name": "Nutlope",
+    "url": "https://github.com/Nutlope"
+  },
+  "homepage": "https://github.com/Nutlope/hallmark",
+  "repository": "https://github.com/Nutlope/hallmark"
+}
