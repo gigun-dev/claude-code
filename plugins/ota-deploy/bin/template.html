@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{APP_NAME}} — Install</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; min-height: 100dvh;
+    background: radial-gradient(120% 80% at 50% 0%, #1b2440 0%, #0a0d16 60%, #06080f 100%);
+    color: #e7ecf5; font: 16px/1.5 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    display: flex; justify-content: center;
+    padding: max(24px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
+  }
+  .card { width: 100%; max-width: 460px; }
+  .head { text-align: center; margin-bottom: 18px; }
+  .icon {
+    width: 84px; height: 84px; border-radius: 20px; margin: 8px auto 14px;
+    background: linear-gradient(160deg, #5b8cff, #7a5cff);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 38px; font-weight: 800; color: #fff; box-shadow: 0 12px 40px rgba(91,140,255,.35);
+  }
+  h1 { font-size: 26px; font-weight: 700; margin: 0 0 6px; letter-spacing: -.02em; }
+  .badge {
+    display: inline-block; padding: 4px 12px; border-radius: 999px;
+    background: rgba(123,92,255,.16); color: #b9a8ff; font-size: 12px; font-weight: 600;
+    border: 1px solid rgba(123,92,255,.3);
+  }
+  .btn {
+    display: block; text-align: center; text-decoration: none; color: #fff;
+    font-weight: 700; font-size: 18px; padding: 17px; border-radius: 16px; margin: 16px 0 8px;
+    transition: transform .08s;
+  }
+  .btn:active { transform: scale(.985); }
+  .btn.ios { background: linear-gradient(135deg, #5b8cff, #7a5cff); box-shadow: 0 10px 30px rgba(91,140,255,.4); }
+  .btn.android { background: linear-gradient(135deg, #21c469, #0f9d58); box-shadow: 0 10px 30px rgba(33,196,105,.35); }
+  .hint {
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
+    border-radius: 12px; padding: 12px 14px; font-size: 13px; color: #9aa6bd; margin: 0 0 16px;
+  }
+  .hint b { color: #cdd6e8; font-weight: 600; }
+  .changes-title {
+    font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: #6f7c93; margin: 22px 0 10px;
+  }
+  .change { padding: 12px 0; border-top: 1px solid rgba(255,255,255,.06); }
+  .change:first-of-type { border-top: none; }
+  .change .b { font-weight: 700; color: #b9a8ff; font-size: 13px; }
+  .change .when { color: #6f7c93; font-size: 12px; font-weight: 400; margin-left: 6px; }
+  ul.body { margin: 5px 0 0; padding-left: 18px; }
+  ul.body li { color: #c3ccde; font-size: 14px; margin-top: 2px; }
+  ul.body li::marker { color: #7a5cff; }
+  footer { text-align: center; color: #525d72; font-size: 11px; margin-top: 28px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="head">
+      <div class="icon">{{INITIAL}}</div>
+      <h1>{{APP_NAME}}</h1>
+      <span class="badge">Build {{BUILD}} · {{DATE}}</span>
+    </div>
+
+    {{ACTIONS}}
+
+    <p class="changes-title">Recent changes</p>
+    {{CHANGELOG}}
+
+    <footer>{{FOOTER}}</footer>
+  </div>
+</body>
+</html>

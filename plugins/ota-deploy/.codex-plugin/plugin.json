@@ -1,0 +1,33 @@
+{
+  "$generatedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); generates name/version/description/author here — homepage, repository, keywords, the mcpServers/skills pointer, and interface stay hand-edited in this file",
+  "name": "ota-deploy",
+  "version": "0.1.0",
+  "description": "Build and distribute iOS IPA and Android APK install pages privately over Tailscale. Shared ota-deploy skill and MIT-licensed upstream CLI for Claude Code and Codex.",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
+  "homepage": "https://github.com/mariosaputra/ota-deploy",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "keywords": [
+    "ota",
+    "ios",
+    "android",
+    "tailscale",
+    "ad-hoc"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "OTA Deploy",
+    "shortDescription": "Install mobile builds from a private Tailscale page",
+    "developerName": "gigun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Publish this mobile app build as an OTA install page over Tailscale."
+    ]
+  }
+}

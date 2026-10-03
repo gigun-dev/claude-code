@@ -95,6 +95,11 @@
       "name": "hallmark",
       "source": "./plugins/hallmark",
       "description": "Distinctive UI design, audit, redesign and design study (Nutlope/hallmark v1.1.0, MIT)."
+    },
+    {
+      "name": "ota-deploy",
+      "source": "./plugins/ota-deploy",
+      "description": "Private Tailscale OTA distribution for iOS IPA and Android APK builds (mariosaputra/ota-deploy, MIT)."
     }
   ]
 }
