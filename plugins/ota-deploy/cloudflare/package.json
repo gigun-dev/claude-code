@@ -1,0 +1,14 @@
+{
+  "name": "ota-distribution",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test worker.test.mjs"
+  },
+  "dependencies": {
+    "jose": "6.2.12"
+  },
+  "devDependencies": {
+    "wrangler": "4.134.0"
+  }
+}

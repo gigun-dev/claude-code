@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # ota-deploy.sh — build an iOS (.ipa) and/or Android (.apk) and publish an
-# install page over Tailscale, so you can install builds on your phone from a
+# install page over Tailscale or Cloudflare, so you can install builds on your phone from a
 # browser. No TestFlight, no Play Console, no ASC.
 #
 # Usage:
@@ -40,7 +40,7 @@ fi
 
 # ---- defaults (overridable in the config) ------------------------------
 APP_NAME="App"; APP_SLUG=""; PLATFORMS="ios"
-TS_HOST=""; PORT="8787"
+TS_HOST=""; PORT="8787"; OTA_PUBLIC_ORIGIN=""; OTA_R2_BUCKET="ota-distribution"; OTA_WRANGLER_CONFIG=""; BARK_ENV_FILE=""; BARK_IDENTITY=""
 IOS_PROJECT=""; IOS_WORKSPACE=""; IOS_SCHEME=""; IOS_BUNDLE_ID=""
 IOS_TEAM_ID=""; IOS_EXPORT_METHOD="release-testing"
 ANDROID_PROJECT_DIR=""; ANDROID_GRADLE_TASK=":app:assembleDebug"
@@ -53,7 +53,7 @@ GIT_REPO=""; TELEGRAM_BOT_TOKEN=""; TELEGRAM_CHAT_ID=""
 # shellcheck disable=SC1090
 source "$CONFIG"
 
-[ -z "$TS_HOST" ] && { echo "✖ TS_HOST is required in $CONFIG" >&2; exit 1; }
+[ -z "$TS_HOST" ] && [ -z "$OTA_PUBLIC_ORIGIN" ] && { echo "✖ TS_HOST is required in $CONFIG" >&2; exit 1; }
 [ -n "$ONLY" ] && PLATFORMS="$ONLY"
 
 # slug → URL path + state dir; default = sanitized app name
@@ -66,8 +66,10 @@ OTA_HOME="${OTA_HOME:-$HOME/.ota-deploy}"
 PUB_ROOT="$OTA_HOME/public"               # one server serves this for ALL projects
 PUBLIC="$PUB_ROOT/$APP_SLUG"              # this project's files live under /<slug>/
 STATE="$OTA_HOME/state/$APP_SLUG"
+# Cloud publication must not overwrite files an existing Tailscale server serves.
+[ -z "$OTA_PUBLIC_ORIGIN" ] || PUBLIC="$STATE/cloudflare-public"
 TS_BIN="$(command -v tailscale || echo /Applications/Tailscale.app/Contents/MacOS/Tailscale)"
-BASE_URL="https://$TS_HOST/$APP_SLUG"
+BASE_URL="${OTA_PUBLIC_ORIGIN:-https://$TS_HOST}/$APP_SLUG"
 mkdir -p "$PUBLIC" "$STATE"
 
 # ---- serve: local static server + tailscale proxy ----------------------
@@ -83,7 +85,10 @@ serve() {
   echo "   $BASE_URL/"
 }
 
-if [ "$SERVE_ONLY" = "1" ]; then serve; exit 0; fi
+if [ "$SERVE_ONLY" = "1" ]; then
+  [ -z "$OTA_PUBLIC_ORIGIN" ] || { echo "Cloudflare serves published builds without a local server"; exit 0; }
+  serve; exit 0
+fi
 
 # ---- build number (auto-increment, per project) ------------------------
 COUNTER="$STATE/build-number"
@@ -200,11 +205,13 @@ else
   [ -z "$COMMITS" ] && COMMITS="(no new commits since build $(tail -1 "$LOG" | cut -f1))"
 fi
 JOINED="$(printf '%s\n' "$COMMITS" | awk 'NF{a=a sep $0; sep=" ||| "} END{print a}')"
-printf '%s\t%s\t%s\t%s\n' "$BUILD" "$DATE" "$HEAD_SHA" "$JOINED" >> "$LOG"
+NEXT_LOG="$WORK/builds.tsv"
+cp "$LOG" "$NEXT_LOG"
+printf '%s\t%s\t%s\t%s\n' "$BUILD" "$DATE" "$HEAD_SHA" "$JOINED" >> "$NEXT_LOG"
 
 # ---- render install page -----------------------------------------------
 export APP_NAME BUILD DATE TS_HOST APP_SLUG IOS_BUNDLE_ID BASE_URL
-python3 - "$SELF_DIR/template.html" "$PUBLIC/index.html" "$LOG" "$PUBLIC" <<'PY'
+python3 - "$SELF_DIR/template.html" "$PUBLIC/index.html" "$NEXT_LOG" "$PUBLIC" <<'PY'
 import sys, os, html
 tmpl, out, logf, pub = sys.argv[1:5]
 host, slug, base = os.environ["TS_HOST"], os.environ["APP_SLUG"], os.environ["BASE_URL"]
@@ -248,7 +255,17 @@ for k, v in repl.items(): h = h.replace(k, v)
 open(out, "w").write(h)
 PY
 
-serve
+if [ -n "$OTA_PUBLIC_ORIGIN" ]; then
+  export BUILT OTA_PUBLIC_ORIGIN OTA_R2_BUCKET OTA_WRANGLER_CONFIG BARK_ENV_FILE BARK_IDENTITY
+  export OTA_MESSAGE="$COMMITS"
+  publish_status=0
+  python3 "$SELF_DIR/../cloudflare/publish.py" "$PUBLIC" || publish_status=$?
+  if [ "$publish_status" -eq 0 ] || [ "$publish_status" -eq 2 ]; then cp "$NEXT_LOG" "$LOG"; fi
+  [ "$publish_status" -eq 0 ] || exit "$publish_status"
+else
+  cp "$NEXT_LOG" "$LOG"
+  serve
+fi
 echo ""
 echo "✅ Build $BUILD ready ($(echo "$BUILT" | xargs)) → $BASE_URL/"
 

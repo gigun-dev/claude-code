@@ -83,4 +83,16 @@ GIT_REPO="{repo}"
     run(['bash', str(SCRIPT), str(conf), '--serve-only'], repo, env)
     assert (state / 'builds.tsv').read_bytes() == before
     assert (root / 'serve-calls').read_text().splitlines() == ['serve --bg 18787'] * 4
+    # A failed cloud upload must preserve the working local distribution and history.
+    python = mocks / 'python3'
+    import shutil
+    python.write_text('#!/bin/sh\ncase "$1" in *cloudflare/publish.py) exit 1;; esac\nexec ' + shutil.which('python3') + ' "$@"\n')
+    python.chmod(0o755)
+    cloud = root / 'cloud.conf'
+    cloud.write_text(conf.read_text() + 'OTA_PUBLIC_ORIGIN="https://install.example.invalid"\n')
+    old_page = (public / 'index.html').read_bytes()
+    run(['bash', str(SCRIPT), str(cloud), '--apk', str(apk)], repo, env, success=False)
+    assert (public / 'index.html').read_bytes() == old_page
+    assert (state / 'builds.tsv').read_bytes() == before
+    assert (state / 'cloudflare-public/app.apk').read_bytes() == apk.read_bytes()
     print('PASS: missing config; APK/page; incremental changelog; isolated IPA/manifest; serve-only')

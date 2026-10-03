@@ -53,3 +53,10 @@ ANDROID_APK_GLOB="androidApp/build/outputs/apk/debug/*.apk"   # relative to ANDR
 # https://api.telegram.org/bot<token>/getUpdates after messaging it once.
 TELEGRAM_BOT_TOKEN=""
 TELEGRAM_CHAT_ID=""
+
+# ---- Cloudflare (instead of Tailscale Serve) -----------------------------
+# OTA_PUBLIC_ORIGIN="https://ota.example.com"
+# OTA_WRANGLER_CONFIG="/absolute/private/cloudflare.json"
+# OTA_R2_BUCKET="ota-distribution"
+# BARK_ENV_FILE="/absolute/path/secrets/bark-env.age"
+# BARK_IDENTITY="$HOME/.ssh/id_ed25519"

@@ -35,6 +35,7 @@ CHECK_NAMES=(
 	"pre-push プラグインの実 push テスト"
 	"telemetry のローカル集計・クエリ回帰テスト"
 	"worktree プラグインのテスト (sweep / integrate)"
+	"ota-deploy の配布・認可テスト"
 )
 check_total=${#CHECK_NAMES[@]}
 check_n=0
@@ -215,6 +216,15 @@ if worktree_out=$(bash plugins/worktree/tests/run.sh 2>&1); then
     printf '%s\n' "$worktree_out" | tail -2
 else
     printf '%s\n' "$worktree_out"
+    overall_failed=1
+fi
+
+# OTA配布の失敗・認可と既存Tailscale経路を隔離環境で確認する。
+echo ""
+check_header
+if python3 plugins/ota-deploy/tests/run.py && (cd plugins/ota-deploy/cloudflare && bun install --frozen-lockfile && bun run test && python3 publish.test.py); then
+    echo "✓ ota-deploy"
+else
     overall_failed=1
 fi
 

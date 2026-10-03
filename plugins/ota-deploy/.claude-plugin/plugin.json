@@ -1,7 +1,7 @@
 {
   "name": "ota-deploy",
-  "version": "0.1.0",
-  "description": "Build and distribute iOS IPA and Android APK install pages privately over Tailscale. Shared ota-deploy skill and MIT-licensed upstream CLI for Claude Code and Codex.",
+  "version": "0.2.0",
+  "description": "Build and distribute iOS IPA and Android APK privately via Cloudflare Access or Tailscale, with optional encrypted Bark notifications. Shared skill for Claude Code and Codex.",
   "author": {
     "name": "gigun",
     "url": "https://github.com/gigun-dev"

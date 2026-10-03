@@ -14,3 +14,4 @@ x 2026-10-03 2026-10-03 委譲成果が未コミットのまま放置されな�
 x 2026-10-03 2026-09-11 worktree の subagent が todo.txt を更新してもマージまで誰にも届かない。いまは「更新するのは本線」という規約で回避しているが、規約が skill 本文に書かれていない +plugins @unattended id:0030
 x 2026-10-03 2026-10-03 ユーザーが課題・進捗・誰待ちかを理解できるようtodo skillの既存文言を削減・修正し、ユーザー課題から技術対応と完了条件・本人判断まで伝わる報告と明示なしの発動を検証する +plugins @unattended id:0039
 x 2026-10-03 2026-10-03 Claude CodeとCodexからOTA配布ツールを使えるようota-deployを共通skillと両ホストmanifestで追加し隔離検証・導入・pushを完了する +plugins @unattended id:0041
+x 2026-10-04 2026-10-04 Tailscaleなしで本人ログインできる固定配布ページ・期限付きIPA配信・Bark通知を実装し、Cloudflare配備と配信検証まで完了する（実機確認はswift-mcp-appの配布タスク） +ota-deploy id:0042
