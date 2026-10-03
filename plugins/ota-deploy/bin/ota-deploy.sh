@@ -2,7 +2,7 @@
 #
 # ota-deploy.sh — build an iOS (.ipa) and/or Android (.apk) and publish an
 # install page over Tailscale or Cloudflare, so you can install builds on your phone from a
-# browser. No TestFlight, no Play Console, no ASC.
+# browser. No TestFlight or Play Console; native iOS builds use ASC CLI.
 #
 # Usage:
 #   ota-deploy.sh [CONFIG]                # build per config (default: ./ota.conf)
@@ -111,27 +111,18 @@ build_ios() {
     cp "$ios_ipa" "$PUBLIC/app.ipa"
   else
     [ -n "$IOS_SCHEME" ] || { echo "✖ IOS_SCHEME required for iOS build" >&2; return 1; }
-    local proj=()
-    if [ -n "$IOS_WORKSPACE" ]; then proj=(-workspace "$IOS_WORKSPACE"); else proj=(-project "$IOS_PROJECT"); fi
+    command -v asc >/dev/null || { echo "✖ ASC CLI required for native iOS builds (brew install asc), or pass --ipa" >&2; return 1; }
+    local proj=() export_args=(--archive-path "$WORK/app.xcarchive" --ipa-path "$WORK/app.ipa" --method "$IOS_EXPORT_METHOD")
+    if [ -n "$IOS_WORKSPACE" ]; then proj=(--workspace "$IOS_WORKSPACE"); else proj=(--project "$IOS_PROJECT"); fi
+    [ -z "$IOS_TEAM_ID" ] || export_args+=(--team-id "$IOS_TEAM_ID")
     echo "→ iOS: archiving $IOS_SCHEME (build $BUILD)…"
-    xcodebuild "${proj[@]}" -scheme "$IOS_SCHEME" -configuration Release \
-      -destination 'generic/platform=iOS' -archivePath "$WORK/app.xcarchive" \
-      CURRENT_PROJECT_VERSION="$BUILD" -allowProvisioningUpdates archive
-    cat > "$WORK/ExportOptions.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0"><dict>
-  <key>method</key><string>$IOS_EXPORT_METHOD</string>
-  <key>teamID</key><string>$IOS_TEAM_ID</string>
-  <key>signingStyle</key><string>automatic</string>
-  <key>compileBitcode</key><false/>
-  <key>stripSwiftSymbols</key><true/>
-</dict></plist>
-PLIST
+    asc xcode archive "${proj[@]}" --scheme "$IOS_SCHEME" --configuration Release \
+      --archive-path "$WORK/app.xcarchive" \
+      --xcodebuild-flag=-destination --xcodebuild-flag=generic/platform=iOS \
+      --xcodebuild-flag="CURRENT_PROJECT_VERSION=$BUILD" --xcodebuild-flag=-allowProvisioningUpdates
     echo "→ iOS: exporting ad-hoc ipa…"
-    xcodebuild -exportArchive -archivePath "$WORK/app.xcarchive" \
-      -exportPath "$WORK/export" -exportOptionsPlist "$WORK/ExportOptions.plist" \
-      -allowProvisioningUpdates
-    cp "$WORK/export/"*.ipa "$PUBLIC/app.ipa"
+    asc xcode export "${export_args[@]}" --xcodebuild-flag=-allowProvisioningUpdates
+    cp "$WORK/app.ipa" "$PUBLIC/app.ipa"
   fi
   # OTA manifest (iOS reads this to install)
   cat > "$PUBLIC/manifest.plist" <<PLIST

@@ -95,4 +95,36 @@ GIT_REPO="{repo}"
     assert (public / 'index.html').read_bytes() == old_page
     assert (state / 'builds.tsv').read_bytes() == before
     assert (state / 'cloudflare-public/app.apk').read_bytes() == apk.read_bytes()
-    print('PASS: missing config; APK/page; incremental changelog; isolated IPA/manifest; serve-only')
+    # Native export failure must never publish a new page or advance its build number.
+    asc = mocks / 'asc'
+    asc.write_text('''#!/usr/bin/env python3
+import json,os,sys,shutil
+from pathlib import Path
+args=sys.argv[1:]
+with open(os.environ['OTA_ASC_CALLS'],'a') as log: log.write(json.dumps(args)+'\\n')
+action=args[1]
+if os.environ.get('OTA_ASC_FAIL')==action: sys.exit(1)
+if action=='archive': Path(args[args.index('--archive-path')+1]).mkdir()
+elif action=='export': shutil.copyfile(os.environ['OTA_ASC_IPA'],args[args.index('--ipa-path')+1])
+else: sys.exit(2)
+''')
+    asc.chmod(0o755)
+    native_env = dict(env, OTA_ASC_CALLS=str(root / 'asc-calls'), OTA_ASC_IPA=str(ipa))
+    native = root / 'native.conf'
+    native.write_text(conf.read_text().replace('APP_SLUG="fixture"', 'APP_SLUG="native"') +
+                      'IOS_PROJECT="Project With Spaces.xcodeproj"\nIOS_SCHEME="Fixture"\n')
+    run(['/bin/bash', str(SCRIPT), str(native), '--ios'], repo, native_env)
+    import json
+    calls = [json.loads(line) for line in (root / 'asc-calls').read_text().splitlines()]
+    assert calls[0][calls[0].index('--project') + 1] == 'Project With Spaces.xcodeproj'
+    assert calls[1][calls[1].index('--method') + 1] == 'release-testing'
+    native_public = root / 'generated/public/native'
+    assert (native_public / 'app.ipa').read_bytes() == ipa.read_bytes()
+    saved_page = (native_public / 'index.html').read_bytes()
+    serve_calls = (root / 'serve-calls').read_bytes()
+    run(['/bin/bash', str(SCRIPT), str(native), '--ios'], repo,
+        dict(native_env, OTA_ASC_FAIL='export'), success=False)
+    assert (native_public / 'index.html').read_bytes() == saved_page
+    assert (root / 'generated/state/native/build-number').read_text().strip() == '1'
+    assert (root / 'serve-calls').read_bytes() == serve_calls
+    print('PASS: prebuilt distribution; Cloudflare failure isolation; ASC Ad Hoc export and failure')

@@ -99,7 +99,7 @@
     {
       "name": "ota-deploy",
       "source": "./plugins/ota-deploy",
-      "description": "Private Tailscale OTA distribution for iOS IPA and Android APK builds (mariosaputra/ota-deploy, MIT)."
+      "description": "ASC-powered iOS builds and private Cloudflare or Tailscale OTA distribution with Bark notifications."
     }
   ]
 }

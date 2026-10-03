@@ -1,7 +1,7 @@
 {
   "$generatedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); generates name/version/description/author here — homepage, repository, keywords, the mcpServers/skills pointer, and interface stay hand-edited in this file",
   "name": "ota-deploy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Build and distribute iOS IPA and Android APK privately via Cloudflare Access or Tailscale, with optional encrypted Bark notifications. Shared skill for Claude Code and Codex.",
   "author": {
     "name": "gigun",
@@ -19,7 +19,7 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "OTA Deploy",
-    "shortDescription": "Install mobile builds from a private Tailscale page",
+    "shortDescription": "Build with ASC and publish private mobile install pages",
     "developerName": "gigun",
     "category": "Developer Tools",
     "capabilities": [
@@ -27,7 +27,7 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Publish this mobile app build as an OTA install page over Tailscale."
+      "Build and publish this mobile app as a private OTA install page."
     ]
   }
 }

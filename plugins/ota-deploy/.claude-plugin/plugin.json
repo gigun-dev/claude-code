@@ -1,6 +1,6 @@
 {
   "name": "ota-deploy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Build and distribute iOS IPA and Android APK privately via Cloudflare Access or Tailscale, with optional encrypted Bark notifications. Shared skill for Claude Code and Codex.",
   "author": {
     "name": "gigun",

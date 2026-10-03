@@ -19,7 +19,7 @@ IOS_PROJECT="/Users/you/Projects/MyApp/iosApp/iosApp.xcodeproj"
 IOS_SCHEME="iosApp"
 IOS_BUNDLE_ID="com.you.myapp"
 IOS_TEAM_ID="ABCDE12345"
-IOS_EXPORT_METHOD="release-testing"   # Xcode 16+/26 name for ad-hoc. Older Xcode: "ad-hoc"
+IOS_EXPORT_METHOD="release-testing"   # ASC CLI/Xcode name for ad-hoc export
 
 # ---- Android (APK sideload) --------------------------------------------
 ANDROID_PROJECT_DIR="/Users/you/Projects/MyApp"          # dir containing ./gradlew

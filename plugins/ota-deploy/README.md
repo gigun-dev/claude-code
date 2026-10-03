@@ -26,6 +26,8 @@ bash scripts/verify.sh
 
 Workerの`DOWNLOAD_SECRET`は暗号化保管したランダム鍵を`wrangler secret bulk`で渡す。`wrangler deploy --config <private-config>`で配備する。本人環境のAccessはdotfilesの`tofu/ota.tf`、署名鍵は`secrets/ota-env.age`が管理する。
 
+native iOSのarchive/exportはASC CLI（`brew install asc`）へ委譲する。Ad Hocには`release-testing`を明示し、ExportOptions生成を自作しない。既存IPAを`--ipa`で渡す経路とカスタムbuild hookはASC不要。これはローカル実行用skillで、ChatGPTクラウドからminiへアクセスするremote MCPは含まない。
+
 `ota.conf` に`OTA_PUBLIC_ORIGIN`・`OTA_WRANGLER_CONFIG`・`OTA_R2_BUCKET`を設定すると、ビルド後にR2へアップロードし、Tailscale Serveは使わない。Bark通知には`BARK_ENV_FILE`で既存のage暗号化通知設定を指定する。通知のリンクは固定ページのSafariスキーム、本文は通常HTTPS URL。サーバー受付成功と実機到達は別に確認する。通知失敗もCLIの失敗として返るが、既に配布したビルドは取り消さない。
 
 ```sh

@@ -16,3 +16,4 @@ x 2026-10-03 2026-10-03 ユーザーが課題・進捗・誰待ちかを理解�
 x 2026-10-03 2026-10-03 Claude CodeとCodexからOTA配布ツールを使えるようota-deployを共通skillと両ホストmanifestで追加し隔離検証・導入・pushを完了する +plugins @unattended id:0041
 x 2026-10-04 2026-10-04 Tailscaleなしで本人ログインできる固定配布ページ・期限付きIPA配信・Bark通知を実装し、Cloudflare配備と配信検証まで完了する（実機確認はswift-mcp-appの配布タスク） +ota-deploy id:0042
 x 2026-10-04 2026-09-11 todo skillの更新契機を開始・再開・内容や依存の変更・保留・検証完了で明示し、委譲前に本線でstartする手順を既存段落の置換で整理する +plugins @unattended id:0028
+x 2026-10-04 2026-10-04 MacBookとminiにASC CLI 5.9.2を導入し、Xcode診断・MacBook Simulator build・mini Ad Hoc exportと署名を検証、OTAの自作archive/exportをASCへ置換する（Apple API認証・upload・remote MCPは今回対象外） +ota-deploy see:plugins/ota-deploy/README.md id:0043
