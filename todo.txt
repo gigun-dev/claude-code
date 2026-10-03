@@ -24,3 +24,4 @@
 2026-09-11 worktree を持つ subagent が worktree の外へ書いた件を、session-breakdown が終了コードで返す形にする。2026-09-11 の実測で 8 件あり、うち 6 件が本線のビルド対象ツリーへの書き込みだった +plugins @unattended see:docs/telemetry/2026-09-11-subagent-time-breakdown.md id:0033
 2026-09-11 「実装は終わったが検証待ち」を表す印が要るかを実データで判断する。根拠は 2026-09-11 の esp32 のセッション e4e316bc-fbdd-454b-a0bd-af98a913bbd3(2 件が実測し直し待ち、1 件が実機検証待ちのまま @wip に置かれた)。@wip は start/stop/do が管理する印なので兼ねると意味が二重になるが、頻度と実害は 1 日ぶんしか見ていない +plugins @unattended id:0034
 2026-09-11 todo の行がセッションを指すときの識別子の形を決める。パスは Claude Code と Codex で違い、cman を使う場合には不要。セッション ID なら両方から辿れる。see: は repo 相対に限られるので本文に書くしかない(id:0031 と関係する) +plugins @unattended id:0036
+(A) 2026-10-03 ユーザーが課題・進捗・誰待ちかを迷わず理解できるようtodo skillの課題先行記述と完了線・担当引継ぎ・本人判断の規約を改善し明示なしの発動と報告例で検証する +plugins @unattended id:0039
