@@ -11,3 +11,4 @@ x 2026-09-11 2026-09-11 telemetry のプラグインに、セッションを辿�
 x 2026-09-14 2026-09-14 telemetryのCodexローカル集計と期間境界を実装し、取得範囲とレビュー指示を修正して回帰検証する +telemetry id:0037
 x 2026-09-22 2026-09-22 Langfuse上流をgigun marketplaceから参照し、Claude CodeとCodexの両方でプラグインとして導入できるようにする +plugins id:0038
 x 2026-10-03 2026-10-03 委譲成果が未コミットのまま放置されないよう台帳更新と成果コミットの役割を分離し許可済みpushまで引き取る規約を配布する +plugins @unattended id:0040
+x 2026-10-03 2026-09-11 worktree の subagent が todo.txt を更新してもマージまで誰にも届かない。いまは「更新するのは本線」という規約で回避しているが、規約が skill 本文に書かれていない +plugins @unattended id:0030
