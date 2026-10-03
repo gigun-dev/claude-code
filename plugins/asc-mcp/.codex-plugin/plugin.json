@@ -1,0 +1,22 @@
+{
+  "$generatedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); generates name/version/description/author here — homepage, repository, keywords, the mcpServers/skills pointer, and interface stay hand-edited in this file",
+  "name": "asc-mcp",
+  "version": "0.1.0",
+  "description": "Build a registered iOS app from a GitHub PR or commit through an authenticated remote MCP, inspect progress, and obtain a private install link.",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  },
+  "mcpServers": "./.mcp.json",
+  "skills": "./skills/",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "interface": {
+    "displayName": "iOS Build",
+    "shortDescription": "GitHubのPRからiOS検証版をビルドして私的配布",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ]
+  }
+}

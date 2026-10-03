@@ -74,7 +74,7 @@
     {
       "name": "pre-push",
       "source": "./plugins/pre-push",
-      "description": "Set up and inspect Git pre-push checks using the repository’s CI verification command. Preserve existing hook management; copied hooks run independently of the plugin."
+      "description": "Set up and inspect Git pre-push checks using the repository\u2019s CI verification command. Preserve existing hook management; copied hooks run independently of the plugin."
     },
     {
       "name": "worktree",
@@ -100,6 +100,11 @@
       "name": "ota-deploy",
       "source": "./plugins/ota-deploy",
       "description": "ASC-powered iOS builds and private Cloudflare or Tailscale OTA distribution with Bark notifications."
+    },
+    {
+      "name": "asc-mcp",
+      "source": "./plugins/asc-mcp",
+      "description": "Build a registered iOS app from a GitHub PR or commit through an authenticated remote MCP, inspect progress, and obtain a private install link."
     }
   ]
 }

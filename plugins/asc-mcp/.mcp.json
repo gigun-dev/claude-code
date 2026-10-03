@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "asc-mcp": {
+      "type": "http",
+      "url": "https://build.097969.xyz/mcp"
+    }
+  }
+}
