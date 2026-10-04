@@ -6,19 +6,12 @@
 2026-09-10 git 履歴の個人端末名を残すか利用者に判断を求め、対応範囲を確定する +ios-skills @user see:docs/ios-skills/next-directions.md id:0006
 2026-09-10 plugin-fresh-session-exposure の Agent 制約について、ケース文言修正か別ケース追加かを決めて完了条件を定義する +ios-skills see:docs/ios-skills/next-directions.md id:0007
 2026-09-10 自作プラグインの SKILL.md に metadata.version を全部持たせる(ios-skills と japanese-tech-writing が持っていない) +plugins id:0009
-2026-09-10 スキルの description と本文を英語に統一する +plugins id:0010
-2026-09-10 skill-creator の eval ループで pre-push と todo の発火率を測る +plugins id:0011
-(A) 2026-09-10 pre-push の description が明示依頼でしか発火しない(push が弾かれた/新規 repo/ローカルは通るのに CI で落ちる、が抜けている) +plugins id:0012
-(A) 2026-09-10 installed cache と repo の SKILL.md が乖離している原因を特定する(cache の adr 0.1.1 の description は repo 履歴に無い) +plugins id:0013
-2026-09-10 verify.sh の [n/9] を手書きでやめる(検査を名前の配列にしてループで回し、番号を導出する)。検査の増減で 9 箇所を直していた +plugins @unattended id:0014
+2026-09-10 todoの進捗質問とpre-pushの失敗相談で暗黙に適切なskillが使われるか対照ケースを測り必要なdescriptionだけ修正する +plugins @unattended id:0011
+(A) 2026-09-10 repoとインストール済みpluginの版・本文を照合し再導入後も更新が反映されることを確認する +plugins @unattended id:0013
 2026-09-10 tools/idf-board.sh の「上N個と同じく」18 箇所から数を落とす(既に 611 行と 625 行が両方 25 でずれている。数は文の意味に要らない) +refactor @unattended id:0015
 2026-09-10 todo check / adr check を CI から呼べない件の答えをスキルか doctor に持たせる(CLI がプラグイン配下にあり repo が開発機に依存する)。2 つの repo が同じ判断を独立にしている +plugins @unattended id:0020
 (B) 2026-09-10 いま塞がれている行を一覧する手段が無い。dep: を足すと ready から消えるだけで痕跡が残らず、忘れると永久に見えない。ls dep: は依存が解けた行も出す +plugins @unattended id:0021
 2026-09-10 +project の付け替えにコマンドが無い。todo.txt と done.txt の両方を書き換える必要があり、done.txt を忘れると過去の集計と食い違う +plugins @unattended id:0022
-2026-09-10 do が根拠を残さない。閉じた根拠はコミットと docs の節なのに done.txt にはどちらも無い。see: を要求するか閉じた時点の HEAD を刻むか決める +plugins @unattended id:0023
-2026-09-10 優先度を段取りの意味で使ってしまう。2026-09-10 に (B) を「手が空いたときにまとめて撃つ束」として使い、@user と二重に持っていた。SKILL.md は との違いしか書いていない +plugins @unattended id:0024
 2026-09-11 @wip が「誰が手を付けているか」を持たない。複数のコーディングエージェントを並行で回すと、同じ行を二重に取れてしまう。担当を書ける形にするか、start に主体を渡せるようにするか決める +plugins @unattended id:0029
-2026-09-11 todo の行から local のセッションログを指せるようにする。see: は repo 相対のパスに限られるので ~/.claude/projects/ の下にあるセッションを起票時に指せない。後から別のエージェントが根拠のログを引けると効く +plugins @unattended id:0031
+2026-09-11 タスクから検証セッションを辿れるよう既存cman・session-breakdownのセッション指定でClaude/Codex双方のログを取得できるか確認し不足があれば直す +plugins @unattended id:0031
 2026-09-11 worktree を持つ subagent が worktree の外へ書いた件を、session-breakdown が終了コードで返す形にする。2026-09-11 の実測で 8 件あり、うち 6 件が本線のビルド対象ツリーへの書き込みだった +plugins @unattended see:docs/telemetry/2026-09-11-subagent-time-breakdown.md id:0033
-2026-09-11 「実装は終わったが検証待ち」を表す印が要るかを実データで判断する。根拠は 2026-09-11 の esp32 のセッション e4e316bc-fbdd-454b-a0bd-af98a913bbd3(2 件が実測し直し待ち、1 件が実機検証待ちのまま @wip に置かれた)。@wip は start/stop/do が管理する印なので兼ねると意味が二重になるが、頻度と実害は 1 日ぶんしか見ていない +plugins @unattended id:0034
-2026-09-11 todo の行がセッションを指すときの識別子の形を決める。パスは Claude Code と Codex で違い、cman を使う場合には不要。セッション ID なら両方から辿れる。see: は repo 相対に限られるので本文に書くしかない(id:0031 と関係する) +plugins @unattended id:0036

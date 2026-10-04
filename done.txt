@@ -18,3 +18,11 @@ x 2026-10-04 2026-10-04 Tailscaleなしで本人ログインできる固定配�
 x 2026-10-04 2026-09-11 todo skillの更新契機を開始・再開・内容や依存の変更・保留・検証完了で明示し、委譲前に本線でstartする手順を既存段落の置換で整理する +plugins @unattended id:0028
 x 2026-10-04 2026-10-04 MacBookとminiにASC CLI 5.9.2を導入し、Xcode診断・MacBook Simulator build・mini Ad Hoc exportと署名を検証、OTAの自作archive/exportをASCへ置換する（Apple API認証・upload・remote MCPは今回対象外） +ota-deploy see:plugins/ota-deploy/README.md id:0043
 x 2026-10-04 2026-10-04 別環境でもPRからiOSビルド・私的配布を再構築できる独立asc-mcp repoを用意し、remote MCP接続用pluginを追加する +asc-mcp id:0044
+x 2026-10-04 2026-09-10 verify.shの検査見出しがCHECK_NAMES配列から件数を導出し追加・削除の不一致も検出することを現行コードで確認する +plugins @unattended id:0014
+x 2026-10-04 2026-09-10 todo skillが優先度を重要度、@wipを進行中、@userを本人判断として区別して説明することを確認する +plugins @unattended id:0024
+x 2026-10-04 2026-09-10 スキルの description と本文を英語に統一する +plugins id:0010 @dropped 全スキルの英語化は必要な機能ではなく、言語統一を目的に既存コンテキストを書き換えない
+x 2026-10-04 2026-09-10 do が根拠を残さない。閉じた根拠はコミットと docs の節なのに done.txt にはどちらも無い。see: を要求するか閉じた時点の HEAD を刻むか決める +plugins @unattended id:0023 @dropped 根拠は既存seeとコミット履歴へ残す。必須タグやHEAD記録の規則を増やさない本人方針に従う
+x 2026-10-04 2026-09-11 「実装は終わったが検証待ち」を表す印が要るかを実データで判断する。根拠は 2026-09-11 の esp32 のセッション e4e316bc-fbdd-454b-a0bd-af98a913bbd3(2 件が実測し直し待ち、1 件が実機検証待ちのまま に置かれた)。@wip は start/stop/do が管理する印なので兼ねると意味が二重になるが、頻度と実害は 1 日ぶんしか見ていない +plugins @unattended id:0034 @dropped 本人判断・検証待ちは既存contextと具体的本文で示す。新しい状態印を追加しない
+x 2026-10-04 2026-09-11 todo の行がセッションを指すときの識別子の形を決める。パスは Claude Code と Codex で違い、cman を使う場合には不要。セッション ID なら両方から辿れる。see: は repo 相対に限られるので本文に書くしかない(id:0031 と関係する) +plugins @unattended id:0036 @dropped セッションの追跡を0031へ統合し新しい識別子規約を増やさない
+x 2026-10-04 2026-09-10 pre-push の description が明示依頼でしか発火しない(push が弾かれた/新規 repo/ローカルは通るのに CI で落ちる、が抜けている) +plugins id:0012 @dropped description修正と暗黙発動の検証を0011へ統合
+x 2026-10-04 2026-10-04 完了記録・現行コードと残件を照合し重複と古い前提を除き検証担当を整理する +governance @unattended id:0045
