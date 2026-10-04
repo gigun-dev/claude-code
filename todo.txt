@@ -12,6 +12,6 @@
 2026-09-10 todo check / adr check を CI から呼べない件の答えをスキルか doctor に持たせる(CLI がプラグイン配下にあり repo が開発機に依存する)。2 つの repo が同じ判断を独立にしている +plugins @unattended id:0020
 (B) 2026-09-10 いま塞がれている行を一覧する手段が無い。dep: を足すと ready から消えるだけで痕跡が残らず、忘れると永久に見えない。ls dep: は依存が解けた行も出す +plugins @unattended id:0021
 2026-09-10 +project の付け替えにコマンドが無い。todo.txt と done.txt の両方を書き換える必要があり、done.txt を忘れると過去の集計と食い違う +plugins @unattended id:0022
-2026-09-11 @wip が「誰が手を付けているか」を持たない。複数のコーディングエージェントを並行で回すと、同じ行を二重に取れてしまう。担当を書ける形にするか、start に主体を渡せるようにするか決める +plugins @unattended id:0029
+2026-09-11 並行エージェントが同じタスクへ二重着手しないよう既存委譲の担当通知を検証し必要ならCLIで着手競合を検出する +plugins @unattended id:0029
 2026-09-11 タスクから検証セッションを辿れるよう既存cman・session-breakdownのセッション指定でClaude/Codex双方のログを取得できるか確認し不足があれば直す +plugins @unattended id:0031
 2026-09-11 worktree を持つ subagent が worktree の外へ書いた件を、session-breakdown が終了コードで返す形にする。2026-09-11 の実測で 8 件あり、うち 6 件が本線のビルド対象ツリーへの書き込みだった +plugins @unattended see:docs/telemetry/2026-09-11-subagent-time-breakdown.md id:0033
