@@ -26,3 +26,4 @@ x 2026-10-04 2026-09-11 「実装は終わったが検証待ち」を表す印�
 x 2026-10-04 2026-09-11 todo の行がセッションを指すときの識別子の形を決める。パスは Claude Code と Codex で違い、cman を使う場合には不要。セッション ID なら両方から辿れる。see: は repo 相対に限られるので本文に書くしかない(id:0031 と関係する) +plugins @unattended id:0036 @dropped セッションの追跡を0031へ統合し新しい識別子規約を増やさない
 x 2026-10-04 2026-09-10 pre-push の description が明示依頼でしか発火しない(push が弾かれた/新規 repo/ローカルは通るのに CI で落ちる、が抜けている) +plugins id:0012 @dropped description修正と暗黙発動の検証を0011へ統合
 x 2026-10-04 2026-10-04 完了記録・現行コードと残件を照合し重複と古い前提を除き検証担当を整理する +governance @unattended id:0045
+x 2026-10-13 2026-10-13 modern-web-guidance 上流を gigun marketplace から参照し、Claude Code と Codex の両方でプラグインとして導入できるようにする +plugins id:0047
