@@ -732,6 +732,74 @@ t "警告を出しても truncate はしない(21 件すべて出す)" "21" \
 	"$(todo ready | grep -c '^  00')"
 
 # ---------------------------------------------------------------------------
+# by: — 誰が登録したか(me / claude / codex)
+# ---------------------------------------------------------------------------
+unset TODO_BY
+setup by
+t "add --by me は by:me を id: の手前に付ける" "2026-09-09 a +p by:me id:0001" \
+	"$(todo add --by me "a +p")"
+t "add --by claude" "2026-09-09 b by:claude id:0002" "$(todo add --by claude "b")"
+t "add --by codex" "2026-09-09 c by:codex id:0003" "$(todo add --by codex "c")"
+t "--by は TEXT の後ろでもよい" "2026-09-09 d by:me id:0004" "$(todo add "d" --by me)"
+t "by を付けた行を check は通す" "0" "$(todo check >/dev/null 2>&1; echo $?)"
+t "add は --by 無しでも通る(任意)" "2026-09-09 plain id:0005" "$(todo add "plain")"
+
+setup by_bad
+t "add --by 語彙外は 1" "1" "$(todo add --by bob "x" >/dev/null 2>&1; echo $?)"
+t "語彙外のとき書き込まない" "" "$(cat "$TODO_DIR/todo.txt" 2>/dev/null)"
+t "語彙外のメッセージに語彙を出す" "1" \
+	"$(todo add --by bob "x" 2>&1 | grep -c 'me claude codex')"
+t "--by に値が無ければ 1" "1" "$(todo add "x" --by >/dev/null 2>&1; echo $?)"
+t "TEXT 中の語彙外 by: も add が拒む" "1" "$(todo add "x by:bob" >/dev/null 2>&1; echo $?)"
+
+setup by_inline
+t "TEXT 中の by: はそのまま通る" "2026-09-09 x by:me id:0001" "$(todo add "x by:me")"
+t "--by と同じ値の by: は重ねない" "2026-09-09 y by:codex id:0002" \
+	"$(todo add --by codex "y by:codex")"
+t "--by と TEXT の by: が食い違えば 1" "1" \
+	"$(todo add --by me "z by:claude" >/dev/null 2>&1; echo $?)"
+t "食い違いのとき書き込まない" "2" "$(wc -l <"$TODO_DIR/todo.txt" | tr -d ' ')"
+
+setup by_env
+t "TODO_BY が --by 無しの既定になる" "2026-09-09 a by:claude id:0001" \
+	"$(TODO_BY=claude todo add "a")"
+t "明示した --by が TODO_BY に勝つ" "2026-09-09 b by:me id:0002" \
+	"$(TODO_BY=claude todo add --by me "b")"
+t "TEXT の by: も TODO_BY に勝つ" "2026-09-09 c by:me id:0003" \
+	"$(TODO_BY=claude todo add "c by:me")"
+t "語彙外の TODO_BY は 1" "1" "$(TODO_BY=bob todo add "d" >/dev/null 2>&1; echo $?)"
+t "語彙外の TODO_BY でも --by を明示すれば通る" "0" \
+	"$(TODO_BY=bob todo add --by me "e" >/dev/null 2>&1; echo $?)"
+
+# check: 手で書いた by: の検査。対照 = 正しい値は通り、誤った値だけが落ちる。
+setup by_check
+cat >"$TODO_DIR/todo.txt" <<'EOT'
+2026-09-09 ok by:me id:0001
+2026-09-09 ok2 by:claude id:0002
+2026-09-09 no by id:0003
+EOT
+t "check: 正しい by: と by: 無しは通る(対照)" "0" "$(todo check >/dev/null 2>&1; echo $?)"
+printf '%s\n' '2026-09-09 bad by:bob id:0004' >>"$TODO_DIR/todo.txt"
+t "check: 語彙外の by: は 2" "2" "$(todo check >/dev/null 2>&1; echo $?)"
+t "check: 語彙外の by: を名指しする" "1" "$(todo check 2>&1 | grep -c 'by: の値が語彙にない (by:bob)')"
+t "check: 他の行は名指ししない" "0" "$(todo check 2>&1 | grep -c 'by:claude')"
+setup by_check2
+printf '%s\n' '2026-09-09 dup by:me by:codex id:0001' >"$TODO_DIR/todo.txt"
+t "check: by: が 2 つある行は 2" "2" "$(todo check >/dev/null 2>&1; echo $?)"
+
+# replace は by: をタグとして持ち越す。ls / ready は TERM で絞れる。
+setup by_replace
+todo add --by me "old text +p" >/dev/null
+todo add --by claude "other" >/dev/null
+todo add --by me "blocked dep:0002" >/dev/null
+t "replace は by: を持ち越す" "2026-09-09 new text +p by:me id:0001" \
+	"$(todo replace 1 "new text +p" 2>/dev/null)"
+t "ls by:me は by:me の行だけ" "2" "$(todo ls by:me | grep -c 'by:me')"
+t "ls by:me に by:claude は混ざらない" "0" "$(todo ls by:me | grep -c 'by:claude')"
+t "ls -by:me は除外になる" "1" "$(todo ls -by:me | grep -c 'by:claude')"
+t "ready by:me は依存の解けた by:me だけ" "1" "$(todo ready by:me | grep -c 'by:me')"
+
+# ---------------------------------------------------------------------------
 # adr の分 — 実行口はこのファイル 1 つに保つ
 # ---------------------------------------------------------------------------
 # ファイルが分かれているのは作業場の作り方が違うから: todo は TODO_DIR を

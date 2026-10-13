@@ -61,7 +61,9 @@ usage() {
 	cat <<'EOF'
 usage: todo <command> [args]      — リポジトリのタスクを todo.txt 形式で操作する
 
-  add "TEXT"           作成日と id: を付けて todo.txt へ追記し、その行を出す
+  add [--by WHO] "TEXT"  作成日と id: を付けて todo.txt へ追記し、その行を出す
+    --by me|claude|codex 誰が登録したか。by:WHO を id: の手前へ付ける(省略可)
+                       省略時は環境変数 TODO_BY。明示した --by が勝つ。TEXT 中の by: と食い違えば誤り
   ready [TERM...]      dep: がすべて done の open 行 = いま着手できるもの
                        ADR があれば先頭に決定の索引を出す(題だけ。本文は出さない)
   ls [TERM...]         open を優先度順に。TERM は AND、先頭 - で除外、大小無視
@@ -99,6 +101,8 @@ usage: todo <command> [args]      — リポジトリのタスクを todo.txt �
   id:NNNN    add が採番する連番(4 桁ゼロ詰め)。タスクを指す唯一の手段
              TEXT に書けるのは散文としての "id:" まで。id:0001 の形は add が拒む
   dep:N,M    依存。指す先が done.txt に入るまで ready に出ない。dep / undep で足し外し
+  by:WHO     誰のタスクか。me=ユーザーが言った/頼んだ、claude / codex=エージェントが自分で導いた
+             これ以外の値は add と check が拒む。無くてもよい。ls by:me で絞る
   key:value  自由。key も value も空白とコロンを含めない(URL は書けない)
              末尾のコロンは value が空 = key:value ではないので散文として通る
              (「原因ではない: …」は書ける。see:https://… は 2 つ目のコロンで落ちる)
@@ -115,6 +119,7 @@ ID は id: の値。ゼロ詰めは付けても付けなくてよい (todo do 12
   2  形式違反を見つけた(check)、または書けば増やすので書かなかった
   3  ID が見つからない
 
+環境変数: TODO_BY(add の by: の既定)
 テスト用の注入点: TODO_TODAY(日付を固定)
 EOF
 }
@@ -315,10 +320,62 @@ rewrite_todo() {
 }
 
 # ---------------------------------------------------------------------------
+# by: の語彙。誰がそのタスクを登録したか(me=ユーザー本人の依頼, claude/codex=エージェントが自分で導いた)。
+BY_VOCAB="me claude codex"
+valid_by() {
+	case " $BY_VOCAB " in *" $1 "*) return 0 ;; esac
+	return 1
+}
+
 cmd_add() {
-	[ $# -eq 1 ] || die "usage: todo add \"TEXT\"   (例: todo add \"送信バッファを A/B する +upload @device\")"
-	check_text "$1"
-	text=$(printf '%s' "$1" | awk "$AWKLIB"'{ print trim($0) }')
+	addusage="usage: todo add [--by me|claude|codex] \"TEXT\"   (例: todo add --by me \"送信バッファを A/B する +upload @device\")"
+	by=''
+	text_in=''
+	have_text=0
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--by)
+			[ $# -ge 2 ] || die "--by に値が無い。$addusage"
+			by=$2
+			shift 2
+			;;
+		--by=*)
+			by=${1#--by=}
+			shift
+			;;
+		*)
+			[ "$have_text" -eq 0 ] || die "$addusage"
+			text_in=$1
+			have_text=1
+			shift
+			;;
+		esac
+	done
+	[ "$have_text" -eq 1 ] || die "$addusage"
+	check_text "$text_in"
+	# 既定は環境変数 TODO_BY。明示した --by が常に勝つ。
+	if [ -z "$by" ] && [ -n "${TODO_BY:-}" ]; then
+		by=$TODO_BY
+		valid_by "$by" || die "TODO_BY '$by' は by: の語彙にない。使えるのは: $BY_VOCAB"
+		byenv=1
+	fi
+	if [ -n "$by" ]; then
+		valid_by "$by" || die "--by '$by' は by: の語彙にない。使えるのは: $BY_VOCAB"
+	fi
+	# TEXT に書かれた by:<value>(複数あれば全部)
+	inline=$(printf '%s' "$text_in" | awk "$AWKLIB"'{ for (i = 1; i <= NF; i++) if (iskvtag($i) && kvkey($i) == "by") print substr($i, 4) }')
+	for v in $inline; do
+		valid_by "$v" || die "TEXT の by:$v は語彙にない。使えるのは: $BY_VOCAB"
+		if [ -n "$by" ] && [ "$v" != "$by" ]; then
+			if [ "${byenv:-0}" -eq 1 ]; then
+				continue # 環境の既定より本文の明示が勝つ
+			fi
+			die "--by $by と TEXT の by:$v が食い違っている。どちらかに揃える"
+		fi
+	done
+	if [ -n "$inline" ]; then by=''; fi # 本文に書いてあるので足さない
+	text=$(printf '%s' "$text_in" | awk "$AWKLIB"'{ print trim($0) }')
+	[ -z "$by" ] || text="$text by:$by"
 
 	next=$(fmt_id "$(next_id)") || exit 1
 
@@ -938,7 +995,14 @@ run_check() {
 				if (!iskv(kv[ki])) continue
 				if (kv[ki] !~ /^[^: \t]+:[^: \t]+$/)
 					err("key:value の形式違反 (" kv[ki] ") —— key も value もコロンを含めない", line)
+				else if (kvkey(kv[ki]) == "by") {
+					nby++
+					if (kv[ki] !~ /^by:(me|claude|codex)$/)
+						err("by: の値が語彙にない (" kv[ki] ") —— me / claude / codex のどれか", line)
+				}
 			}
+			if (nby > 1) err("by: が 2 つ以上ある", line)
+			nby = 0
 
 			# --- id -------------------------------------------------------
 			c = idcount(line)

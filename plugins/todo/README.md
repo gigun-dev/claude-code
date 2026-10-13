@@ -50,10 +50,13 @@ todo.txt の道具からは完了行 + context + ただの語として読める�
 - **上流の仕様**は `skills/todo/references/todo-txt-format.md` に**そのまま**入れてある
   (上流 README の逐語コピー。GPL-3.0 で、同じディレクトリの `LICENSE-todo-txt` が
   そのライセンス)。**編集しない** —— 更新は上流から取り直す。
-- **このプラグインの拡張**(`id:` `dep:` `see:` `@wip`・並び順)は
+- **このプラグインの拡張**(`id:` `dep:` `see:` `by:` `@wip`・並び順)は
   `skills/todo/SKILL.md` の「語彙」が正。**毎回の起動で要る情報なので reference に
   置かない**(reference は必要になったときだけ読まれる)。
 
+- `by:me|claude|codex` は**誰が登録したか**。ユーザーが言った・頼んだものは、
+  エージェントが書いても `me`。エージェントが自分で導いたものは自分の名。
+  任意(無い行は違反ではない)。`todo ls by:me` で絞れる。
 - `(A)`〜`(Z)` は**重要度**。進行中は表さない —— それは `@wip`。
 - `@` は**そのタスクが要る状況**(`@device` `@user` `@unattended`)。
 - **作成日は仕様上「任意」**。`add` は必ず付けるが、無い行を `check` は咎めない
@@ -84,6 +87,8 @@ worktree の implementer は報告するに留める(`skills/todo/SKILL.md` の�
 
 ```sh
 todo add "text"          # 作成日と id: を付けて追記(+proj @ctx key:value は text にそのまま書く)
+todo add --by me "text"  # by:me を付ける(me=ユーザーの依頼 / claude・codex=エージェントが自分で導いた。
+                         #   既定は環境変数 TODO_BY、明示した --by が勝つ。語彙外は拒む)
 todo ready [TERM...]     # dep: が解けている open 行 = いま着手できる / 並列に投げられる
                          #   ADR があれば先頭に決定の索引(題だけ)を出す
 todo ls [TERM...]        # open を優先度順に。TERM は AND、-TERM で除外
