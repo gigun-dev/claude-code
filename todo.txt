@@ -15,3 +15,4 @@
 2026-09-11 並行エージェントが同じタスクへ二重着手しないよう既存委譲の担当通知を検証し必要ならCLIで着手競合を検出する +plugins @unattended id:0029
 2026-09-11 タスクから検証セッションを辿れるよう既存cman・session-breakdownのセッション指定でClaude/Codex双方のログを取得できるか確認し不足があれば直す +plugins @unattended id:0031
 2026-09-11 worktree を持つ subagent が worktree の外へ書いた件を、session-breakdown が終了コードで返す形にする。2026-09-11 の実測で 8 件あり、うち 6 件が本線のビルド対象ツリーへの書き込みだった +plugins @unattended see:docs/telemetry/2026-09-11-subagent-time-breakdown.md id:0033
+(A) 2026-10-15 委譲結果を受け取った親が、未確認項目と todo 候補を指摘なしに todo.txt へ登録し(by:claude)、着手時に start で @wip を付けるようにする。2026-10-15 の dotfiles セッションでは、サブエージェント報告の未確認 3 件と todo 候補 3 件が利用者の指摘まで未登録で、by も @wip も使われなかった。グローバル CLAUDE.md の reconcile 規則はあったのに発火していない。対照ケースで再現させ、skill の description・SubagentStop hook・報告形式のどれで直すかを決める +todo @unattended by:me id:0050
