@@ -28,6 +28,19 @@ Two things used to be written by hand in two places:
   that used to live in .agents/plugins/marketplace.json) so a single source
   exists for every plugin. See CLAUDE.md for the command to run.
 
+  3. the Antigravity CLI (agy) native plugin files, generated in full for every
+     plugin that has a non-empty skills/ directory or a .mcp.json:
+       plugins/<name>/.antigravity-plugin/plugin.json  (name/version/
+         description/author from .claude-plugin/plugin.json)
+       plugins/<name>/mcp_config.json  (from the canonical .mcp.json:
+         stdio -> command/args/env, http -> serverUrl, and
+         ${CLAUDE_PLUGIN_ROOT} -> ${PLUGIN_ROOT})
+     skills/ is shared as-is (same SKILL.md format). Skipped on purpose:
+     hooks (agy events/tool names differ), commands, agents.
+     mcp_config.json has to sit at the plugin root (agy reads it from there
+     even when the manifest lives in .antigravity-plugin/); the dedicated
+     .antigravity-plugin/ dir keeps the manifest out of Claude/Codex discovery.
+
 Run `scripts/generate_manifests.py --check` to detect drift (used by
 scripts/verify.sh) or `scripts/generate_manifests.py --write` to regenerate.
 Default (no flag) behaves like --check: it reports and exits 1 without
@@ -151,6 +164,93 @@ def sync_plugin_manifests(write: bool) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# 3. agy (Antigravity CLI) native plugin files — generated in full
+# ---------------------------------------------------------------------------
+
+AGY_MANIFEST_DIR = ".antigravity-plugin"
+AGY_MARKER_KEY = "$generated"
+AGY_MARKER_VALUE = (
+    "scripts/generate_manifests.py --write, from ../.claude-plugin/plugin.json. "
+    "Do not hand-edit this file."
+)
+AGY_MCP_MARKER_VALUE = (
+    "scripts/generate_manifests.py --write, from .mcp.json. Do not hand-edit this file."
+)
+
+
+def has_skills(plugin_dir: Path) -> bool:
+    skills = plugin_dir / "skills"
+    return skills.is_dir() and any(skills.glob("*/SKILL.md"))
+
+
+def convert_mcp_server(plugin: str, name: str, server: dict) -> dict:
+    """Map one Claude/Codex .mcp.json server to agy's mcp_config.json shape.
+
+    agy 1.3.5 validates "command or serverUrl" (its newer docs call the key
+    "url" with serverUrl as legacy; 1.3.5 rejects plain "url", so serverUrl)."""
+    kind = server.get("type", "stdio")
+    if kind == "stdio":
+        out: dict = {"command": server["command"]}
+        if "args" in server:
+            out["args"] = server["args"]
+        if "env" in server:
+            out["env"] = server["env"]
+    elif kind == "http":
+        out = {"serverUrl": server["url"]}
+    else:
+        raise SystemExit(f"{plugin}: MCP server {name!r} has unsupported type {kind!r}")
+    unknown = set(server) - {"type", "command", "args", "env", "url"}
+    if unknown:
+        raise SystemExit(f"{plugin}: MCP server {name!r} has fields agy mapping drops: {sorted(unknown)}")
+    return json.loads(json.dumps(out).replace("${CLAUDE_PLUGIN_ROOT}", "${PLUGIN_ROOT}"))
+
+
+def generate_agy_files(plugin_dir: Path) -> dict[Path, str]:
+    """Return {path: text} of agy files this plugin should have ({} if none)."""
+    claude_path = plugin_dir / ".claude-plugin" / "plugin.json"
+    mcp_path = plugin_dir / ".mcp.json"
+    if not claude_path.is_file() or not (has_skills(plugin_dir) or mcp_path.is_file()):
+        return {}
+    claude_data = json.loads(claude_path.read_text(encoding="utf-8"))
+    manifest = {AGY_MARKER_KEY: AGY_MARKER_VALUE}
+    for field in GENERATED_PLUGIN_FIELDS:
+        if field not in claude_data:
+            raise SystemExit(f"{claude_path}: missing \"{field}\", needed for agy plugin.json")
+        manifest[field] = claude_data[field]
+    files = {plugin_dir / AGY_MANIFEST_DIR / "plugin.json": fmt_json(manifest, compact=False)}
+    if mcp_path.is_file():
+        servers = json.loads(mcp_path.read_text(encoding="utf-8"))["mcpServers"]
+        mcp = {
+            AGY_MARKER_KEY: AGY_MCP_MARKER_VALUE,
+            "mcpServers": {
+                n: convert_mcp_server(plugin_dir.name, n, srv) for n, srv in servers.items()
+            },
+        }
+        files[plugin_dir / "mcp_config.json"] = fmt_json(mcp, compact=False)
+    return files
+
+
+def sync_agy(write: bool) -> list[str]:
+    stale: list[str] = []
+    for plugin_dir in plugin_dirs():
+        expected = generate_agy_files(plugin_dir)
+        # A previously generated mcp_config.json whose .mcp.json is gone is stale too.
+        leftover = plugin_dir / "mcp_config.json"
+        if leftover not in expected and leftover.is_file():
+            stale.append(str(leftover.relative_to(REPO_ROOT)))
+            if write:
+                leftover.unlink()
+        for path, text in expected.items():
+            if path.is_file() and path.read_text(encoding="utf-8") == text:
+                continue
+            stale.append(str(path.relative_to(REPO_ROOT)))
+            if write:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, encoding="utf-8")
+    return stale
+
+
+# ---------------------------------------------------------------------------
 # 2. marketplace.json
 # ---------------------------------------------------------------------------
 
@@ -232,6 +332,7 @@ def main() -> None:
 
     stale_plugins = sync_plugin_manifests(write)
     marketplace_stale = sync_marketplace(write)
+    stale_agy = sync_agy(write)
 
     problems = []
     if stale_plugins:
@@ -245,6 +346,10 @@ def main() -> None:
         problems.append(
             f"{CODEX_MARKETPLACE.relative_to(REPO_ROOT)} {verb}"
         )
+
+    if stale_agy:
+        verb = "regenerated" if write else "out of sync"
+        problems.append(f"agy plugin files {verb}: " + ", ".join(stale_agy))
 
     if not problems:
         print("generated manifests are in sync.")

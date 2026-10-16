@@ -1,0 +1,10 @@
+{
+  "$generated": "scripts/generate_manifests.py --write, from ../.claude-plugin/plugin.json. Do not hand-edit this file.",
+  "name": "todo",
+  "version": "0.5.0",
+  "description": "Durable repository context an agent reads: tasks in todo.txt and decisions in docs/adr. Three skills — see what is ready and record every state change as it happens (todo), record and check architecture decisions (adr), install or inspect either in a repository (doctor). Two bundled CLIs, bin/todo and bin/adr. Successor to `harness`; absorbed the separate `adr` plugin. ADR format and bar vendored from mattpocock/skills (MIT).",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  }
+}

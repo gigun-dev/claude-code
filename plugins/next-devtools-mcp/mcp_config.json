@@ -1,0 +1,12 @@
+{
+  "$generated": "scripts/generate_manifests.py --write, from .mcp.json. Do not hand-edit this file.",
+  "mcpServers": {
+    "next-devtools": {
+      "command": "bunx",
+      "args": [
+        "-y",
+        "next-devtools-mcp@latest"
+      ]
+    }
+  }
+}

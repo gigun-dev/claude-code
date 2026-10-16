@@ -10,7 +10,7 @@ todo / adr / ios-skills / 各種 MCP をプラグインとして配布するモ�
 ## 主要コマンド
 
 - 検証: `bash scripts/verify.sh`。CI・pre-push からは呼ばれない。手で叩く
-- `.claude-plugin/plugin.json` か `.claude-plugin/marketplace.json` を変えたら `python3 scripts/generate_manifests.py --write` で生成し直す(元はこの2つ。`.codex-plugin/plugin.json` は name/version/description/author が生成対象で、homepage・repository・keywords・mcpServers/skills の指す先・interface は引き続き手で編集する。`.agents/plugins/marketplace.json` は全体が生成物で手で編集しない)
+- `.claude-plugin/plugin.json` か `.claude-plugin/marketplace.json` を変えたら `python3 scripts/generate_manifests.py --write` で生成し直す(元はこの2つ。`.codex-plugin/plugin.json` は name/version/description/author が生成対象で、homepage・repository・keywords・mcpServers/skills の指す先・interface は引き続き手で編集する。`.agents/plugins/marketplace.json` は全体が生成物で手で編集しない。agy 向けの `.antigravity-plugin/plugin.json` と plugin 直下の `mcp_config.json` も全体が生成物で、`.mcp.json` と `.claude-plugin/plugin.json` から作る)
 - 次にやること: `plugins/todo/bin/todo ready`
 - 既存の決定: `plugins/todo/bin/adr ls`
 

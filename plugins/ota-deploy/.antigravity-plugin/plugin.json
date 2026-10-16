@@ -1,0 +1,10 @@
+{
+  "$generated": "scripts/generate_manifests.py --write, from ../.claude-plugin/plugin.json. Do not hand-edit this file.",
+  "name": "ota-deploy",
+  "version": "0.3.0",
+  "description": "Build and distribute iOS IPA and Android APK privately via Cloudflare Access or Tailscale, with optional encrypted Bark notifications. Shared skill for Claude Code and Codex.",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  }
+}

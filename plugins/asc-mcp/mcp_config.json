@@ -1,0 +1,8 @@
+{
+  "$generated": "scripts/generate_manifests.py --write, from .mcp.json. Do not hand-edit this file.",
+  "mcpServers": {
+    "asc-mcp": {
+      "serverUrl": "https://build.097969.xyz/mcp"
+    }
+  }
+}

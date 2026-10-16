@@ -1,0 +1,10 @@
+{
+  "$generated": "scripts/generate_manifests.py --write, from ../.claude-plugin/plugin.json. Do not hand-edit this file.",
+  "name": "markitdown-mcp",
+  "version": "1.0.0",
+  "description": "MarkItDown MCP server (file to markdown conversion)",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  }
+}

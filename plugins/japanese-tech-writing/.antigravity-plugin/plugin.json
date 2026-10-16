@@ -1,0 +1,10 @@
+{
+  "$generated": "scripts/generate_manifests.py --write, from ../.claude-plugin/plugin.json. Do not hand-edit this file.",
+  "name": "japanese-tech-writing",
+  "version": "0.1.0",
+  "description": "Style rules for Japanese technical documents and book manuscripts: paragraph writing, rigor of argument, reader load, point of view and narration, restraint in rhetoric, eliminating LLM-ish filler phrases and translationese metaphors, and reducing redundancy. Vendored verbatim from a k16shikano gist (Unlicense).",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  }
+}

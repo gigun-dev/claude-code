@@ -1,0 +1,10 @@
+{
+  "$generated": "scripts/generate_manifests.py --write, from ../.claude-plugin/plugin.json. Do not hand-edit this file.",
+  "name": "chrome-devtools-mcp",
+  "version": "1.0.0",
+  "description": "Chrome DevTools MCP server",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  }
+}

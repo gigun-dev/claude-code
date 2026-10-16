@@ -28,6 +28,19 @@ codex plugin add <plugin>@gigun
 
 Langfuse と modern-web-guidance は上流の Git リポジトリを両カタログから直接参照する。`claude plugin install <plugin>@gigun` / `codex plugin add <plugin>@gigun` で導入し、更新時は各ホストの marketplace とプラグインを更新する。上流のソースはこのリポジトリへ複製しない。
 
+### Antigravity CLI (agy)
+
+スキルと MCP だけを agy ネイティブ形式で生成している(`scripts/generate_manifests.py`)。`plugins/<name>/.antigravity-plugin/plugin.json` と、MCP を持つ plugin は直下の `mcp_config.json`(`.mcp.json` から変換。http は `serverUrl`、`${CLAUDE_PLUGIN_ROOT}` は `${PLUGIN_ROOT}`)。`skills/` は Claude と同じ `SKILL.md` をそのまま読ませる。`.claude-plugin/` があっても `.antigravity-plugin/` を持つディレクトリはネイティブ plugin として扱われ、リポジトリ内のファイルは書き換えられない。
+hooks は agy とイベント・ツール名が違うため対象外。commands は未対応。`agents/` は agy が直接読む(`agy plugin validate` で確認)。
+
+`agy plugin import` / `install` はコピーを作って UI 管理の `config.json` に記録するため使わず、`~/.gemini/config/plugins.json` でこのリポジトリを指す。`entries[].path` は `/` 絶対か `~/` 始まりのみ展開される(環境変数は展開されない)。
+
+```json
+{ "entries": [{ "path": "~/ghq/github.com/gigun-dev/claude-code/plugins" }] }
+```
+
+単体検証は `agy plugin validate plugins/<name>`(認証不要・読み取りのみ)。
+
 ## Claude Code / Codex 共通の構成
 
 | 内容 | 置き場 | 扱い |

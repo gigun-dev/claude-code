@@ -1,0 +1,13 @@
+{
+  "$generated": "scripts/generate_manifests.py --write, from .mcp.json. Do not hand-edit this file.",
+  "mcpServers": {
+    "agy": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--script",
+        "${PLUGIN_ROOT}/server.py"
+      ]
+    }
+  }
+}
