@@ -34,6 +34,7 @@
 
 | プロジェクト | 完了日 | 備考 |
 | --- | --- | --- |
+| `gigun-dev/figmate` | 2026-10-18 | 未完項目のみ `todo.txt`/`done.txt` へ移行(旧カタログ記号を各行に残す)、ADR 5件記録、`session-start.sh` 撤去、`pre-push` は維持。`docs/next-directions.md` と `docs/log.md` は凍結(a4e99d2) |
 | `realbind/cf-asc-dashbord` | 2026-09-24 | 未完項目のみ `todo.txt`/`done.txt` へ移行、ADR 2件記録、`session-start.sh` 撤去、`pre-push` は維持。詳細はそのリポジトリの `docs/next-directions.md`（凍結）を参照 |
 
 ## 各プロジェクトで渡す依頼文
