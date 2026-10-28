@@ -281,7 +281,7 @@ def generate_codex_marketplace() -> str:
         if isinstance(source, str):
             codex_source = {"source": "local", "path": source}
             category = load_category(name)
-        elif isinstance(source, dict) and source.get("source") == "url":
+        elif isinstance(source, dict) and source.get("source") in {"url", "git-subdir"}:
             codex_source = source
             category = p.get("category")
             if not category:

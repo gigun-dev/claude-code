@@ -115,6 +115,38 @@
       },
       "description": "Keep your coding agent up to date with the latest web best practices.",
       "category": "Developer Tools"
+    },
+    {
+      "name": "swift-concurrency-pro",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/twostraws/Swift-Concurrency-Agent-Skill.git",
+        "path": "swift-concurrency-pro",
+        "ref": "main"
+      },
+      "description": "Reviews Swift code for concurrency correctness, modern API usage (actors, async/await), and common async pitfalls.",
+      "category": "Developer Tools"
+    },
+    {
+      "name": "swift-testing-pro",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/twostraws/Swift-Testing-Agent-Skill.git",
+        "path": "swift-testing-pro",
+        "ref": "main"
+      },
+      "description": "Reviews Swift code for modern Swift Testing framework usage (@Test, #expect) and migration from XCTest.",
+      "category": "Developer Tools"
+    },
+    {
+      "name": "swiftui-pro",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/twostraws/SwiftUI-Agent-Skill.git",
+        "ref": "main"
+      },
+      "description": "Reviews SwiftUI code for modern API best practices, state management, and performance.",
+      "category": "Developer Tools"
     }
   ]
 }
