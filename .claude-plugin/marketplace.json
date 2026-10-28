@@ -93,8 +93,13 @@
     },
     {
       "name": "hallmark",
-      "source": "./plugins/hallmark",
-      "description": "Distinctive UI design, audit, redesign and design study (Nutlope/hallmark v1.1.0, MIT)."
+      "source": {
+        "source": "url",
+        "url": "https://github.com/Nutlope/hallmark.git",
+        "ref": "main"
+      },
+      "description": "Distinctive UI design, audit, redesign and design study (Nutlope/hallmark, MIT).",
+      "category": "Design"
     },
     {
       "name": "ota-deploy",

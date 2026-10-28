@@ -201,8 +201,9 @@
     {
       "name": "hallmark",
       "source": {
-        "source": "local",
-        "path": "./plugins/hallmark"
+        "source": "url",
+        "url": "https://github.com/Nutlope/hallmark.git",
+        "ref": "main"
       },
       "policy": {
         "installation": "AVAILABLE",
