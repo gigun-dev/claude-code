@@ -3,8 +3,7 @@
 エージェントが読む文脈を、リポジトリのファイルに置く 1 つの配布単位。
 **これからやることは `todo.txt`、覆しにくい決まりごとは `docs/adr/`。**
 CLI は `bin/todo`・`bin/adr`・`bin/doctor` の 3 本、skill は `todo` / `adr` / `doctor` の 3 つ。
-(`adr` は 2026-09-10 まで別プラグインだった。統合の理由は
-`docs/adr/0005-merge-adr-into-the-todo-plugin.md`。)
+(`adr` はかつて別プラグインだったが、エージェントが読む持続的な文脈として 1 つの配布単位に統合された。)
 `bin/doctor` は指示(`CLAUDE.md` / `AGENTS.md`)と実体の食い違いだけを見る。
 `todo check` / `adr check` が形式を見るのに対し、こちらは決定の置き場の有無・
 指示からの紐付け・「正典」と名指しされた実在しないファイル・登録されていない
