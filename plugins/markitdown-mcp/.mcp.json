@@ -1,1 +1,1 @@
-{"mcpServers":{"markitdown":{"type":"stdio","command":"uvx","args":["markitdown-mcp"]}}}
+{"mcpServers":{"markitdown":{"type":"stdio","command":"markitdown-mcp"}}}

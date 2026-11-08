@@ -2,10 +2,7 @@
   "$generated": "scripts/generate_manifests.py --write, from .mcp.json. Do not hand-edit this file.",
   "mcpServers": {
     "markitdown": {
-      "command": "uvx",
-      "args": [
-        "markitdown-mcp"
-      ]
+      "command": "markitdown-mcp"
     }
   }
 }
