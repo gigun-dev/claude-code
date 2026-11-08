@@ -177,6 +177,11 @@
       },
       "description": "Rewrites AI-generated Japanese prose to read naturally while keeping meaning, numbers, negations and conditions (nanaism/yomiyasu, MIT).",
       "category": "Productivity"
+    },
+    {
+      "name": "git-workflow",
+      "source": "./plugins/git-workflow",
+      "description": "Git workflow skills. commit: atomic Conventional Commits. Skills copied verbatim from ryoppippi/dotfiles (MIT)."
     }
   ]
 }

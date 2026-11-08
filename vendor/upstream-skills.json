@@ -42,6 +42,13 @@
       "path": "agents/skills/edit-skills",
       "dest": "plugins/edit-skills/skills/edit-skills",
       "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
+    },
+    {
+      "name": "commit",
+      "repo": "ryoppippi/dotfiles",
+      "path": "agents/skills/commit",
+      "dest": "plugins/git-workflow/skills/commit",
+      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
     }
   ]
 }

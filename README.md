@@ -94,10 +94,11 @@ MCPサーバーのコード・テスト・配布方法までこのリポジト�
 | [`t3`](plugins/t3/README.md) | t3-delegate, t3-limits | T3 Code 内の子タスク委譲と quota 確認 + T3 Code MCP(ryoppippi、MIT)
 | [`cross-agent`](plugins/cross-agent/README.md) | ask-other-agent, review-loop | 他社エージェントへの相談・レビュー(ryoppippi、MIT)
 | [`edit-skills`](plugins/edit-skills/README.md) | edit-skills | skill 編集の規約と監査(ryoppippi、MIT)
+| [`git-workflow`](plugins/git-workflow/README.md) | commit | 小さな Conventional Commits を作る(ryoppippi、MIT)
 
 Supabase・Vercel など公式マーケットプレイスに既にMCP内包プラグインがあるものは重複させず、`claude-plugins-official` 側を使う方針。
 
-`worktree` `t3` `cross-agent` `edit-skills` の skill は ryoppippi/dotfiles と ryoppippi/t3-limits から原本のまま写しており、出典と固定 commit は [`vendor/upstream-skills.json`](vendor/upstream-skills.json) にある。`scripts/sync_upstream_skills.py`(既定は dry-run、`--write` で写し直し)と週次の `.github/workflows/upstream-skills.yml` が差分を確認する。
+`worktree` `t3` `cross-agent` `edit-skills` `git-workflow` の skill は ryoppippi/dotfiles と ryoppippi/t3-limits から原本のまま写しており、出典と固定 commit は [`vendor/upstream-skills.json`](vendor/upstream-skills.json) にある。`scripts/sync_upstream_skills.py`(既定は dry-run、`--write` で写し直し)と週次の `.github/workflows/upstream-skills.yml` が差分を確認する。
 
 ### harness から todo・ADR へ移行
 
