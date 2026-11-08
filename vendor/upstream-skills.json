@@ -48,7 +48,14 @@
       "repo": "ryoppippi/dotfiles",
       "path": "agents/skills/commit",
       "dest": "plugins/git-workflow/skills/commit",
-      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
+      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805",
+      "replace": [
+        {
+          "file": "SKILL.md",
+          "from": "Write the message in English with UK spelling:",
+          "to": "Write the message in Japanese, keeping the Conventional Commits type and scope in English:"
+        }
+      ]
     }
   ]
 }

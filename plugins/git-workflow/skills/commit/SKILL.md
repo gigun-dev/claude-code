@@ -27,7 +27,7 @@ Argument `push` (default `false`): push once all commits are made. Use it for
    The index may already hold changes staged for `nix run .#switch`; check
    the full staged diff before each commit and unstage anything outside the
    current commit unit.
-4. Write the message in English with UK spelling:
+4. Write the message in Japanese, keeping the Conventional Commits type and scope in English:
 
    ```text
    <type>(<scope>): <subject>
