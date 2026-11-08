@@ -17,3 +17,8 @@
 2026-10-13 着手中の印に日付を持たせ(wip:日付)、ready の先頭に着手中を出し、更新系のコマンドで着手中の存在を促す。日付の無い古い印も読めるようにする +todo by:me id:0049
 (A) 2026-10-15 委譲結果を受け取った親が、未確認項目と todo 候補を指摘なしに todo.txt へ登録し(by:claude)、着手時に start で @wip を付けるようにする。2026-10-15 の dotfiles セッションでは、サブエージェント報告の未確認 3 件と todo 候補 3 件が利用者の指摘まで未登録で、by も @wip も使われなかった。グローバル CLAUDE.md の reconcile 規則はあったのに発火していない。対照ケースで再現させ、skill の description・SubagentStop hook・報告形式のどれで直すかを決める +todo @unattended by:me id:0050
 2026-10-17 Claude Code と Codex の worktree 運用を棚卸しし、規則を両者で揃えて置き場所を決める。現状、規則(並行書き込み時のみ・squash-merge・統合後に親が削除)はグローバル CLAUDE.md にしか無く codex/AGENTS.md には無い。Codex app は ~/.codex/worktrees/ に作る(2026-10-17 時点で 6 個)。figmate では統合済みの worktree が消し忘れで残っていた。id:0033 の worktree 外書き込みと合わせて扱う +worktree by:me id:0051
+2026-11-09 Apple同梱Xcodeプラグインへの移行方法をClaude・Codexで実走しxcode-mcpとの二重登録を解消する +ios-skills by:codex dep:0059,0060 id:0055
+2026-11-09 ios-simulatorとios-device-buildの通常UI検証をApple device-interactionへ振り分け独自の状態準備と配布手順を維持する +ios-skills by:codex dep:0059,0060 id:0056
+2026-11-09 ios-app-iconのXcode組み込み手順をxcrun xcodeprojで検証し旧形式の手編集案内と明示UDIDを欠く例を更新する +ios-skills by:codex id:0057
+2026-11-09 新しいxcproj形式を最小buildで確認し実機buildとASC uploadの重複したproject探索処理の対応要否を判定する +ios-skills by:codex id:0058
+2026-11-09 miniのMCP・Simulatorとmini-vmからの承認済みリモート実行経路を実走しGUI・署名・実機・映像配信の境界を確認する +ios-skills see:docs/ios-skills/environment-constraints.md by:codex id:0060

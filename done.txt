@@ -32,3 +32,5 @@ x 2026-10-13 2026-10-13 todo の各行に登録者(利用者本人 / Claude / Co
 x 2026-10-28 2026-10-28 Emil のスキルを Claude Code と Codex 用プラグインとして配布する +plugins @unattended by:me id:0052
 x 2026-10-29 2026-09-10 repoとインストール済みpluginの版・本文を照合し再導入後も更新が反映されることを確認する +plugins @unattended id:0013
 x 2026-10-29 2026-10-29 サードパーティ製スキル(Swift/hallmark等)の外部URL参照化とADR 0009の制定 +plugins by:me id:0053
+x 2026-11-09 2026-11-09 Xcode 27.2とApple同梱プラグインに対してiOS関連skill・pluginの更新方針を棚卸しする +ios-skills by:me id:0054
+x 2026-11-09 2026-11-09 miniとmini-vmのXcode・GUI・MCP・Simulator制約を確認しiOSツール移行の前提を整理する +ios-skills by:me id:0059
