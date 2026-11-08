@@ -92,7 +92,7 @@ MCPサーバーのコード・テスト・配布方法までこのリポジト�
 | `yomiyasu` | yomiyasu | AI が書いた日本語を、意味・数値・否定・条件を保ったまま読みやすく直す（nanaism/yomiyasu、MIT、Claude Code のみ） |
 | [`worktree`](plugins/worktree/README.md) | worktree | git-wt / git-wtpr による worktree 操作(ryoppippi/dotfiles、MIT)。`git-wt` が PATH にあること |
 | [`t3`](plugins/t3/README.md) | t3-delegate, t3-limits | T3 Code 内の子タスク委譲と quota 確認 + T3 Code MCP(ryoppippi、MIT)
-| [`cross-agent`](plugins/cross-agent/README.md) | ask-other-agent, review-loop, web-fetch | 他社エージェントへの相談・レビュー・Web 取得(ryoppippi、MIT)
+| [`cross-agent`](plugins/cross-agent/README.md) | ask-other-agent, review-loop | 他社エージェントへの相談・レビュー(ryoppippi、MIT)
 | [`edit-skills`](plugins/edit-skills/README.md) | edit-skills | skill 編集の規約と監査(ryoppippi、MIT)
 
 Supabase・Vercel など公式マーケットプレイスに既にMCP内包プラグインがあるものは重複させず、`claude-plugins-official` 側を使う方針。

@@ -89,7 +89,7 @@
     {
       "name": "cross-agent",
       "source": "./plugins/cross-agent",
-      "description": "Ask other agents or models (Codex, Claude Code, Grok, Cursor), run a cross-vendor review loop, and fetch web pages with ax/tgrab. Skills copied verbatim from ryoppippi/dotfiles (MIT)."
+      "description": "Ask other agents or models (Codex, Claude Code, Grok, Cursor) and run a cross-vendor review loop. Skills copied verbatim from ryoppippi/dotfiles (MIT)."
     },
     {
       "name": "edit-skills",

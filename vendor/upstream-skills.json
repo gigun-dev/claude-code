@@ -37,13 +37,6 @@
       "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
     },
     {
-      "name": "web-fetch",
-      "repo": "ryoppippi/dotfiles",
-      "path": "agents/skills/web-fetch",
-      "dest": "plugins/cross-agent/skills/web-fetch",
-      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
-    },
-    {
       "name": "edit-skills",
       "repo": "ryoppippi/dotfiles",
       "path": "agents/skills/edit-skills",

@@ -2,7 +2,7 @@
   "$generatedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); generates name/version/description/author here — homepage, repository, keywords, the mcpServers/skills pointer, and interface stay hand-edited in this file",
   "name": "cross-agent",
   "version": "0.1.0",
-  "description": "Ask other agents or models (Codex, Claude Code, Grok, Cursor), run a cross-vendor review loop, and fetch web pages with ax/tgrab. Skills copied verbatim from ryoppippi/dotfiles (MIT).",
+  "description": "Ask other agents or models (Codex, Claude Code, Grok, Cursor) and run a cross-vendor review loop. Skills copied verbatim from ryoppippi/dotfiles (MIT).",
   "author": {
     "name": "gigun",
     "url": "https://github.com/gigun-dev"
