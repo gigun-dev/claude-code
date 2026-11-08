@@ -34,7 +34,6 @@ CHECK_NAMES=(
 	"todo プラグインのテスト (tests/run.sh)"
 	"pre-push プラグインの実 push テスト"
 	"telemetry のローカル集計・クエリ回帰テスト"
-	"worktree プラグインのテスト (sweep / integrate)"
 	"ota-deploy の配布・認可テスト"
 )
 check_total=${#CHECK_NAMES[@]}
@@ -205,17 +204,6 @@ elif telemetry_out=$(python3 -m unittest discover -s plugins/telemetry/tests -p 
     fi
 else
     printf '%s\n' "$telemetry_out"
-    overall_failed=1
-fi
-
-# 使い捨てリポジトリで squash 判定・消し急ぎ防止・locked の据え置き・
-# integrate の merge/finish と競合時の停止を実機確認する。
-echo ""
-check_header
-if worktree_out=$(bash plugins/worktree/tests/run.sh 2>&1); then
-    printf '%s\n' "$worktree_out" | tail -2
-else
-    printf '%s\n' "$worktree_out"
     overall_failed=1
 fi
 

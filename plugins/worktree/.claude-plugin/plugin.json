@@ -1,7 +1,7 @@
 {
   "name": "worktree",
-  "version": "0.2.0",
-  "description": "Manage git worktrees a subagent used: integrate (squash-merge, human commits, cleanup only after the commit is verified) as the primary path, sweep (judge removable / human-decides / hands-off, with a machine check for squash-merged branches) to catch what integrate didn't handle. Never guesses squash status and never force-deletes without a machine-verified reason.",
+  "version": "1.0.0",
+  "description": "Manage git worktrees with git-wt (and git-wtpr for PR checkouts): detect an existing linked worktree, create with --nocd, delete and rename safely. Adapted from ryoppippi/dotfiles (MIT).",
   "author": {
     "name": "gigun",
     "url": "https://github.com/gigun-dev"
