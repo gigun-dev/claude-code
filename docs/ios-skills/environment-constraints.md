@@ -40,6 +40,10 @@ CodexへのApple公式plugin登録と新規sessionのツール公開、miniか�
 - ProのClaudeへ公式xcode@claude-plugins-officialをinstallし、enabled=trueを確認。
   旧xcode-mcpはuser scopeで既にdisabledだった。Codexのbuild-ios-apps内XcodeBuildMCPは別実装であり削除しない。
   CodexへのApple公式plugin登録と新規sessionのツール公開は別途確認する。
+- ClaudeとCodexの管理CLIでios-skills 1.3.0 / asc-mcp 0.2.0へ更新済み。新規sessionで反映する。
+  Codexの公式marketplaceにxcode項目はなく、XcodeのCodex向けexportはskillsだけのpluginだった。
+  `xcrun mcpbridge run-agent --dry-run codex`は「Settings → Intelligence → Codexから再download」
+  が必要というagentInitializationErrorを返した。Xcode側のCodexを復旧してから登録・公開を再確認する。
 - miniのsigning/runner監査、固定commitの未署名archive結果はasc-mcpのdocs/ad-hoc-delivery.mdが正本。
   GUIではDevelopment identityのみ確認し、Distribution資材は保護領域を含め未確定。
   remote serve-simの実ストリーム・署名・実機インストール・再起動復帰はこの検証の成功に含めない。
