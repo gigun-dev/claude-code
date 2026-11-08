@@ -152,6 +152,16 @@
       },
       "description": "Reviews SwiftUI code for modern API best practices, state management, and performance.",
       "category": "Developer Tools"
+    },
+    {
+      "name": "yomiyasu",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/nanaism/yomiyasu.git",
+        "ref": "main"
+      },
+      "description": "Rewrites AI-generated Japanese prose to read naturally while keeping meaning, numbers, negations and conditions (nanaism/yomiyasu, MIT).",
+      "category": "Productivity"
     }
   ]
 }
