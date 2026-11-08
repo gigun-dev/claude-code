@@ -1,7 +1,7 @@
 {
   "$generatedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); generates name/version/description/author here — homepage, repository, keywords, the mcpServers/skills pointer, and interface stay hand-edited in this file",
   "name": "ios-skills",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "iOS app icon authoring, Simulator control, physical-device builds, and App Store Connect uploads.",
   "author": {
     "name": "gigun",

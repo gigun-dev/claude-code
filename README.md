@@ -84,7 +84,7 @@ MCPサーバーのコード・テスト・配布方法までこのリポジト�
 | `todo` | todo, adr, doctor | todo.txt でタスクと依存関係を、docs/adr/ で決定を管理 |
 | `pre-push` | pre-push | Git の push 前検証の導入・点検 |
 | `telemetry` | review | Langfuse のトレースから自分のセッションを実測し、設定改善に回す |
-| `ios-skills` | ios-app-icon, ios-simulator, ios-device-build, appstoreconnect-upload | `.icon`生成・Simulator操作・実機build・App Store Connect upload |
+| `ios-skills` | ios-app-icon, ios-simulator, ios-device-build, appstoreconnect-upload | 実行先の能力判定・Macへのリモート実行・アイコン・Simulator・実機build・ASC upload |
 | [`ota-deploy`](plugins/ota-deploy/README.md) | ota-deploy | Tailscale経由のiOS IPA・Android APK配布ページ生成 |
 | [`emil`](plugins/emil/README.md) | emil | UIデザイン、アニメーション、プロトタイピングとUI検証（Emil Kowalski、MIT） |
 | [`hallmark`](plugins/hallmark/README.md) | hallmark | 新規UIの設計・監査・再設計・参考デザインの分析（Nutlope/hallmark v1.1.0、MIT） |

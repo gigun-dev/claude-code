@@ -11,10 +11,14 @@ compatibility: >-
 
 # iOS実機ビルド
 
+最初に `python3 ../../scripts/ios-host.py probe --mcp` で実行先の能力を確認する。
+Linux・リモート Mac・Apple MCP の install/run 経路では
+[実行先と経路の選択](../../references/execution.md)を読む。必要な Apple ツールが公開されていれば
+その対応スキルを使い、IDE を介さない実行は以下の CLI を使う。Ad Hoc OTA 配布は asc-mcp の担当。
+
 対象を推測せず、プロジェクト・scheme・UDIDを明示して実行する。同じMacに他人の端末と他人の
 ビルド成果物が混在している前提で動く。端末が特定できない、または`--dry-run`のplanが依頼と
-食い違うなら、そこで止めてユーザーに聞く。1回もビルドせずに終える判断も、この手順の正しい
-終わり方に含める。
+食い違うなら、その不足を解消する。実行依頼があり plan が一致したら build・install・起動確認まで進める。
 
 ## 手順
 

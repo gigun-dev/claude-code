@@ -22,7 +22,25 @@ ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
 Xcode が新規プロジェクトに自動で入れる設定だが、XcodeGen の素の target には付かない。
 無いと素材を同梱しても actool がどれを採用するか分からず、**アイコンが空のままビルドが通る**。
 
-## 素の .xcodeproj の場合: Xcode 16 以降は pbxproj を編集しなくてよい
+## 素の .xcodeproj の場合
+
+`xcrun xcodeproj --help` が実行できる環境では、プロジェクト操作に公式 CLI を使う。
+旧 `project.pbxproj` と新 `project.xcproj` の両方を扱えるので、内部ファイルを直接編集して
+形式を推測しない。入口はどちらも `.xcodeproj` ディレクトリである。
+
+```bash
+xcrun xcodeproj target list --project App.xcodeproj
+xcrun xcodeproj group ls --project App.xcodeproj
+xcrun xcodeproj setting set --project App.xcodeproj \
+  ASSETCATALOG_COMPILER_APPICON_NAME AppIcon --target App
+```
+
+設定後に `setting get` と build product を確認する。通常 group に `.icon` を追加するときは
+`group add-file --help` と `group include --help` で対象 group / target を特定する。
+filesystem-synchronized group の内部はファイルを配置して同期させる。
+
+CLI がない Xcode では既存の同期フォルダ方式、XcodeGen の生成元、または IDE のプロジェクト操作を
+使う。生成元がある場合はそちらを更新し、生成された project だけを変更しない。
 
 `project.pbxproj` の `objectVersion = 77` かつ `PBXFileSystemSynchronizedRootGroup` が
 あれば **同期フォルダ**方式で、そのフォルダにファイルを置くだけでターゲットに入る。
@@ -33,8 +51,8 @@ Xcode が新規プロジェクトに自動で入れる設定だが、XcodeGen �
 grep -n "objectVersion\|PBXFileSystemSynchronizedRootGroup" App.xcodeproj/project.pbxproj
 ```
 
-古い形式(objectVersion < 70)なら PBXFileReference / PBXBuildFile / Resources phase の
-3箇所を手で足すことになるので、その場合は Xcode で追加したほうが速い。
+同期フォルダのない旧 project でも、利用可能なら上記 CLI から追加できる。
+CLI がない場合は IDE の追加操作を使い、複数の PBX オブジェクトを手で継ぎ足さない。
 
 ## 生成元(SVG / spec)はリポジトリに置き、バンドルからは外す
 
@@ -115,7 +133,7 @@ warning: The app icon set "AppIcon" has an unassigned child.
 ## 組み込み後の検証コマンド
 
 ```bash
-APP=$(find ~/Library/Developer/Xcode/DerivedData -name "YourApp.app" -path "*Debug-iphonesimulator*" | head -1)
+APP='/absolute/path/to/this-build/YourApp.app'
 
 # アイコンが焼き込まれたか
 test -f "$APP/Assets.car" && stat -f%z "$APP/Assets.car"
@@ -138,5 +156,6 @@ xcrun devicectl list devices --json-output /tmp/d.json
 python3 -c "import json;d=json.load(open('/tmp/d.json'));[print(x['deviceProperties']['name'],x['deviceProperties'].get('osVersionNumber')) for x in d['result']['devices']]"
 ```
 
-実機のスクリーンショットは `devicectl` からは取得できないので、ホーム画面の確認は
-人の目に頼ることになる。Simulator なら `xcrun simctl io booted screenshot` で撮れる。
+ホーム画面の確認は、実際に公開されている Apple の DeviceInteraction ツールか本人の実機確認を
+使う。`devicectl` で撮れないことを全経路の制約と扱わない。Simulator は
+`xcrun simctl io '<明示UDID>' screenshot /absolute/output/home.png` で撮れる。

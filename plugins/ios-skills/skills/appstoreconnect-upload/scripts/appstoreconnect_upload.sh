@@ -80,26 +80,13 @@ command -v xcodebuild >/dev/null 2>&1 || fail "$EX_ENV" "xcodebuild not found; s
 command -v python3 >/dev/null 2>&1 || fail "$EX_ENV" "python3 not found"
 command -v plutil >/dev/null 2>&1 || fail "$EX_ENV" "plutil not found"
 
-PROJECT_PATH="$(cd "$(dirname "$PROJECT_PATH")" 2>/dev/null && pwd)/$(basename "$PROJECT_PATH")" ||
-  fail "$EX_VALIDATE" "project path does not exist: $PROJECT_PATH"
-BUILD_KIND=""
-BUILD_FILE=""
-if [[ -d "$PROJECT_PATH" && "$PROJECT_PATH" == *.xcworkspace ]]; then
-  BUILD_KIND="-workspace"; BUILD_FILE="$PROJECT_PATH"
-elif [[ -d "$PROJECT_PATH" && "$PROJECT_PATH" == *.xcodeproj ]]; then
-  BUILD_KIND="-project"; BUILD_FILE="$PROJECT_PATH"
-elif [[ -d "$PROJECT_PATH" ]]; then
-  candidates=()
-  while IFS= read -r item; do candidates+=("$item"); done < <(find "$PROJECT_PATH" -maxdepth 1 -type d -name '*.xcworkspace' -print | sort)
-  if [[ ${#candidates[@]} -eq 0 ]]; then
-    while IFS= read -r item; do candidates+=("$item"); done < <(find "$PROJECT_PATH" -maxdepth 1 -type d -name '*.xcodeproj' -print | sort)
-  fi
-  [[ ${#candidates[@]} -eq 1 ]] || fail "$EX_VALIDATE" "directory must contain exactly one workspace or project"
-  BUILD_FILE="${candidates[0]}"
-  [[ "$BUILD_FILE" == *.xcworkspace ]] && BUILD_KIND="-workspace" || BUILD_KIND="-project"
-else
-  fail "$EX_VALIDATE" "--project must point to a .xcodeproj, .xcworkspace, or directory"
-fi
+# Keep project selection identical across build and archive/upload, including
+# Xcode 27.2 projects whose internal configuration is project.xcproj.
+IOS_COMMON="$(cd "$(dirname "$0")/../../../scripts" && pwd)"
+PROJECT_SELECTION="$(python3 "$IOS_COMMON/ios-project.py" "$PROJECT_PATH")" ||
+  fail "$EX_VALIDATE" "cannot resolve Xcode project"
+BUILD_KIND="${PROJECT_SELECTION%%$'\n'*}"
+BUILD_FILE="${PROJECT_SELECTION#*$'\n'}"
 
 PROJECT_ROOT="$(dirname "$BUILD_FILE")"
 [[ "$EXPORT_OPTIONS" = /* ]] || EXPORT_OPTIONS="$PROJECT_ROOT/$EXPORT_OPTIONS"

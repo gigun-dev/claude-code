@@ -34,3 +34,7 @@ x 2026-10-29 2026-09-10 repoとインストール済みpluginの版・本文を�
 x 2026-10-29 2026-10-29 サードパーティ製スキル(Swift/hallmark等)の外部URL参照化とADR 0009の制定 +plugins by:me id:0053
 x 2026-11-09 2026-11-09 Xcode 27.2とApple同梱プラグインに対してiOS関連skill・pluginの更新方針を棚卸しする +ios-skills by:me id:0054
 x 2026-11-09 2026-11-09 miniとmini-vmのXcode・GUI・MCP・Simulator制約を確認しiOSツール移行の前提を整理する +ios-skills by:me id:0059
+x 2026-11-09 2026-11-09 ios-simulatorとios-device-buildの通常UI検証をApple device-interactionへ振り分け独自の状態準備と配布手順を維持する +ios-skills by:codex dep:0059,0060 id:0056
+x 2026-11-09 2026-11-09 ios-app-iconのXcode組み込み手順をxcrun xcodeprojで検証し旧形式の手編集案内と明示UDIDを欠く例を更新する +ios-skills by:codex id:0057
+x 2026-11-09 2026-11-09 新しいxcproj形式を最小buildで確認し実機buildとASC uploadの重複したproject探索処理の対応要否を判定する +ios-skills by:codex id:0058
+x 2026-11-09 2026-11-09 mini・mini-vmの実行能力とMCP/CLI境界を調べ共通remote executorでSimulator boot・screenshotと失敗伝達を実走確認する。映像配信は0064、Codex登録は0063へ分離 +ios-skills see:docs/ios-skills/environment-constraints.md by:codex id:0060

@@ -23,10 +23,9 @@ skills:
 
 ## 最初にやること(順番を変えない)
 
-1. 新規端末が必要なら `simctl create` と `bootstatus` を先に済ませる。その後、対象端末への
-   **最初の操作として `scripts/sim-preflight.sh --udid <UDID>` を撃つ。** warnings の `fix` を実行してから次へ進む。
-   ここを飛ばすと**以降の観測がすべて無効になる**(システムプロキシで新品端末の TLS が全落ち /
-   ソフトキーボードが出ない、のどちらも実測で起きている)。
+1. スキルの環境確認で実行先と MCP / CLI の経路を選ぶ。CLI で新規端末を使う場合は
+   `simctl create` と `bootstatus` の後、`scripts/sim-preflight.sh --udid <UDID>` を実行する。
+   warnings は今回の操作に必要なものを確認・解消する。Apple の端末操作経路には idb 接続を要求しない。
 2. **UDID は main から指定されたものだけを使う。** 自分で `booted` を選ばない
    (複数 Booted は現実に起きる。他エージェントの端末を撮った事故が実際にある)。
    main が UDID を渡してこなかったら、**推測せず聞き返す**。

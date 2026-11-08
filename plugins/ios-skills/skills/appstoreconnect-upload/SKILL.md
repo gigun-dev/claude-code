@@ -3,7 +3,8 @@ name: appstoreconnect-upload
 description: |
   Archive and upload iOS/macOS apps to App Store Connect (TestFlight/App Store) via CLI.
   Use when: (1) User wants to deploy to TestFlight, (2) User wants to upload to App Store,
-  (3) User says "deploy", "upload", "archive", "TestFlight", "App Store Connect", or similar.
+  (3) User explicitly requests an App Store Connect archive/upload. Ad Hoc OTA installation
+  links and private iPhone distribution use asc-mcp instead.
 compatibility: >-
   macOS + Xcode。Apple Developer Program(有償)への登録と、App Store Connect にアクセスできる
   Apple ID が必要。ネットワーク接続必須。
@@ -11,8 +12,10 @@ compatibility: >-
 
 # App Store Connectへarchive/uploadする
 
-plan → validate → executeの順で進める。**既定の完了形はplanを出して止まること**で、archiveも
-ネットワークuploadも行わずに終えてよい。
+plan → validate → execute の順で進める。スクリプトの既定は plan のみだが、実 upload を依頼されて
+検証が通った場合は `--upload` で実行し、processing の確認まで進める。
+最初に `python3 ../../scripts/ios-host.py probe` を実行し、Linux・リモート Mac では
+[実行先と経路の選択](../../references/execution.md)を読む。
 
 ## 手順
 

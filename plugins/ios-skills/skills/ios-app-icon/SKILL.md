@@ -14,6 +14,9 @@ compatibility: >-
 
 # Liquid Glassアプリアイコンを作る
 
+最初に `python3 ../../scripts/ios-host.py probe` で実行先の Xcode・ictool・xcodeproj を確認する。
+Linux・リモート Mac では[実行先と経路の選択](../../references/execution.md)を読む。
+
 素材と最終renderは別物。作成 → `ictool` render → 実サイズ比較を必ず繰り返す。
 
 ## 描く前のゲート

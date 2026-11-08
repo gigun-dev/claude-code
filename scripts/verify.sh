@@ -37,6 +37,7 @@ CHECK_NAMES=(
 	"telemetry のローカル集計・クエリ回帰テスト"
 	"輸入 skill の固定情報 (vendor/upstream-skills.json)"
 	"ota-deploy の配布・認可テスト"
+	"iOS 実行先・project 選択・リモート終了値のテスト"
 )
 check_total=${#CHECK_NAMES[@]}
 check_n=0
@@ -256,6 +257,15 @@ echo ""
 check_header
 if python3 plugins/ota-deploy/tests/run.py && (cd plugins/ota-deploy/cloudflare && bun install --frozen-lockfile && bun run test && python3 publish.test.py); then
     echo "✓ ota-deploy"
+else
+    overall_failed=1
+fi
+
+# 実機やネットワークを使う確認は別途行い、ここでは実行境界の決定論的な回帰を検査する。
+echo ""
+check_header
+if python3 -m unittest discover -s plugins/ios-skills/tests -p 'test_*.py'; then
+    echo "✓ ios-skills execution"
 else
     overall_failed=1
 fi

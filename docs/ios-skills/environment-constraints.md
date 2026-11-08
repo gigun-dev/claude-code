@@ -1,6 +1,6 @@
 # iOS ツール移行前の環境確認
 
-2026-11-09 に SSH とローカル CLI で確認したスナップショット。推奨構成の決定ではない。
+2026-11-09 に SSH とローカル CLI で確認したスナップショット。実装と実走結果を含む。
 
 | 環境 | 確認結果 |
 |---|---|
@@ -13,11 +13,33 @@
 ## 更新方針への影響
 
 - Xcode 27.2 の機能を全環境の必須条件にしない。実行先のツール能力を確認して経路を選ぶ。
-- mini の mcpbridge はバイナリの存在のみ確認。MCP 接続、公開ツール、DeviceInteraction session は未検証。27.2 のツールと同一と扱わない。
+- mini の mcpbridge は存在するが、実際の起動はAppSandboxの未解決symbolで失敗した。Apple MCPを前提にせず、動作確認済みのCLIを使う。
 - mini-vm は主開発環境、mini は macOS 実行環境。相互 SSH は確認済みだが、MCP のリモート接続と各ツールの動作は別途実走する。同じ gigun へのアクセスがあることを build/sign/publish の資格情報分離の前提に含める。
 - CLI build、GUI 操作、Simulator 実行、USB 実機アクセス、ブラウザへの映像配信を別々に検証する。Xcode プロセスや runtime の存在だけで成功と判定しない。
-- mini の OS/Xcode 更新可否、GUI session への操作権限、Simulator の起動・描画性能、署名・実機接続、remote MCP の到達性、serve-sim の接続先と port forwarding は未確認。
+- mini の Simulator bootとscreenshotは確認済み。OS/Xcode更新可否、GUI操作、描画性能、署名・実機接続、serve-simの映像配信は未確認。
 
 ## 残る検証
 
-iOS のビルド、Simulator 起動、実機操作は行っていない。ネットワーク設定は後続の dotfiles 作業で移行・検証した。Apple 公式 plugin への移行と自作 skill の routing 更新は、これらの実走確認を経てから確定する。
+CodexへのApple公式plugin登録と新規sessionのツール公開、miniからの映像配信、実機操作、署名・配布、再起動復帰を残す。miniのMCP起動失敗はCLI経路の利用を妨げない。
+
+## 実装後の実走（2026-11-09）
+
+- ios-host.pyのprobeをPro、mini、mini-vmで実行し、さらにmini-vm経由でminiをprobeした。
+  ProはMCP initialize/tools/list成功、miniはAppSandbox未解決symbolでbridge起動失敗、
+  mini-vmはLinuxとしてMac実行先が必要と判定した。存在と動作を分離した。
+- macOSのTailscale SSHは `exit 4` もtransport終了値0となり、同一client→mini-vmは4だった。
+  miniの /usr/bin/login 経由の非TTY実行は上流issues/18256と一致する。共通executorが返す
+  子の終了値を使う方式でminiの失敗4・signal終了143・日本語stdinを実測した。
+- miniのCLIでpaired device列挙は0件。実機installは未実施。使い捨てiPhone17 Simulatorを
+  作成・boot完了・preflight・screenshot取得して実フレームを確認し、当該端末を削除した。
+  idbは未導入でタップは未検証。別targetのxcodebuild warningは停止せず、screenshotに必要な前提だけ確認した。
+- Proのxcrun xcodeprojで新project.xcproj内部形式のprojectを作成し、target/group/include/settingsから
+  SwiftUIアプリを構成して未署名build成功。既存project.pbxprojの設定read/writeもscratchで成功。
+  .xcodeproj入口は変わらないので、.xcprojを独立した入力拡張子として追加する必要はなかった。
+  共通project selectorを実機buildとASC uploadへ適用し、Proの新形式とminiの旧形式でplanを確認した。
+- ProのClaudeへ公式xcode@claude-plugins-officialをinstallし、enabled=trueを確認。
+  旧xcode-mcpはuser scopeで既にdisabledだった。Codexのbuild-ios-apps内XcodeBuildMCPは別実装であり削除しない。
+  CodexへのApple公式plugin登録と新規sessionのツール公開は別途確認する。
+- miniのsigning/runner監査、固定commitの未署名archive結果はasc-mcpのdocs/ad-hoc-delivery.mdが正本。
+  GUIではDevelopment identityのみ確認し、Distribution資材は保護領域を含め未確定。
+  remote serve-simの実ストリーム・署名・実機インストール・再起動復帰はこの検証の成功に含めない。

@@ -7,13 +7,18 @@ description: >-
   出ない、TLS が失敗する、アカウントを追加できない、録画の尺が合わない、といった詰まりの診断にも使う。
   Simulator を操作する前に読む。実機は対象外(ios-device-build)。
 compatibility: >-
-  macOS + フル Xcode(Command Line Tools だけでは不可)。tap/swipe/テキスト入力/アクセシビリティ走査には
-  idb が必要 —— idb-companion(nix または brew)と fb-idb(`uv tool install fb-
+  実行先に macOS + フル Xcode が必要。Apple の端末操作 MCP が利用できる場合はその経路を使える。
+  CLI で tap/swipe/テキスト入力/アクセシビリティ走査を行う場合は idb が必要 —— idb-companion と fb-idb(`uv tool install fb-
   idb`)の2コンポーネント。screenshot / launch / openurl は xcrun simctl だけで動く。Python
   スクリプトは uv(PEP 723 インライン依存)で実行する。実機は対象外。
 ---
 
 # iOS SimulatorをCLI操作する
+
+最初に `python3 ../../scripts/ios-host.py probe --mcp` で実行環境を確認する。
+Linux・リモート Mac・Apple の端末操作 MCP・ブラウザ表示の要求では
+[実行先と経路の選択](../../references/execution.md)を読む。必要な MCP ツールが公開されていれば
+通常の UI 検証は Apple の対応スキルへ渡し、以下は CLI で状態準備や操作を行う場合に使う。
 
 buildはプロジェクト側の手順に任せる。すべてのコマンドでUDIDを固定し、暗黙の`booted`を使わない。
 
@@ -28,12 +33,11 @@ buildはプロジェクト側の手順に任せる。すべてのコマンドで
    scripts/sim-preflight.sh --udid "$SIM_UDID"
    ```
 
-   既存端末でも最初の対象操作はpreflightにする。warningsの`fix`を実行し、再度preflightしてから
-   観測を始める。端末のcreate/bootはpreflightより前でよい。preflightを飛ばすと、以降の観測は
-   汚れた土台の上の値になり無効になる。
+   CLI 経路では既存端末でも最初に preflight する。warnings は今回の操作に関係するものを
+   原因確認して解消し、再度確認する。たとえば screenshot に idb は不要で、別端末を使う
+   xcodebuild は停止しない。create/boot は preflight より前でよい。
 
-2. UI操作前に、タップを削れるか判断する。タップを1回も行わずに終えてよく、「Simulatorでは
-   検証しない」という結論もこの手順の正しい終わり方に含める。
+2. UI操作前に、状態注入でタップを減らせるか判断する。依頼された検証は観測できる完了条件まで進める。
 
    - アプリ内状態: `SIMCTL_CHILD_<VAR>`またはURL scheme。
    - OS状態を複製: seed端末をshutdownし、`simctl clone`。Keychain/資格情報も複製されるため扱いを限定する。
