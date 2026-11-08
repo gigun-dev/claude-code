@@ -35,6 +35,7 @@ CHECK_NAMES=(
 	"todo プラグインのテスト (tests/run.sh)"
 	"pre-push プラグインの実 push テスト"
 	"telemetry のローカル集計・クエリ回帰テスト"
+	"輸入 skill の固定情報 (vendor/upstream-skills.json)"
 	"ota-deploy の配布・認可テスト"
 )
 check_total=${#CHECK_NAMES[@]}
@@ -220,6 +221,27 @@ elif telemetry_out=$(python3 -m unittest discover -s plugins/telemetry/tests -p 
     fi
 else
     printf '%s\n' "$telemetry_out"
+    overall_failed=1
+fi
+
+# 輸入した skill の記録が実態と合っているか(オフライン)。上流との差分は週次 CI が見る。
+echo ""
+check_header
+if vendor_out=$(python3 - <<'PY' 2>&1
+import json, re, sys
+from pathlib import Path
+bad = []
+for s in json.load(open("vendor/upstream-skills.json"))["skills"]:
+    if not re.fullmatch(r"[0-9a-f]{40}", s["sha"]):
+        bad.append(f"{s['name']}: sha is not a 40-hex commit")
+    if not (Path(s["dest"]) / "SKILL.md").is_file():
+        bad.append(f"{s['name']}: {s['dest']}/SKILL.md missing")
+print("\n".join(bad)); sys.exit(1 if bad else 0)
+PY
+); then
+    echo "✓ vendor/upstream-skills.json"
+else
+    printf '%s\n' "$vendor_out"
     overall_failed=1
 fi
 
