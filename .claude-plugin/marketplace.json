@@ -79,12 +79,22 @@
     {
       "name": "worktree",
       "source": "./plugins/worktree",
-      "description": "Manage git worktrees with git-wt (and git-wtpr for PR checkouts): detect an existing linked worktree, create with --nocd, delete and rename safely. Adapted from ryoppippi/dotfiles (MIT)."
+      "description": "Manage git worktrees with git-wt and git-wtpr (PR checkouts). Skill copied verbatim from ryoppippi/dotfiles (MIT)."
     },
     {
       "name": "t3",
       "source": "./plugins/t3",
-      "description": "Delegate work to another provider or model as a T3 Code child task via the t3-code MCP server (delegate_task). Adapted from ryoppippi/dotfiles (MIT)."
+      "description": "Delegate work to another provider or model as a T3 Code child task (t3-delegate), and check provider quota (t3-limits). Skills copied verbatim from ryoppippi/dotfiles and ryoppippi/t3-limits (MIT)."
+    },
+    {
+      "name": "cross-agent",
+      "source": "./plugins/cross-agent",
+      "description": "Ask other agents or models (Codex, Claude Code, Grok, Cursor), run a cross-vendor review loop, and fetch web pages with ax/tgrab. Skills copied verbatim from ryoppippi/dotfiles (MIT)."
+    },
+    {
+      "name": "edit-skills",
+      "source": "./plugins/edit-skills",
+      "description": "Conventions and an audit script for editing agent skills. Skill copied verbatim from ryoppippi/dotfiles (MIT)."
     },
     {
       "name": "langfuse",

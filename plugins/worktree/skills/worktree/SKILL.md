@@ -18,7 +18,7 @@ git rev-parse --path-format=absolute --git-common-dir
 ```
 
 Different paths mean the current directory is already a linked worktree: stay
-in it unless the user asks for another. Do not create a nested worktree from it. Equal paths mean the main worktree;
+in it unless the user asks for another. Equal paths mean the main worktree;
 create a linked one only when the task needs isolation.
 
 ## Working in a worktree
@@ -42,12 +42,3 @@ Check `git status --short` in the target worktree first.
   wanted.
 
 `git wt --help` and `git wtpr --help` cover the rest.
-
-## Subagents in an isolated worktree
-
-Claude Code's permission checker rejects compound commands (`cd … && … | …`)
-from a subagent running in an isolated worktree, because it cannot prove they
-stay inside it. Brief such a subagent to run one simple command per call and
-to use `git -C <worktree>` instead of `cd`.
-
-Adapted from ryoppippi/dotfiles (MIT).

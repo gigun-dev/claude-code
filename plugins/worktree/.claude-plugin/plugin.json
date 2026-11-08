@@ -1,7 +1,7 @@
 {
   "name": "worktree",
   "version": "1.0.0",
-  "description": "Manage git worktrees with git-wt (and git-wtpr for PR checkouts): detect an existing linked worktree, create with --nocd, delete and rename safely. Adapted from ryoppippi/dotfiles (MIT).",
+  "description": "Manage git worktrees with git-wt and git-wtpr (PR checkouts). Skill copied verbatim from ryoppippi/dotfiles (MIT).",
   "author": {
     "name": "gigun",
     "url": "https://github.com/gigun-dev"
