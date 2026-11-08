@@ -236,6 +236,12 @@ for s in json.load(open("vendor/upstream-skills.json"))["skills"]:
         bad.append(f"{s['name']}: sha is not a 40-hex commit")
     if not (Path(s["dest"]) / "SKILL.md").is_file():
         bad.append(f"{s['name']}: {s['dest']}/SKILL.md missing")
+    for r in s.get("replace", []):
+        f = Path(s["dest"]) / r.get("file", "")
+        if not {"file", "from", "to"} <= r.keys() or not r["from"]:
+            bad.append(f"{s['name']}: replace rule needs file/from/to")
+        elif r["to"] not in (f.read_text(encoding="utf-8") if f.is_file() else ""):
+            bad.append(f"{s['name']}: replace 'to' not found in {f}")
 print("\n".join(bad)); sys.exit(1 if bad else 0)
 PY
 ); then

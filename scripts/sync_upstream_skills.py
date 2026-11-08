@@ -9,9 +9,13 @@ of every skill copied verbatim from upstream.
   --write                 re-copy changed skills and update their pinned SHA
   --report FILE           also write a Markdown summary (PR body) to FILE
 
+A skill may carry `"replace": [{"file", "from", "to"}]`; the rules are applied to
+the upstream copy before comparing and writing, and a `from` that no longer
+matches fails the run so that upstream drift is noticed.
+
 Needs the gh CLI (authenticated) for the GitHub API. Local files are never
-edited by hand: a skill is "changed" when upstream HEAD differs from the
-local copy, which also catches accidental local edits.
+edited by hand: a skill is "changed" when (upstream HEAD + replace rules) differs
+from the local copy, which also catches accidental local edits.
 """
 
 from __future__ import annotations
@@ -50,6 +54,19 @@ def fetch(repo: str, path: str, ref: str) -> dict[str, tuple[str, bytes]]:
     return files
 
 
+def apply_replacements(name: str, upstream: dict[str, tuple[str, bytes]], rules: list[dict]) -> None:
+    """Apply the declared `replace` rules to the upstream copy; fail if `from` is absent."""
+    for r in rules:
+        f, old, new = r["file"], r["from"], r["to"]
+        if f not in upstream:
+            raise SystemExit(f"{name}: replace target {f} not in upstream")
+        mode, content = upstream[f]
+        text = content.decode("utf-8")
+        if old not in text:
+            raise SystemExit(f"{name}: replace 'from' not found in {f} (upstream changed?): {old!r}")
+        upstream[f] = (mode, text.replace(old, new).encode("utf-8"))
+
+
 def local_files(dest: Path) -> dict[str, bytes]:
     if not dest.is_dir():
         return {}
@@ -72,6 +89,7 @@ def main() -> int:
             heads[repo] = gh(f"repos/{repo}/commits/HEAD")["sha"]
         head = heads[repo]
         upstream = fetch(repo, s["path"], head)
+        apply_replacements(s["name"], upstream, s.get("replace", []))
         dest = ROOT / s["dest"]
         local = local_files(dest)
         changed = {k: v[1] for k, v in upstream.items()} != local
