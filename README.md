@@ -26,7 +26,7 @@ codex plugin marketplace add gigun-dev/claude-code
 codex plugin add <plugin>@gigun
 ```
 
-サードパーティ製スキル（Langfuse, modern-web-guidance, swift-concurrency-pro, swift-testing-pro, swiftui-pro, hallmark 等）は、上流の Git リポジトリを両カタログから直接参照する（ADR 0002 参照）。`claude plugin install <plugin>@gigun` / `codex plugin add <plugin>@gigun` で導入し、更新時は各ホストの marketplace とプラグインを更新する。上流のソースはこのリポジトリへ複製しない。
+サードパーティ製スキル（Langfuse, modern-web-guidance, swift-concurrency-pro, swift-testing-pro, swiftui-pro, hallmark, yomiyasu 等）は、上流の Git リポジトリを両カタログから直接参照する（ADR 0002 参照）。`claude plugin install <plugin>@gigun` / `codex plugin add <plugin>@gigun` で導入し、更新時は各ホストの marketplace とプラグインを更新する。上流のソースはこのリポジトリへ複製しない。
 
 ### Antigravity CLI (agy)
 
@@ -89,6 +89,7 @@ MCPサーバーのコード・テスト・配布方法までこのリポジト�
 | [`ota-deploy`](plugins/ota-deploy/README.md) | ota-deploy | Tailscale経由のiOS IPA・Android APK配布ページ生成 |
 | [`hallmark`](plugins/hallmark/README.md) | hallmark | 新規UIの設計・監査・再設計・参考デザインの分析（Nutlope/hallmark v1.1.0、MIT） |
 | `japanese-tech-writing` | japanese-tech-writing | 日本語の技術文書・書籍原稿を書く / 推敲するときの文章規範(上流のgistから逐語でvendor、Unlicense) |
+| `yomiyasu` | yomiyasu | AI が書いた日本語を、意味・数値・否定・条件を保ったまま読みやすく直す（nanaism/yomiyasu、MIT、Claude Code のみ） |
 
 Supabase・Vercel など公式マーケットプレイスに既にMCP内包プラグインがあるものは重複させず、`claude-plugins-official` 側を使う方針。
 
