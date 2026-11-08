@@ -69,7 +69,6 @@ todo・adr の実行依存は POSIX sh と awk。harness やホスト専用ラ�
 | `deepwiki-mcp` | DeepWiki (http) | GitHubリポジトリのドキュメントQ&A |
 | `dart-mcp` | `dart mcp-server` | Dart / Flutter開発(PATHに dart が必要) |
 | `tableplus-mcp` | TablePlus | データベースGUI連携 |
-| `figmate-mcp` | `figmate-mcp` | agent2figmaデザイン(要 figmate グローバルインストール) |
 | `markitdown-mcp` | `markitdown-mcp` | ファイル→Markdown変換(dotfiles の packages.nix から nix で入れる) |
 
 Context7はClaude/Codexともに `context7@claude-plugins-official` を使う。OpenAI Developer Docs MCPは[公式の直接設定](https://developers.openai.com/learn/docs-mcp)を使う。開発中のTDR MCPは将来ChatGPT pluginとして扱い、このmarketplaceには含めない。

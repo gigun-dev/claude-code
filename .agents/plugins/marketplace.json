@@ -78,18 +78,6 @@
       "category": "Developer Tools"
     },
     {
-      "name": "figmate-mcp",
-      "source": {
-        "source": "local",
-        "path": "./plugins/figmate-mcp"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Developer Tools"
-    },
-    {
       "name": "markitdown-mcp",
       "source": {
         "source": "local",
