@@ -1,0 +1,10 @@
+{
+  "$generated": "scripts/generate_manifests.py --write, from ../.claude-plugin/plugin.json. Do not hand-edit this file.",
+  "name": "t3",
+  "version": "0.1.0",
+  "description": "Delegate work to another provider or model as a T3 Code child task via the t3-code MCP server (delegate_task). Adapted from ryoppippi/dotfiles (MIT).",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  }
+}

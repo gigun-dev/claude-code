@@ -82,6 +82,11 @@
       "description": "Manage git worktrees with git-wt (and git-wtpr for PR checkouts): detect an existing linked worktree, create with --nocd, delete and rename safely. Adapted from ryoppippi/dotfiles (MIT)."
     },
     {
+      "name": "t3",
+      "source": "./plugins/t3",
+      "description": "Delegate work to another provider or model as a T3 Code child task via the t3-code MCP server (delegate_task). Adapted from ryoppippi/dotfiles (MIT)."
+    },
+    {
       "name": "langfuse",
       "source": {
         "source": "url",
