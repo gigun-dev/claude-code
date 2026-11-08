@@ -182,6 +182,11 @@
       "name": "git-workflow",
       "source": "./plugins/git-workflow",
       "description": "Git workflow skills. commit: atomic Conventional Commits. Skills copied verbatim from ryoppippi/dotfiles (MIT)."
+    },
+    {
+      "name": "emil",
+      "source": "./plugins/emil",
+      "description": "Emil Kowalski\u2019s skills for UI design, animation, prototyping and UI testing."
     }
   ]
 }

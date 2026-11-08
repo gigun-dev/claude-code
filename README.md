@@ -87,6 +87,7 @@ MCPサーバーのコード・テスト・配布方法までこのリポジト�
 | `telemetry` | review | Langfuse のトレースから自分のセッションを実測し、設定改善に回す |
 | `ios-skills` | ios-app-icon, ios-simulator, ios-device-build, appstoreconnect-upload | `.icon`生成・Simulator操作・実機build・App Store Connect upload |
 | [`ota-deploy`](plugins/ota-deploy/README.md) | ota-deploy | Tailscale経由のiOS IPA・Android APK配布ページ生成 |
+| [`emil`](plugins/emil/README.md) | emil | UIデザイン、アニメーション、プロトタイピングとUI検証（Emil Kowalski、MIT） |
 | [`hallmark`](plugins/hallmark/README.md) | hallmark | 新規UIの設計・監査・再設計・参考デザインの分析（Nutlope/hallmark v1.1.0、MIT） |
 | `japanese-tech-writing` | japanese-tech-writing | 日本語の技術文書・書籍原稿を書く / 推敲するときの文章規範(上流のgistから逐語でvendor、Unlicense) |
 | `yomiyasu` | yomiyasu | AI が書いた日本語を、意味・数値・否定・条件を保ったまま読みやすく直す（nanaism/yomiyasu、MIT、Claude Code のみ） |

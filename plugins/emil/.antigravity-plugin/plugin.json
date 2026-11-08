@@ -1,0 +1,10 @@
+{
+  "$generated": "scripts/generate_manifests.py --write, from ../.claude-plugin/plugin.json. Do not hand-edit this file.",
+  "name": "emil",
+  "version": "0.1.0",
+  "description": "Emil Kowalski’s skills for interface design, animation, prototyping, and UI testing.",
+  "author": {
+    "name": "Emil Kowalski",
+    "url": "https://github.com/emilkowalski"
+  }
+}
