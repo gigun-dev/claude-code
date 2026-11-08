@@ -1,0 +1,8 @@
+{
+  "$generated": "scripts/generate_manifests.py --write, from .mcp.json. Do not hand-edit this file.",
+  "mcpServers": {
+    "t3-code": {
+      "serverUrl": "http://127.0.0.1:3773/mcp"
+    }
+  }
+}

@@ -1,8 +1,8 @@
 {
   "$generatedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); generates name/version/description/author here — homepage, repository, keywords, the mcpServers/skills pointer, and interface stay hand-edited in this file",
   "name": "t3",
-  "version": "0.1.0",
-  "description": "Delegate work to another provider or model as a T3 Code child task via the t3-code MCP server (delegate_task). Adapted from ryoppippi/dotfiles (MIT).",
+  "version": "0.2.0",
+  "description": "Delegate work to another provider or model as a T3 Code child task (t3-delegate), and check provider quota (t3-limits). Skills copied verbatim from ryoppippi/dotfiles and ryoppippi/t3-limits (MIT).",
   "author": {
     "name": "gigun",
     "url": "https://github.com/gigun-dev"
@@ -23,5 +23,6 @@
     "defaultPrompt": [
       "この調査を別モデルに委譲して"
     ]
-  }
+  },
+  "mcpServers": "./.mcp.json"
 }
