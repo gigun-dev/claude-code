@@ -29,6 +29,7 @@ overall_failed=0
 # 素朴な添字配列と、呼ばれた回数を数えるだけのカウンタで済ませる。
 CHECK_NAMES=(
 	"生成マニフェストの整合性チェック (scripts/generate_manifests.py --check)"
+	"MCP adapter の整合性チェック (scripts/sync_mcp_wrappers.py --check)"
 	"agy-mcp パース回帰テスト (--selftest-parse)"
 	"ADR の形式チェック"
 	"todo プラグインのテスト (tests/run.sh)"
@@ -91,6 +92,21 @@ elif gen_out=$(python3 scripts/generate_manifests.py --check 2>&1); then
 else
 	echo "✗ 生成マニフェストが実態とずれている — scripts/generate_manifests.py --write で生成し直すこと"
 	printf '%s\n' "$gen_out" | sed 's/^/    /'
+	overall_failed=1
+fi
+
+# Claude 用 plugin.json の mcpServers は各 plugin の .mcp.json から生成する adapter。
+# README で手順にしていたが関門に無く、asc-mcp が mcpServers を欠いたまま main に入っていた。
+echo ""
+check_header
+if ! command -v python3 >/dev/null 2>&1; then
+	echo "✗ python3 が見つからない — MCP adapter の整合性を検査できない(未検査を合格扱いにしない)"
+	overall_failed=1
+elif mcp_out=$(python3 scripts/sync_mcp_wrappers.py --check 2>&1); then
+	echo "✓ MCP adapter の整合性: 問題なし"
+else
+	echo "✗ MCP adapter が .mcp.json とずれている — scripts/sync_mcp_wrappers.py --write で生成し直すこと"
+	printf '%s\n' "$mcp_out" | sed 's/^/    /'
 	overall_failed=1
 fi
 # -----------------------------------------------------------------------
