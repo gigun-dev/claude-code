@@ -6,14 +6,14 @@
       "repo": "ryoppippi/dotfiles",
       "path": "agents/skills/worktree",
       "dest": "plugins/worktree/skills/worktree",
-      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
+      "sha": "47204655c75914f2b4ec08990d0fee120065120d"
     },
     {
       "name": "t3-delegate",
       "repo": "ryoppippi/dotfiles",
       "path": "agents/skills/t3-delegate",
       "dest": "plugins/t3/skills/t3-delegate",
-      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
+      "sha": "47204655c75914f2b4ec08990d0fee120065120d"
     },
     {
       "name": "t3-limits",
@@ -27,28 +27,28 @@
       "repo": "ryoppippi/dotfiles",
       "path": "agents/skills/ask-other-agent",
       "dest": "plugins/cross-agent/skills/ask-other-agent",
-      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
+      "sha": "47204655c75914f2b4ec08990d0fee120065120d"
     },
     {
       "name": "review-loop",
       "repo": "ryoppippi/dotfiles",
       "path": "agents/skills/review-loop",
       "dest": "plugins/cross-agent/skills/review-loop",
-      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
+      "sha": "47204655c75914f2b4ec08990d0fee120065120d"
     },
     {
       "name": "edit-skills",
       "repo": "ryoppippi/dotfiles",
       "path": "agents/skills/edit-skills",
       "dest": "plugins/edit-skills/skills/edit-skills",
-      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
+      "sha": "47204655c75914f2b4ec08990d0fee120065120d"
     },
     {
       "name": "commit",
       "repo": "ryoppippi/dotfiles",
       "path": "agents/skills/commit",
       "dest": "plugins/git-workflow/skills/commit",
-      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805",
+      "sha": "47204655c75914f2b4ec08990d0fee120065120d",
       "replace": [
         {
           "file": "SKILL.md",
