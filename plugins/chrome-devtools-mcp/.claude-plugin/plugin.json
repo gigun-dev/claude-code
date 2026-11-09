@@ -11,6 +11,11 @@
       "type": "stdio",
       "command": "bunx",
       "args": ["chrome-devtools-mcp@latest"]
+    },
+    "chrome-devtools-live": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": ["chrome-devtools-mcp@latest", "--autoConnect"]
     }
   }
 }

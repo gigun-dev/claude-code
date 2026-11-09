@@ -6,6 +6,13 @@
       "args": [
         "chrome-devtools-mcp@latest"
       ]
+    },
+    "chrome-devtools-live": {
+      "command": "bunx",
+      "args": [
+        "chrome-devtools-mcp@latest",
+        "--autoConnect"
+      ]
     }
   }
 }
