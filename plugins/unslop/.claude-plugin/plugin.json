@@ -1,0 +1,12 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "unslop",
+  "version": "0.1.0",
+  "description": "Turn vibecoded, AI-looking UI into a designed interface. Skill copied verbatim from heydamir/unslop (CC BY 4.0, by Damir Sokolovsky).",
+  "author": {
+    "name": "Damir Sokolovsky",
+    "url": "https://github.com/heydamir"
+  },
+  "homepage": "https://github.com/heydamir/unslop",
+  "repository": "https://github.com/heydamir/unslop"
+}

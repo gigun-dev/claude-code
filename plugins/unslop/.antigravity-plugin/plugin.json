@@ -1,0 +1,10 @@
+{
+  "$generated": "scripts/generate_manifests.py --write, from ../.claude-plugin/plugin.json. Do not hand-edit this file.",
+  "name": "unslop",
+  "version": "0.1.0",
+  "description": "Turn vibecoded, AI-looking UI into a designed interface. Skill copied verbatim from heydamir/unslop (CC BY 4.0, by Damir Sokolovsky).",
+  "author": {
+    "name": "Damir Sokolovsky",
+    "url": "https://github.com/heydamir"
+  }
+}

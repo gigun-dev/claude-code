@@ -182,6 +182,11 @@
       "name": "emil",
       "source": "./plugins/emil",
       "description": "Emil Kowalski\u2019s skills for UI design, animation, prototyping and UI testing."
+    },
+    {
+      "name": "unslop",
+      "source": "./plugins/unslop",
+      "description": "Turn vibecoded, AI-looking UI into a designed interface (heydamir/unslop, CC BY 4.0, copied verbatim)."
     }
   ]
 }

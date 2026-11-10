@@ -1,5 +1,5 @@
 {
-  "$comment": "Upstream skills copied verbatim. Maintained by scripts/sync_upstream_skills.py; do not edit sha by hand. Licence: ryoppippi/dotfiles and ryoppippi/t3-limits are MIT.",
+  "$comment": "Upstream skills copied verbatim. Maintained by scripts/sync_upstream_skills.py; do not edit sha by hand. Licence: ryoppippi/dotfiles and ryoppippi/t3-limits are MIT; heydamir/unslop is CC BY 4.0 (credit kept in SKILL.md and plugins/unslop/LICENSE).",
   "skills": [
     {
       "name": "worktree",
@@ -56,6 +56,13 @@
           "to": "Write the message in Japanese, keeping the Conventional Commits type and scope in English:"
         }
       ]
+    },
+    {
+      "name": "unslop",
+      "repo": "heydamir/unslop",
+      "path": "skills/unslop",
+      "dest": "plugins/unslop/skills/unslop",
+      "sha": "97daa3eb365670ea3f87ed85356cbfcee18105a5"
     }
   ]
 }

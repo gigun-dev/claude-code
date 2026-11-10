@@ -1,0 +1,32 @@
+{
+  "$generatedFrom": "../.claude-plugin/plugin.json (scripts/generate_manifests.py --write); generates name/version/description/author here — homepage, repository, keywords, the mcpServers/skills pointer, and interface stay hand-edited in this file",
+  "name": "unslop",
+  "version": "0.1.0",
+  "description": "Turn vibecoded, AI-looking UI into a designed interface. Skill copied verbatim from heydamir/unslop (CC BY 4.0, by Damir Sokolovsky).",
+  "author": {
+    "name": "Damir Sokolovsky",
+    "url": "https://github.com/heydamir"
+  },
+  "skills": "./skills/",
+  "homepage": "https://github.com/heydamir/unslop",
+  "repository": "https://github.com/gigun-dev/claude-code",
+  "keywords": [
+    "design",
+    "ui",
+    "redesign"
+  ],
+  "interface": {
+    "displayName": "Unslop",
+    "shortDescription": "AI っぽい UI をデザインされた画面に直す",
+    "developerName": "Damir Sokolovsky",
+    "category": "Design",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/heydamir/unslop",
+    "defaultPrompt": [
+      "この画面を unslop して"
+    ]
+  }
+}
