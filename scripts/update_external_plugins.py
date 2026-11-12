@@ -17,6 +17,12 @@ this repository and not by when, where or with which Node the install ran:
 After --write, run scripts/generate_manifests.py --write to carry the pins into
 .agents/plugins/marketplace.json.
 
+Every npm pin also has an entry in nix/npm-sources.json (tarball URL and the
+registry's SRI integrity), which nix/agy-external-plugins.nix fetches to build
+the agy copy of the plugin. --write keeps that file on the pinned versions in
+the same change, and --check fails when the two disagree, so the version a host
+installs through the marketplace and the one Nix builds cannot drift apart.
+
 Why a minimum age: the weekly workflow merges its own PR, so nobody reads the
 diff first. Waiting a few days leaves time for a bad release to be noticed and
 withdrawn upstream. A pin never moves backwards: a candidate older than the
@@ -48,6 +54,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MARKETPLACE = REPO_ROOT / ".claude-plugin" / "marketplace.json"
+NPM_SOURCES = REPO_ROOT / "nix" / "npm-sources.json"
+NPM_SOURCES_MARKER = (
+    "scripts/update_external_plugins.py --write, from the npm pins in "
+    ".claude-plugin/marketplace.json. Do not hand-edit this file."
+)
 NPM_REGISTRY = "https://registry.npmjs.org"
 EXACT_VERSION = re.compile(r"\d+\.\d+\.\d+")
 COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
@@ -92,6 +103,33 @@ def pin_problem(entry: dict) -> str | None:
     else:
         return f"{entry['name']}: unsupported external source {kind!r}"
     return None
+
+
+def npm_source_problems(marketplace: dict, sources: dict) -> list[str]:
+    """Offline: nix/npm-sources.json holds exactly the marketplace's npm pins."""
+    pins = {e["name"]: e["source"] for e in external_entries(marketplace) if e["source"].get("source") == "npm"}
+    problems = [f"nix/npm-sources.json: {n} is not an npm pin in the marketplace" for n in sources if n not in pins and not n.startswith("$")]
+    for name, source in pins.items():
+        entry = sources.get(name)
+        if not entry:
+            problems.append(f"nix/npm-sources.json: no entry for {name}")
+        elif (entry.get("package"), entry.get("version")) != (source["package"], source.get("version")):
+            problems.append(
+                f"nix/npm-sources.json: {name} is {entry.get('package')}@{entry.get('version')}, "
+                f"the marketplace pins {source['package']}@{source.get('version')}"
+            )
+        elif not str(entry.get("hash", "")).startswith("sha512-") or not str(entry.get("url", "")).startswith("https://"):
+            problems.append(f"nix/npm-sources.json: {name} needs an https url and a sha512- hash")
+    return problems
+
+
+def npm_source_entry(package: str, version: str) -> dict:
+    dist = json.loads(http(f"{NPM_REGISTRY}/{urllib.parse.quote(package, safe='@')}/{version}"))["dist"]
+    return {"package": package, "version": version, "url": dist["tarball"], "hash": dist["integrity"]}
+
+
+def load_npm_sources() -> dict:
+    return json.loads(NPM_SOURCES.read_text(encoding="utf-8")) if NPM_SOURCES.is_file() else {}
 
 
 def npm_tarball_has_manifests(package: str, version: str, dist: dict) -> str | None:
@@ -173,9 +211,12 @@ def main() -> int:
     marketplace = json.loads(text)
     entries = external_entries(marketplace)
 
+    sources = load_npm_sources()
     if args.check:
         problems = [p for p in map(pin_problem, entries) if p]
-        print("\n".join(problems) if problems else f"{len(entries)} external plugins pinned")
+        if not problems:
+            problems = npm_source_problems(marketplace, sources)
+        print("\n".join(problems) if problems else f"{len(entries)} external plugins pinned, npm sources match")
         return 1 if problems else 0
 
     cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=args.min_age_days)
@@ -203,6 +244,18 @@ def main() -> int:
         # Same form the file already has (ASCII-escaped, 2-space indent), so a
         # pin move is the only line that changes.
         MARKETPLACE.write_text(json.dumps(marketplace, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    if args.write and npm_source_problems(marketplace, sources):
+        # Rebuilt from the pins rather than patched, so a removed plugin leaves no entry.
+        fresh = {"$generated": NPM_SOURCES_MARKER}
+        for entry in entries:
+            source = entry["source"]
+            if source.get("source") == "npm":
+                kept = sources.get(entry["name"], {})
+                same = (kept.get("package"), kept.get("version")) == (source["package"], source["version"])
+                fresh[entry["name"]] = kept if same else npm_source_entry(source["package"], source["version"])
+        NPM_SOURCES.parent.mkdir(exist_ok=True)
+        NPM_SOURCES.write_text(json.dumps(fresh, indent=2) + "\n", encoding="utf-8")
+        print(f"wrote {NPM_SOURCES.relative_to(REPO_ROOT)}")
     return 0
 
 

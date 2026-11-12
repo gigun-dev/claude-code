@@ -25,9 +25,19 @@ REA（morluto/rea）は npm パッケージ `rea-agents` を Claude Code・Codex
 
 `rea-agents@6.9.0` と版を明記すると、Node 24.21.0 でも 6.9.0 が選ばれる。固定した marketplace から一時的な設定ディレクトリへ導入し、Claude Code と Codex のどちらも REA 6.9.0 と、最新より古い commit に固定した yomiyasu を入れることを確認した。Git の固定は `sha` を足す書き方が両 host で通る。`ref` に commit を書くと Codex は通るが Claude Code は導入できない。
 
+## agy への配布（2026-11-13）
+
+agy には marketplace から入らないため、flake の `agy-external-plugins` で包む（ADR 0005）。確認は agy 1.5.5 で、`plugins.json` に 1 entry を一時的に足して 1 回ずつ起動した。
+
+- 読み取り専用の場所（`nix build` の出力）に置いた plugin を `plugins.json` から読み、MCP と skill の両方を認識した。MCP の tool 定義は 255 件で、plugin ディレクトリへの書き込みは無かった。`mcp_config.json` の `env` は起動したサーバーに渡り、`${PLUGIN_ROOT}` は plugin の絶対パスに展開された。
+- skill 本文が切られるのは、`/rea:reverse-engineer-anything` で呼んだときだった。ツールを禁じて尋ねると、本文の 24,000 バイト直前の文は見え、それより後ろの文は見えなかった。スラッシュなしの依頼では本文は注入されず、モデルが `read_file` で SKILL.md を全部読んだ。
+- 分割しない 6.9.0 でも、ツールを許すとモデルが自分で SKILL.md の後半を読み直し、「my app とだけ言われたら聞き返す」規則に従った。分割版は本文を読んだあと移した節を読み、同じ振る舞いになった。各 1 回の試行で、試した規則は 1 つだけである。
+- 分割は「Route the target first」（30,193 バイト）の 1 節を移し、本文は 13,351 バイトになる。移した節の 382 行はすべて分割後のどちらかに残る。6.8.0 も同じ 1 節で収まり、6.0.0〜6.7.0 は上限内で分割しない。
+- dotfiles の nixpkgs（2026-11-13 時点）の `nodejs` は 24.21.0 で、launcher は版の要求を理由に起動を拒んだ。このためパッケージは `nodejs_26` の絶対パスで起動し、ビルドの最後に tools/list まで確かめる。24.21.0 を渡すとビルドが失敗することも確かめた。
+
 ## 運用
 
-REA plugin が MCP と skill を所有するため、同じ host へ `rea setup` や別の MCP 定義を重ねない。更新は plugin 更新機構に委ね、解析エンジンと Node/Java の環境は dotfiles 側で管理する。plugin 自体は Ghidra をインストールせず、CLI の `rea` を PATH へ追加するものでもない。launcher は PATH 上の `node` を使う。
+REA plugin が MCP と skill を所有するため、同じ host へ `rea setup` や別の MCP 定義を重ねない。更新は plugin 更新機構に委ね、解析エンジンと Node/Java の環境は dotfiles 側で管理する。plugin 自体は Ghidra をインストールせず、CLI の `rea` を PATH へ追加するものでもない。Claude Code と Codex の launcher は PATH 上の `node` を使い、agy 版は `mcp_config.json` に書いた node を使う。agy にも `rea setup` を使わない。
 
 ## 上流の根拠
 

@@ -6,6 +6,8 @@ name: external-plugins
 # before it lands, so the checks that stand in for a reviewer run in this job:
 # the minimum age and the npm manifest check inside the script, then the pin and
 # generated-manifest checks below. A failed step leaves main untouched.
+# An npm pin move also rewrites nix/npm-sources.json (tarball URL and registry
+# integrity) in the same commit, which the agy build in nix/ fetches.
 # Local dry-run:
 #   python3 scripts/update_external_plugins.py --dry-run
 
@@ -47,7 +49,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
-          git add .claude-plugin/marketplace.json .agents/plugins/marketplace.json
+          git add .claude-plugin/marketplace.json .agents/plugins/marketplace.json nix/npm-sources.json
           git commit -m "chore(marketplace): move external plugin pins"
           git push origin "$branch"
           gh pr create --title "chore(marketplace): move external plugin pins" --body-file "$RUNNER_TEMP/body.md" --base "${{ github.event.repository.default_branch }}" --head "$branch"

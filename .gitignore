@@ -2,3 +2,6 @@
 .claude-plugin/.claude/
 .DS_Store
 __pycache__/
+# nix build の出力リンク
+result
+result-*

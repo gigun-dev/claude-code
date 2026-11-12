@@ -41,6 +41,16 @@ hooks は agy とイベント・ツール名が違うため対象外。commands 
 
 単体検証は `agy plugin validate plugins/<name>`(認証不要・読み取りのみ)。
 
+外部 plugin のうち npm で配布されるもの(REA)は、このリポジトリの flake が agy 版を作る(`nix/agy-external-plugins.nix`、overlay の `agy-external-plugins`。ADR 0005)。上流の tarball を `nix/npm-sources.json` の版とハッシュで取得し、`scripts/agy_wrap_plugin.py` が agy の manifest と `mcp_config.json` を足す。agy がスラッシュコマンドで読む skill 本文は先頭 24,000 バイトまでなので、超える SKILL.md は節単位で `references/` へ移す。出力は plugin を並べたディレクトリなので、`plugins.json` の entry としてそのまま指す。Ghidra などの環境は `mcpEnv` で渡す。
+
+```nix
+(pkgs.agy-external-plugins.override {
+  mcpEnv.rea.rea = { GHIDRA_INSTALL_DIR = "${ghidra}/lib/ghidra"; JAVA_HOME = "${pkgs.jdk21}"; };
+})
+```
+
+`nix/npm-sources.json` は `scripts/update_external_plugins.py --write` が marketplace の npm の版と同じコミットで書く。手で編集しない。
+
 ## Claude Code / Codex 共通の構成
 
 | 内容 | 置き場 | 扱い |

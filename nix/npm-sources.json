@@ -1,0 +1,9 @@
+{
+  "$generated": "scripts/update_external_plugins.py --write, from the npm pins in .claude-plugin/marketplace.json. Do not hand-edit this file.",
+  "rea": {
+    "package": "rea-agents",
+    "version": "6.9.0",
+    "url": "https://registry.npmjs.org/rea-agents/-/rea-agents-6.9.0.tgz",
+    "hash": "sha512-KqDn1UR5BMqHoQ3MGAnPuWiSKwgdFaz1L/uUNgrKt+1W8kPtgYP8AWEOXIF1lDIOBVyPuYIIst2iamo1Wf3r8g=="
+  }
+}

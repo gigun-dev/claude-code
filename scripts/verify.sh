@@ -37,6 +37,7 @@ CHECK_NAMES=(
 	"telemetry のローカル集計・クエリ回帰テスト"
 	"輸入 skill の固定情報 (vendor/upstream-skills.json)"
 	"外部 plugin の版固定 (marketplace の version / sha)"
+	"agy 向け外部 plugin の包み方と skill 分割 (scripts/tests)"
 	"ota-deploy の配布・認可テスト"
 	"iOS 実行先・project 選択・リモート終了値のテスト"
 )
@@ -259,6 +260,17 @@ echo ""
 check_header
 if python3 scripts/update_external_plugins.py --check; then
     echo "✓ 外部 plugin の版固定"
+else
+    overall_failed=1
+fi
+
+# agy 向けに外部 plugin を包む処理(nix/agy-external-plugins.nix が使う)。skill 分割が
+# 本文を失わないこと、壊れるリンクや収まらない本文で失敗することを合成データで確かめる。
+# Nix のビルド自体(上流 tarball の取得と MCP の起動確認)はここでは走らせない。
+echo ""
+check_header
+if python3 -m unittest discover -s scripts/tests -p 'test_*.py'; then
+    echo "✓ agy_wrap_plugin"
 else
     overall_failed=1
 fi
