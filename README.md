@@ -33,10 +33,10 @@ codex plugin add <plugin>@gigun
 スキルと MCP だけを agy ネイティブ形式で生成している(`scripts/generate_manifests.py`)。`plugins/<name>/.antigravity-plugin/plugin.json` と、MCP を持つ plugin は直下の `mcp_config.json`(`.mcp.json` から変換。http は `serverUrl`、`${CLAUDE_PLUGIN_ROOT}` は `${PLUGIN_ROOT}`)。`skills/` は Claude と同じ `SKILL.md` をそのまま読ませる。`.claude-plugin/` があっても `.antigravity-plugin/` を持つディレクトリはネイティブ plugin として扱われ、リポジトリ内のファイルは書き換えられない。
 hooks は agy とイベント・ツール名が違うため対象外。commands は未対応。`agents/` は agy が直接読む(`agy plugin validate` で確認)。
 
-`agy plugin import` / `install` はコピーを作って UI 管理の `config.json` に記録するため使わず、`~/.gemini/config/plugins.json` でこのリポジトリを指す。`entries[].path` は `/` 絶対か `~/` 始まりのみ展開される(環境変数は展開されない)。
+`agy plugin import` / `install` はコピーを作って UI 管理の `config.json` に記録するため使わず、`~/.gemini/config/plugins.json` でこのリポジトリを指す。dotfiles(`nix/modules/home/dotfiles.nix`)が Claude の `enabledPlugins` から読ませる plugin を導いて配る。`entries[].path` は絶対パスで書く。agy 1.5.5 は文書と違って `~/` を展開せず、その entry を飛ばす(環境変数も展開されない)。
 
 ```json
-{ "entries": [{ "path": "~/ghq/github.com/gigun-dev/claude-code/plugins" }] }
+{ "entries": [{ "path": "/Users/<user>/ghq/github.com/gigun-dev/claude-code/plugins", "include_only": ["todo", "emil"] }] }
 ```
 
 単体検証は `agy plugin validate plugins/<name>`(認証不要・読み取りのみ)。
