@@ -36,6 +36,7 @@ CHECK_NAMES=(
 	"pre-push プラグインの実 push テスト"
 	"telemetry のローカル集計・クエリ回帰テスト"
 	"輸入 skill の固定情報 (vendor/upstream-skills.json)"
+	"外部 plugin の版固定 (marketplace の version / sha)"
 	"ota-deploy の配布・認可テスト"
 	"iOS 実行先・project 選択・リモート終了値のテスト"
 )
@@ -249,6 +250,16 @@ PY
     echo "✓ vendor/upstream-skills.json"
 else
     printf '%s\n' "$vendor_out"
+    overall_failed=1
+fi
+
+# 外部 plugin が marketplace で版を固定されているか(オフライン)。固定が無いと、入る版が
+# 導入した時刻と host の環境で決まる。上流の新しい版は週次 CI が取り込む。
+echo ""
+check_header
+if python3 scripts/update_external_plugins.py --check; then
+    echo "✓ 外部 plugin の版固定"
+else
     overall_failed=1
 fi
 

@@ -96,7 +96,8 @@
       "source": {
         "source": "url",
         "url": "https://github.com/langfuse/skills.git",
-        "ref": "main"
+        "ref": "main",
+        "sha": "6fb2baf4413719ec241916e25e4a0330372c9d49"
       },
       "description": "Work with Langfuse tracing, prompts, datasets, evaluations, and documentation.",
       "category": "Developer Tools"
@@ -106,7 +107,8 @@
       "source": {
         "source": "url",
         "url": "https://github.com/Nutlope/hallmark.git",
-        "ref": "main"
+        "ref": "main",
+        "sha": "80fc3c723ab31eb9a43b7ce6c239d6bce094cdbb"
       },
       "description": "Distinctive UI design, audit, redesign and design study (Nutlope/hallmark, MIT).",
       "category": "Design"
@@ -126,7 +128,8 @@
       "source": {
         "source": "url",
         "url": "https://github.com/GoogleChrome/modern-web-guidance.git",
-        "ref": "main"
+        "ref": "main",
+        "sha": "341268561baaff256927c931ec8215dbd30e3cee"
       },
       "description": "Keep your coding agent up to date with the latest web best practices.",
       "category": "Developer Tools"
@@ -137,7 +140,8 @@
         "source": "git-subdir",
         "url": "https://github.com/twostraws/Swift-Concurrency-Agent-Skill.git",
         "path": "swift-concurrency-pro",
-        "ref": "main"
+        "ref": "main",
+        "sha": "bee3f69ba17142da148d3c5406f148ed62592b69"
       },
       "description": "Reviews Swift code for concurrency correctness, modern API usage (actors, async/await), and common async pitfalls.",
       "category": "Developer Tools"
@@ -148,7 +152,8 @@
         "source": "git-subdir",
         "url": "https://github.com/twostraws/Swift-Testing-Agent-Skill.git",
         "path": "swift-testing-pro",
-        "ref": "main"
+        "ref": "main",
+        "sha": "2d6bba14a3c8bf3694f218b92fffe617c41ae43e"
       },
       "description": "Reviews Swift code for modern Swift Testing framework usage (@Test, #expect) and migration from XCTest.",
       "category": "Developer Tools"
@@ -158,7 +163,8 @@
       "source": {
         "source": "url",
         "url": "https://github.com/twostraws/SwiftUI-Agent-Skill.git",
-        "ref": "main"
+        "ref": "main",
+        "sha": "f2920b63995263f57b3e198674e89a602efba6d2"
       },
       "description": "Reviews SwiftUI code for modern API best practices, state management, and performance.",
       "category": "Developer Tools"
@@ -168,7 +174,8 @@
       "source": {
         "source": "url",
         "url": "https://github.com/nanaism/yomiyasu.git",
-        "ref": "main"
+        "ref": "main",
+        "sha": "8394e099486aaa2e28cf89992e46f5ebe5ed839d"
       },
       "description": "Rewrites AI-generated Japanese prose to read naturally while keeping meaning, numbers, negations and conditions (nanaism/yomiyasu, MIT).",
       "category": "Productivity"
@@ -177,7 +184,8 @@
       "name": "rea",
       "source": {
         "source": "npm",
-        "package": "rea-agents"
+        "package": "rea-agents",
+        "version": "6.9.0"
       },
       "description": "Reverse engineer anything with agents, from app behavior down to native binaries: MCP server and skill (morluto/rea, MIT).",
       "category": "Developer Tools"

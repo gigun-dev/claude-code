@@ -1,6 +1,6 @@
 # REA plugin配布の確認
 
-REA（morluto/rea）は npm パッケージ `rea-agents` を Claude Code・Codex 共通の plugin 配布物にしている。共通marketplaceには npm source（バージョン指定なし）で登録した。方針は ADR 0003。
+REA（morluto/rea）は npm パッケージ `rea-agents` を Claude Code・Codex 共通の plugin 配布物にしている。共通marketplaceには npm source で登録し、版は marketplace に固定している。方針は ADR 0004。
 
 ## 6.8.0 で登録を見送った理由
 
@@ -18,6 +18,12 @@ REA（morluto/rea）は npm パッケージ `rea-agents` を Claude Code・Codex
   - Codex 0.167.1: `codex plugin add` で 6.9.0 が入った。`codex mcp list` は接続を確かめないため、Codex と同じくインストール先を cwd にして相対パスの launcher を起動し、initialize と tools/list（255 tools）を確認した。
 
 確認していないのは、普段の設定へのインストールと、実際のエージェントセッションから REA の tool を呼ぶことである。
+
+## 版を固定した理由（2026-11-12）
+
+当初は npm source に版を書かず、更新を各 host に任せていた。mini-vm の marketplace 更新 unit が Node 24.21.0 で `codex plugin add rea@gigun` を実行すると、`rea-agents` 6.7.0 が入った。`npm pack` は `engines.node` を満たす最新版を選び、6.8.0 以降は `^24.22.1` を要求するためである。同じ host の Node 24.22.1 では 6.9.0 になる。6.7.0 は plugin 定義を持たず、Codex のキャッシュには版名 `local` で入った。
+
+`rea-agents@6.9.0` と版を明記すると、Node 24.21.0 でも 6.9.0 が選ばれる。固定した marketplace から一時的な設定ディレクトリへ導入し、Claude Code と Codex のどちらも REA 6.9.0 と、最新より古い commit に固定した yomiyasu を入れることを確認した。Git の固定は `sha` を足す書き方が両 host で通る。`ref` に commit を書くと Codex は通るが Claude Code は導入できない。
 
 ## 運用
 

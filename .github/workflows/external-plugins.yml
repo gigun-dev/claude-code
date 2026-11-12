@@ -1,0 +1,54 @@
+name: external-plugins
+
+# Weekly: move the pinned version / sha of every external plugin in
+# .claude-plugin/marketplace.json to the newest upstream release that is old
+# enough, then open a PR and merge it (docs/adr/0004-*). Nobody reads the diff
+# before it lands, so the checks that stand in for a reviewer run in this job:
+# the minimum age and the npm manifest check inside the script, then the pin and
+# generated-manifest checks below. A failed step leaves main untouched.
+# Local dry-run:
+#   python3 scripts/update_external_plugins.py --dry-run
+
+on:
+  schedule:
+    - cron: "43 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      min_age_days:
+        description: "Only adopt a release or commit at least this many days old"
+        default: "3"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Move pins
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MIN_AGE_DAYS: ${{ inputs.min_age_days || '3' }}
+        run: python3 scripts/update_external_plugins.py --write --min-age-days "$MIN_AGE_DAYS" --report "$RUNNER_TEMP/body.md"
+      - name: Regenerate manifests
+        run: python3 scripts/generate_manifests.py --write
+      - name: Check pins and generated manifests
+        run: |
+          python3 scripts/update_external_plugins.py --check
+          python3 scripts/generate_manifests.py --check
+      - name: Open PR and merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then echo "no change"; exit 0; fi
+          branch="chore/external-plugins-$(date +%Y%m%d-%H%M)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add .claude-plugin/marketplace.json .agents/plugins/marketplace.json
+          git commit -m "chore(marketplace): move external plugin pins"
+          git push origin "$branch"
+          gh pr create --title "chore(marketplace): move external plugin pins" --body-file "$RUNNER_TEMP/body.md" --base "${{ github.event.repository.default_branch }}" --head "$branch"
+          gh pr merge "$branch" --rebase --delete-branch
