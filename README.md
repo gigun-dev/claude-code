@@ -26,7 +26,7 @@ codex plugin marketplace add gigun-dev/claude-code
 codex plugin add <plugin>@gigun
 ```
 
-サードパーティ製スキル（Langfuse, modern-web-guidance, swift-concurrency-pro, swift-testing-pro, swiftui-pro, hallmark, yomiyasu 等）は、上流の Git リポジトリを両カタログから直接参照する（ADR 0002 参照）。`claude plugin install <plugin>@gigun` / `codex plugin add <plugin>@gigun` で導入し、更新時は各ホストの marketplace とプラグインを更新する。上流のソースはこのリポジトリへ複製しない。
+サードパーティ製スキル（Langfuse, modern-web-guidance, swift-concurrency-pro, swift-testing-pro, swiftui-pro, hallmark, yomiyasu 等）は、上流の Git リポジトリを両カタログから直接参照する。上流が npm パッケージで plugin を配布する REA（`rea-agents`）は npm source で参照する（ADR 0003 参照）。`claude plugin install <plugin>@gigun` / `codex plugin add <plugin>@gigun` で導入し、更新時は各ホストの marketplace とプラグインを更新する。上流のソースはこのリポジトリへ複製しない。
 
 ### Antigravity CLI (agy)
 

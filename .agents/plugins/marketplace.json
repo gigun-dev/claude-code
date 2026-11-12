@@ -327,6 +327,18 @@
       "category": "Productivity"
     },
     {
+      "name": "rea",
+      "source": {
+        "source": "npm",
+        "package": "rea-agents"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
       "name": "git-workflow",
       "source": {
         "source": "local",
