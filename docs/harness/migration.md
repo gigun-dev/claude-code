@@ -75,7 +75,7 @@ harness はフックを各リポジトリへコピーしていたため、プラ
 - スキル本文の読み込み・CLI の実行と、モデルが実際の依頼で適切にスキルを選ぶことは別。
   新規のモデル会話での自動選択や、他リポジトリの移行完了は今回検証していない。
 
-共通化の方針は [ADR 0003](../adr/0003-share-skills-and-cli-between-hosts.md)。
+共通化の方針は [ADR 0001](../adr/0001-share-skills-and-configuration-across-hosts.md)。
 Codex のスキルの段階的読み込みと配置パスの仕様は
 [公式の Build skills](https://learn.chatgpt.com/codex/build-skills)、
 インストールした CLI を別フォルダから検証する考え方は
