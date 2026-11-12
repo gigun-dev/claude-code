@@ -2,7 +2,6 @@
 
 2026-09-10 の利用者の指示により、harness を廃止して todo・adr に切り替える。
 タスクは `todo.txt` / `done.txt`、決定は `docs/adr/`、知識は docs、経緯はコミットメッセージに置く。
-フックを配布しない判断は [ADR 0002](../adr/0002-ship-no-hooks-in-todo-and-adr.md) を参照する。
 
 ## このリポジトリでの変更
 
