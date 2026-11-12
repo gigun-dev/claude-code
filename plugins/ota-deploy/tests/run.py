@@ -118,6 +118,7 @@ else: sys.exit(2)
     calls = [json.loads(line) for line in (root / 'asc-calls').read_text().splitlines()]
     assert calls[0][calls[0].index('--project') + 1] == 'Project With Spaces.xcodeproj'
     assert calls[1][calls[1].index('--method') + 1] == 'release-testing'
+    assert all('--xcodebuild-flag=-allowProvisioningUpdates' not in call for call in calls)
     native_public = root / 'generated/public/native'
     assert (native_public / 'app.ipa').read_bytes() == ipa.read_bytes()
     saved_page = (native_public / 'index.html').read_bytes()
@@ -127,4 +128,15 @@ else: sys.exit(2)
     assert (native_public / 'index.html').read_bytes() == saved_page
     assert (root / 'generated/state/native/build-number').read_text().strip() == '1'
     assert (root / 'serve-calls').read_bytes() == serve_calls
-    print('PASS: prebuilt distribution; Cloudflare failure isolation; ASC Ad Hoc export and failure')
+    calls_before = len((root / 'asc-calls').read_text().splitlines())
+    run(['/bin/bash', str(SCRIPT), str(native), '--ios', '--allow-provisioning-updates'], repo, native_env)
+    calls = [json.loads(line) for line in (root / 'asc-calls').read_text().splitlines()][calls_before:]
+    assert len(calls) == 2
+    assert all('--xcodebuild-flag=-allowProvisioningUpdates' in call for call in calls)
+    # A sourced configuration cannot silently opt into the per-run flag.
+    config_opt_in = root / 'config-opt-in.conf'
+    config_opt_in.write_text(native.read_text() + 'ALLOW_PROVISIONING_UPDATES=1\n')
+    calls_before = (root / 'asc-calls').read_bytes()
+    run(['/bin/bash', str(SCRIPT), str(config_opt_in), '--ios'], repo, native_env, success=False)
+    assert (root / 'asc-calls').read_bytes() == calls_before
+    print('PASS: prebuilt distribution; Cloudflare failure isolation; ASC provisioning opt-in and failure')

@@ -28,6 +28,8 @@ Workerの`DOWNLOAD_SECRET`は暗号化保管したランダム鍵を`wrangler se
 
 native iOSのarchive/exportはASC CLI（`brew install asc`）へ委譲する。Ad Hocには`release-testing`を明示し、ExportOptions生成を自作しない。既存IPAを`--ipa`で渡す経路とカスタムbuild hookはASC不要。これはローカル実行用skillで、ChatGPTクラウドからminiへアクセスするremote MCPは含まない。
 
+native iOS buildは既定で `-allowProvisioningUpdates` を渡さない。Apple Developer側の署名資材の作成・更新を明示的に承認した実行に限り、CLIへ `--allow-provisioning-updates` を指定できる。これによりarchiveとexportの両方に更新が許可される。custom build hookはこの設定の対象外で、hook自身の挙動を確認する。
+
 `ota.conf` に`OTA_PUBLIC_ORIGIN`・`OTA_WRANGLER_CONFIG`・`OTA_R2_BUCKET`を設定すると、ビルド後にR2へアップロードし、Tailscale Serveは使わない。Bark通知には`BARK_ENV_FILE`で既存のage暗号化通知設定を指定する。通知のリンクは固定ページのSafariスキーム、本文は通常HTTPS URL。サーバー受付成功と実機到達は別に確認する。通知失敗もCLIの失敗として返るが、既に配布したビルドは取り消さない。
 
 ```sh

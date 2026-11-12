@@ -2,7 +2,7 @@
 name: ota-deploy
 description: Build or publish iOS IPA and Android APK install pages over Cloudflare Access or private Tailscale HTTPS. Use for OTA/ad-hoc distribution, installing a build from a phone browser, or restarting an existing OTA server.
 metadata:
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 同梱CLIは、このskillのディレクトリから `../../bin/ota-deploy.sh` の絶対パスで呼ぶ。テンプレートと設定例も同じ `bin/` にある。Claude CodeとCodexで共通。
@@ -12,6 +12,8 @@ metadata:
 macOS、Python3、対象platformのbuild toolが必要。native iOS buildはASC CLI（`brew install asc`）の `asc xcode archive/export` を使う。Tailscale配布にはTailscale、Cloudflare配布にはBunと `cloudflare/` の依存が必要。iOS OTAはHTTPSと端末UDIDを含むad-hoc署名が必要。登録済み端末は `xcrun devicectl list devices` とApple Developerのprofileを照合する。対象を特定できない値は推測せず確認する。
 
 署名診断は `asc xcode doctor --output json`、個別のarchiveからのAd Hoc生成は `asc xcode export --archive-path <archive> --ipa-path <output> --method release-testing`。exportの既定はApp Store用なのでmethodを明示する。ASCはXcodeの実行wrapperであり、SSHからキーチェーンを利用できない条件は変わらない。既存の署名実行環境で生成したIPAを `--ipa` で公開できる。AppleへのuploadやASC APIキーの登録はこの配布に不要。
+
+native iOSのarchive/exportは既定でApple側のprovisioning更新を許可しない。`--allow-provisioning-updates` はApple Developerの署名資材が作成・更新され得るため、対象と変更内容についてユーザーの明示承認を得た実行に限り指定する。署名不足を理由に自動で追加しない。custom build hookは独自の挙動なので別途確認する。
 
 ```sh
 "<skill-dir>/../../bin/ota-deploy.sh" /absolute/path/ota.conf --ios

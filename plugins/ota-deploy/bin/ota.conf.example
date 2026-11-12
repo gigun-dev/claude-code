@@ -20,6 +20,8 @@ IOS_SCHEME="iosApp"
 IOS_BUNDLE_ID="com.you.myapp"
 IOS_TEAM_ID="ABCDE12345"
 IOS_EXPORT_METHOD="release-testing"   # ASC CLI/Xcode name for ad-hoc export
+# Apple provisioning changes require the per-run --allow-provisioning-updates flag;
+# no config value enables them. Use only with explicit user approval.
 
 # ---- Android (APK sideload) --------------------------------------------
 ANDROID_PROJECT_DIR="/Users/you/Projects/MyApp"          # dir containing ./gradlew

@@ -13,16 +13,18 @@
 #   ota-deploy.sh --ipa path/to/App.ipa   # skip xcodebuild, use a prebuilt ipa
 #   ota-deploy.sh --apk path/to/app.apk   # skip gradle, use a prebuilt apk
 #   ota-deploy.sh --serve-only            # just (re)start serving (e.g. after reboot)
+#   ota-deploy.sh --allow-provisioning-updates  # opt in to Apple account changes
 #
 # See README.md for full setup + customization.
 #
 set -euo pipefail
 
 # ---- locate + load config ----------------------------------------------
-CONFIG=""; SERVE_ONLY=0; ONLY=""; IPA_OVERRIDE=""; APK_OVERRIDE=""; MSG=""
+CONFIG=""; SERVE_ONLY=0; ONLY=""; IPA_OVERRIDE=""; APK_OVERRIDE=""; MSG=""; ALLOW_PROVISIONING_UPDATES=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --serve-only) SERVE_ONLY=1; shift;;
+    --allow-provisioning-updates) ALLOW_PROVISIONING_UPDATES=1; shift;;
     --ios) ONLY="ios"; shift;;
     --android) ONLY="android"; shift;;
     --ipa) IPA_OVERRIDE="$2"; shift 2;;
@@ -32,6 +34,7 @@ while [ $# -gt 0 ]; do
     *) CONFIG="$1"; shift;;
   esac
 done
+readonly ALLOW_PROVISIONING_UPDATES
 [ -z "$CONFIG" ] && CONFIG="./ota.conf"
 if [ ! -f "$CONFIG" ]; then
   echo "✖ config not found: $CONFIG  (copy ota.conf.example → ota.conf and edit)" >&2
@@ -115,13 +118,18 @@ build_ios() {
     local proj=() export_args=(--archive-path "$WORK/app.xcarchive" --ipa-path "$WORK/app.ipa" --method "$IOS_EXPORT_METHOD")
     if [ -n "$IOS_WORKSPACE" ]; then proj=(--workspace "$IOS_WORKSPACE"); else proj=(--project "$IOS_PROJECT"); fi
     [ -z "$IOS_TEAM_ID" ] || export_args+=(--team-id "$IOS_TEAM_ID")
+    local archive_args=(xcode archive "${proj[@]}" --scheme "$IOS_SCHEME" --configuration Release
+      --archive-path "$WORK/app.xcarchive" --xcodebuild-flag=-destination
+      --xcodebuild-flag=generic/platform=iOS --xcodebuild-flag="CURRENT_PROJECT_VERSION=$BUILD")
+    # Enabling this may create or update signing assets in the Apple account.
+    if [ "$ALLOW_PROVISIONING_UPDATES" = 1 ]; then
+      archive_args+=(--xcodebuild-flag=-allowProvisioningUpdates)
+      export_args+=(--xcodebuild-flag=-allowProvisioningUpdates)
+    fi
     echo "→ iOS: archiving $IOS_SCHEME (build $BUILD)…"
-    asc xcode archive "${proj[@]}" --scheme "$IOS_SCHEME" --configuration Release \
-      --archive-path "$WORK/app.xcarchive" \
-      --xcodebuild-flag=-destination --xcodebuild-flag=generic/platform=iOS \
-      --xcodebuild-flag="CURRENT_PROJECT_VERSION=$BUILD" --xcodebuild-flag=-allowProvisioningUpdates
+    asc "${archive_args[@]}"
     echo "→ iOS: exporting ad-hoc ipa…"
-    asc xcode export "${export_args[@]}" --xcodebuild-flag=-allowProvisioningUpdates
+    asc xcode export "${export_args[@]}"
     cp "$WORK/app.ipa" "$PUBLIC/app.ipa"
   fi
   # OTA manifest (iOS reads this to install)
