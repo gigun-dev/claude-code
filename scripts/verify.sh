@@ -33,7 +33,7 @@ CHECK_NAMES=(
 	"agy-mcp パース回帰テスト (--selftest-parse)"
 	"ADR の形式チェック"
 	"todo プラグインのテスト (tests/run.sh)"
-	"pre-push プラグインの実 push テスト"
+	"pre-push skill の実 push テスト"
 	"telemetry のローカル集計・クエリ回帰テスト"
 	"輸入 skill の固定情報 (vendor/upstream-skills.json)"
 	"外部 plugin の版固定 (marketplace の version / sha)"
@@ -197,12 +197,12 @@ fi
 [ "$todo_failed" -ne 0 ] && overall_failed=1
 
 # -----------------------------------------------------------------------
-# pre-push プラグインの実 push テスト
+# pre-push skill の実 push テスト
 # -----------------------------------------------------------------------
 # ローカルの bare リポジトリで、配布する Git フックの実際の成否を検証する。
 echo ""
 check_header
-if prepush_out=$(python3 plugins/pre-push/tests/test_pre_push.py 2>&1); then
+if prepush_out=$(python3 tests/pre-push/test_pre_push.py 2>&1); then
     printf '%s\n' "$prepush_out" | tail -4
 else
     printf '%s\n' "$prepush_out"
