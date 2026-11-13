@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 
-TEMPLATE = Path(__file__).resolve().parents[1] / 'skills/pre-push/assets/pre-push'
+TEMPLATE = Path(__file__).resolve().parents[2] / 'skills/pre-push/assets/pre-push'
 
 
 class PrePushTests(unittest.TestCase):

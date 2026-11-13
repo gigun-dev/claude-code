@@ -26,7 +26,7 @@ codex plugin marketplace add gigun-dev/claude-code
 codex plugin add <plugin>@gigun
 ```
 
-サードパーティ製スキル（Langfuse, modern-web-guidance, swift-concurrency-pro, swift-testing-pro, swiftui-pro, hallmark, yomiyasu 等）は、上流の Git リポジトリを両カタログから直接参照する。上流が npm パッケージで plugin を配布する REA（`rea-agents`）は npm source で参照する。どれも版を marketplace に固定し（npm は `version`、Git は `sha`）、週次の workflow（`.github/workflows/external-plugins.yml`）が `scripts/update_external_plugins.py` で公開から 3 日以上経った版へ進めて自動 merge する（ADR 0004 参照）。`claude plugin install <plugin>@gigun` / `codex plugin add <plugin>@gigun` で導入し、更新時は各ホストの marketplace とプラグインを更新する。上流のソースはこのリポジトリへ複製しない。
+skill だけでできたもの(自前の pre-push・japanese-tech-writing、上流の worktree・cross-agent・edit-skills・commit・emil・unslop・hallmark・langfuse・modern-web-guidance・yomiyasu)は plugin にせず、dotfiles の agent-skills-nix が版を `flake.lock` に固定して各ホストの skill ディレクトリへ置く(ADR 0006、[`skills/README.md`](skills/README.md))。marketplace に残る外部 plugin は、commands や MCP など skill 以外も持つもの(visual-explainer・REA)と、判断を保留している swift 系 3 つ。上流の Git リポジトリ(`sha`)か npm パッケージ(`version`)を marketplace に固定し、週次の workflow(`.github/workflows/external-plugins.yml`)が `scripts/update_external_plugins.py` で公開から 3 日以上経った版へ進めて自動 merge する(ADR 0004)。上流のソースはこのリポジトリへ複製しない。
 
 ### Antigravity CLI (agy)
 
@@ -36,7 +36,7 @@ hooks は agy とイベント・ツール名が違うため対象外。commands 
 `agy plugin import` / `install` はコピーを作って UI 管理の `config.json` に記録するため使わず、`~/.gemini/config/plugins.json` でこのリポジトリを指す。dotfiles(`nix/modules/home/dotfiles.nix`)が Claude の `enabledPlugins` から読ませる plugin を導いて配る。`entries[].path` は絶対パスで書く。agy 1.5.5 は文書と違って `~/` を展開せず、その entry を飛ばす(環境変数も展開されない)。
 
 ```json
-{ "entries": [{ "path": "/Users/<user>/ghq/github.com/gigun-dev/claude-code/plugins", "include_only": ["todo", "emil"] }] }
+{ "entries": [{ "path": "/Users/<user>/ghq/github.com/gigun-dev/claude-code/plugins", "include_only": ["todo", "t3"] }] }
 ```
 
 単体検証は `agy plugin validate plugins/<name>`(認証不要・読み取りのみ)。
@@ -88,23 +88,14 @@ MCPサーバーのコード・テスト・配布方法までこのリポジト�
 | プラグイン | スキル | 用途 |
 |---|---|---|
 | `todo` | todo, adr, doctor | todo.txt でタスクと依存関係を、docs/adr/ で決定を管理 |
-| `pre-push` | pre-push | Git の push 前検証の導入・点検 |
 | `telemetry` | review | Langfuse のトレースから自分のセッションを実測し、設定改善に回す |
 | `ios-skills` | ios-app-icon, ios-simulator, ios-device-build, appstoreconnect-upload | 実行先の能力判定・Macへのリモート実行・アイコン・Simulator・実機build・ASC upload |
 | [`ota-deploy`](plugins/ota-deploy/README.md) | ota-deploy | Tailscale経由のiOS IPA・Android APK配布ページ生成 |
-| [`emil`](plugins/emil/README.md) | emil | UIデザイン、アニメーション、プロトタイピングとUI検証（Emil Kowalski、MIT） |
-| [`hallmark`](https://github.com/Nutlope/hallmark) | hallmark | 新規UIの設計・監査・再設計・参考デザインの分析（Nutlope/hallmark、MIT。版は marketplace の `sha` で固定） |
-| `japanese-tech-writing` | japanese-tech-writing | 日本語の技術文書・書籍原稿を書く / 推敲するときの文章規範(上流のgistから逐語でvendor、Unlicense) |
-| `yomiyasu` | yomiyasu | AI が書いた日本語を、意味・数値・否定・条件を保ったまま読みやすく直す（nanaism/yomiyasu、MIT、Claude Code のみ） |
-| [`worktree`](plugins/worktree/README.md) | worktree | git-wt / git-wtpr による worktree 操作(ryoppippi/dotfiles、MIT)。`git-wt` が PATH にあること |
 | [`t3`](plugins/t3/README.md) | t3-delegate, t3-limits | T3 Code 内の子タスク委譲と quota 確認 + T3 Code MCP(ryoppippi、MIT)
-| [`cross-agent`](plugins/cross-agent/README.md) | ask-other-agent, review-loop | 他社エージェントへの相談・レビュー(ryoppippi、MIT)
-| [`edit-skills`](plugins/edit-skills/README.md) | edit-skills | skill 編集の規約と監査(ryoppippi、MIT)
-| [`git-workflow`](plugins/git-workflow/README.md) | commit | 小さな Conventional Commits を作る(ryoppippi、MIT)
 
 Supabase・Vercel など公式マーケットプレイスに既にMCP内包プラグインがあるものは重複させず、`claude-plugins-official` 側を使う方針。
 
-`worktree` `t3` `cross-agent` `edit-skills` `git-workflow` の skill は ryoppippi/dotfiles と ryoppippi/t3-limits から原本のまま写しており、出典と固定 commit は [`vendor/upstream-skills.json`](vendor/upstream-skills.json) にある。`scripts/sync_upstream_skills.py`(既定は dry-run、`--write` で写し直し)と週次の `.github/workflows/upstream-skills.yml` が差分を確認する。
+`t3` の skill は ryoppippi/dotfiles と ryoppippi/t3-limits から原本のまま写しており(MCP と一緒に配るため plugin に残す)、出典と固定 commit は [`vendor/upstream-skills.json`](vendor/upstream-skills.json) にある。`scripts/sync_upstream_skills.py`(既定は dry-run、`--write` で写し直し)と週次の `.github/workflows/upstream-skills.yml` が差分を確認する。
 
 ### harness から todo・ADR へ移行
 

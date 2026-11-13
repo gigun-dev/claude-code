@@ -1,9 +1,0 @@
-{
-  "name": "edit-skills",
-  "version": "0.1.0",
-  "description": "Conventions and an audit script for editing agent skills. Skill copied verbatim from ryoppippi/dotfiles (MIT).",
-  "author": {
-    "name": "gigun",
-    "url": "https://github.com/gigun-dev"
-  }
-}

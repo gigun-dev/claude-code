@@ -42,45 +42,9 @@
       "description": "Review Claude Code and Codex local sessions, or configured Langfuse traces, and identify evidence-backed improvements"
     },
     {
-      "name": "japanese-tech-writing",
-      "source": "./plugins/japanese-tech-writing",
-      "description": "Style rules for Japanese technical prose: paragraph structure, argument rigor, reader load, restraint in rhetoric, no LLM filler or translationese (vendored verbatim from a k16shikano gist, Unlicense)"
-    },
-    {
-      "name": "pre-push",
-      "source": "./plugins/pre-push",
-      "description": "Set up and inspect Git pre-push checks using the repository\u2019s CI verification command. Preserve existing hook management; copied hooks run independently of the plugin."
-    },
-    {
-      "name": "worktree",
-      "source": "./plugins/worktree",
-      "description": "Manage git worktrees with git-wt and git-wtpr (PR checkouts). Skill copied verbatim from ryoppippi/dotfiles (MIT)."
-    },
-    {
       "name": "t3",
       "source": "./plugins/t3",
       "description": "Delegate work to another provider or model as a T3 Code child task (t3-delegate), and check provider quota (t3-limits). Skills copied verbatim from ryoppippi/dotfiles and ryoppippi/t3-limits (MIT)."
-    },
-    {
-      "name": "cross-agent",
-      "source": "./plugins/cross-agent",
-      "description": "Ask other agents or models (Codex, Claude Code, Grok, Cursor) and run a cross-vendor review loop. Skills copied verbatim from ryoppippi/dotfiles (MIT)."
-    },
-    {
-      "name": "edit-skills",
-      "source": "./plugins/edit-skills",
-      "description": "Conventions and an audit script for editing agent skills. Skill copied verbatim from ryoppippi/dotfiles (MIT)."
-    },
-    {
-      "name": "langfuse",
-      "source": {
-        "source": "url",
-        "url": "https://github.com/langfuse/skills.git",
-        "ref": "main",
-        "sha": "6fb2baf4413719ec241916e25e4a0330372c9d49"
-      },
-      "description": "Work with Langfuse tracing, prompts, datasets, evaluations, and documentation.",
-      "category": "Developer Tools"
     },
     {
       "name": "visual-explainer",
@@ -95,17 +59,6 @@
       "category": "Developer Tools"
     },
     {
-      "name": "hallmark",
-      "source": {
-        "source": "url",
-        "url": "https://github.com/Nutlope/hallmark.git",
-        "ref": "main",
-        "sha": "80fc3c723ab31eb9a43b7ce6c239d6bce094cdbb"
-      },
-      "description": "Distinctive UI design, audit, redesign and design study (Nutlope/hallmark, MIT).",
-      "category": "Design"
-    },
-    {
       "name": "ota-deploy",
       "source": "./plugins/ota-deploy",
       "description": "ASC-powered iOS builds and private Cloudflare or Tailscale OTA distribution with Bark notifications."
@@ -114,17 +67,6 @@
       "name": "asc-mcp",
       "source": "./plugins/asc-mcp",
       "description": "Build a registered iOS app from a GitHub PR or commit through an authenticated remote MCP, inspect progress, and obtain a private install link."
-    },
-    {
-      "name": "modern-web-guidance",
-      "source": {
-        "source": "url",
-        "url": "https://github.com/GoogleChrome/modern-web-guidance.git",
-        "ref": "main",
-        "sha": "341268561baaff256927c931ec8215dbd30e3cee"
-      },
-      "description": "Keep your coding agent up to date with the latest web best practices.",
-      "category": "Developer Tools"
     },
     {
       "name": "swift-concurrency-pro",
@@ -162,17 +104,6 @@
       "category": "Developer Tools"
     },
     {
-      "name": "yomiyasu",
-      "source": {
-        "source": "url",
-        "url": "https://github.com/nanaism/yomiyasu.git",
-        "ref": "main",
-        "sha": "8394e099486aaa2e28cf89992e46f5ebe5ed839d"
-      },
-      "description": "Rewrites AI-generated Japanese prose to read naturally while keeping meaning, numbers, negations and conditions (nanaism/yomiyasu, MIT).",
-      "category": "Productivity"
-    },
-    {
       "name": "rea",
       "source": {
         "source": "npm",
@@ -181,21 +112,6 @@
       },
       "description": "Reverse engineer anything with agents, from app behavior down to native binaries: MCP server and skill (morluto/rea, MIT).",
       "category": "Developer Tools"
-    },
-    {
-      "name": "git-workflow",
-      "source": "./plugins/git-workflow",
-      "description": "Git workflow skills. commit: atomic Conventional Commits. Skills copied verbatim from ryoppippi/dotfiles (MIT)."
-    },
-    {
-      "name": "emil",
-      "source": "./plugins/emil",
-      "description": "Emil Kowalski\u2019s skills for UI design, animation, prototyping and UI testing."
-    },
-    {
-      "name": "unslop",
-      "source": "./plugins/unslop",
-      "description": "Turn vibecoded, AI-looking UI into a designed interface (heydamir/unslop, CC BY 4.0, copied verbatim)."
     }
   ]
 }
