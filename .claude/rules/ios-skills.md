@@ -13,7 +13,7 @@ paths:
 
 `evaluations/` は評価の手順・入力・実行器・測定結果を置く。
 評価を変更するときは `evaluations/README.md` を読む。
-対象は `plugins/ios-skills/` の改善で、外部製品を接続するだけの `xcode-mcp` は対象外。
+対象は `plugins/ios-skills/` の改善で、Xcode の MCP は Apple 公式 plugin を使い対象外。
 
 Codex では `evaluations/AGENTS.md` がこのファイルへの symlink。
 配布物の `plugins/` にリポジトリ外を指す symlink を置かない。
