@@ -1,4 +1,4 @@
-# External npm plugins (nix/npm-sources.json) as Antigravity CLI (agy) plugins.
+# Pinned external npm and Git plugins as Antigravity CLI (agy) plugins.
 #
 # The output is a directory of plugins, $out/<name>/, for one entry in
 # ~/.gemini/config/plugins.json: { path = "${pkg}"; include_only = [ ... ]; }.
@@ -26,6 +26,14 @@
 }:
 let
   sources = lib.filterAttrs (name: _: !lib.hasPrefix "$" name) (lib.importJSON ./npm-sources.json);
+  marketplace = lib.importJSON ../.claude-plugin/marketplace.json;
+  # Git plugins need an agy-compatible layout; add names here after checking it.
+  gitNames = [ "visual-explainer" ];
+  gitEntries = builtins.filter (p: builtins.elem p.name gitNames) marketplace.plugins;
+  gitSources = builtins.listToAttrs (map (p: {
+    inherit (p) name;
+    value = p.source;
+  }) gitEntries);
   scripts = lib.fileset.toSource {
     root = ../scripts;
     fileset = lib.fileset.unions [
@@ -33,7 +41,7 @@ let
       ../scripts/generate_manifests.py
     ];
   };
-  unknown = lib.subtractLists (lib.attrNames sources) (lib.attrNames mcpEnv);
+  unknown = lib.subtractLists (lib.attrNames sources ++ lib.attrNames gitSources) (lib.attrNames mcpEnv);
   install = name: source: ''
     mkdir -p "$out/${name}"
     tar -xzf ${
@@ -46,11 +54,32 @@ let
       --node ${lib.getExe mcpNode} \
       --env ${lib.escapeShellArg (builtins.toJSON (mcpEnv.${name} or { }))}
   '';
+  installGit = name: source:
+    let
+      checkout = builtins.fetchGit { inherit (source) url; rev = source.sha; };
+      subdir = if source.source == "git-subdir" then "/${source.path}" else "";
+    in ''
+      mkdir -p "$out/${name}"
+      cp -R ${checkout}${subdir}/. "$out/${name}/"
+      chmod -R u+w "$out/${name}"
+      if [ -f "$out/${name}/SKILL.md" ]; then
+        mkdir -p "$out/${name}/skills/${name}"
+        cp -R ${checkout}${subdir}/. "$out/${name}/skills/${name}/"
+        chmod -R u+w "$out/${name}/skills/${name}"
+      fi
+      python3 ${scripts}/agy_wrap_plugin.py "$out/${name}" \
+        --node ${lib.getExe mcpNode} \
+        --env ${lib.escapeShellArg (builtins.toJSON (mcpEnv.${name} or { }))}
+    '';
 in
 assert lib.assertMsg (unknown == [ ]) "agy-external-plugins: mcpEnv names unknown plugins: ${toString unknown}";
+assert lib.assertMsg (builtins.length gitEntries == builtins.length gitNames) "agy-external-plugins: missing Git marketplace entry";
 stdenvNoCC.mkDerivation {
   pname = "agy-external-plugins";
-  version = lib.concatStringsSep "+" (lib.mapAttrsToList (name: s: "${name}-${s.version}") sources);
+  version = lib.concatStringsSep "+" (
+    lib.mapAttrsToList (name: s: "${name}-${s.version}") sources
+    ++ lib.mapAttrsToList (name: s: "${name}-${builtins.substring 0 12 s.sha}") gitSources
+  );
 
   dontUnpack = true;
   # Why not the default fixup: it rewrites shebangs and strips binaries across
@@ -63,6 +92,7 @@ stdenvNoCC.mkDerivation {
   installPhase = ''
     runHook preInstall
     ${lib.concatStrings (lib.mapAttrsToList install sources)}
+    ${lib.concatStrings (lib.mapAttrsToList installGit gitSources)}
     runHook postInstall
   '';
 
@@ -76,10 +106,10 @@ stdenvNoCC.mkDerivation {
     runHook postInstallCheck
   '';
 
-  passthru = { inherit sources; };
+  passthru = { inherit sources gitSources; };
 
   meta = {
-    description = "Pinned external npm plugins wrapped for the Antigravity CLI (agy)";
+    description = "Pinned external plugins wrapped for the Antigravity CLI (agy)";
     platforms = lib.platforms.unix;
   };
 }

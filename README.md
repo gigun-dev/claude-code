@@ -41,7 +41,7 @@ hooks は agy とイベント・ツール名が違うため対象外。commands 
 
 単体検証は `agy plugin validate plugins/<name>`(認証不要・読み取りのみ)。
 
-外部 plugin のうち npm で配布されるもの(REA)は、このリポジトリの flake が agy 版を作る(`nix/agy-external-plugins.nix`、overlay の `agy-external-plugins`。ADR 0005)。上流の tarball を `nix/npm-sources.json` の版とハッシュで取得し、`scripts/agy_wrap_plugin.py` が agy の manifest と `mcp_config.json` を足す。agy がスラッシュコマンドで読む skill 本文は先頭 24,000 バイトまでなので、超える SKILL.md は節単位で `references/` へ移す。出力は plugin を並べたディレクトリなので、`plugins.json` の entry としてそのまま指す。Ghidra などの環境は `mcpEnv` で渡す。
+外部 plugin の agy 版はこのリポジトリの flake が作る(`nix/agy-external-plugins.nix`、overlay の `agy-external-plugins`。ADR 0005)。npm は `nix/npm-sources.json` の版とハッシュ、対応済みの Git plugin は marketplace の固定コミットから取得する。Git plugin は上流の構造を確認して Nix の `gitNames` に登録する。`scripts/agy_wrap_plugin.py` が agy の manifest と必要な `mcp_config.json` を足す。agy がスラッシュコマンドで読む skill 本文は先頭 24,000 バイトまでなので、超える SKILL.md は節単位で `references/` へ移す。出力は plugin を並べたディレクトリなので、`plugins.json` の entry としてそのまま指す。Ghidra などの環境は `mcpEnv` で渡す。
 
 ```nix
 (pkgs.agy-external-plugins.override {
