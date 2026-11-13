@@ -42,3 +42,4 @@ x 2026-11-12 2026-11-10 REAを既存の外部pluginと同じように共通marke
 x 2026-11-13 2026-11-13 OTA native iOSビルドの自動provisioningを明示指定にし、既定と不正値の拒否をfixtureで検証する +ota-deploy @unattended by:codex id:0066
 x 2026-11-13 2026-11-13 visual-explainer を外部プラグインとして Claude Code・Codex・agy に導入する +plugins by:me id:0067
 x 2026-11-13 2026-11-13 +plugins Claude・Codex・agyそれぞれで、設定に未記載のgigun pluginを有効と宣言したときinstall(cacheへの取得)まで自動で行われるか、既存pluginの版更新は行われるかを使い捨ての設定ディレクトリで実測する。hallmarkはmarketplaceが外部URLに変わった後もvendor版1.1.0のcacheで動いている by:claude id:0068
+x 2026-11-13 2026-11-13 +plugins pre-push を改修する。何を直すかは未定で、利用者に聞いてから中身を決める (0074 で残すと決めた際の要望) by:claude id:0075 @dropped pre-push は廃止した(利用者判断 2026-11-13)。CI で検証するリポジトリでは push 前の検証が二重になり、dotfiles も ADR 0011 で手元の関門をやめている。90 日の利用は 1 回
