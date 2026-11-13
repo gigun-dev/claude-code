@@ -74,11 +74,8 @@ todo・adr の実行依存は POSIX sh と awk。harness やホスト専用ラ�
 | プラグイン | MCPサーバー | 用途 |
 |---|---|---|
 | `xcode-mcp` | `xcrun mcpbridge` | Xcode / iOS開発 |
-| `next-devtools-mcp` | `next-devtools-mcp` | Next.js開発 |
 | `chrome-devtools-mcp` | `chrome-devtools-mcp` | ブラウザ操作・Web検証 |
 | `deepwiki-mcp` | DeepWiki (http) | GitHubリポジトリのドキュメントQ&A |
-| `dart-mcp` | `dart mcp-server` | Dart / Flutter開発(PATHに dart が必要) |
-| `tableplus-mcp` | TablePlus | データベースGUI連携 |
 | `markitdown-mcp` | `markitdown-mcp` | ファイル→Markdown変換(dotfiles の packages.nix から nix で入れる) |
 
 Context7はClaude/Codexともに `context7@claude-plugins-official` を使う。OpenAI Developer Docs MCPは[公式の直接設定](https://developers.openai.com/learn/docs-mcp)を使う。開発中のTDR MCPは将来ChatGPT pluginとして扱い、このmarketplaceには含めない。
