@@ -18,7 +18,7 @@ error で起動できない場合がある。エラーは依存する経路だ�
 | Simulator の複製・OS アカウント・proxy・録画 | ios-simulator の simctl / 同梱スクリプト |
 | IDE を介さない実機 build/install/run | ios-device-build の CLI |
 | アイコンの生成・render | ios-app-icon。xcodeproj コマンドが実行可能なら組み込みに利用 |
-| iPhone へ Ad Hoc OTA 配布 | 登録済みプロジェクトなら asc-mcp。App Store Connect への upload と混同しない |
+| iPhone へ Ad Hoc OTA 配布 | ios-ota（ローカルCLIまたは登録済みプロジェクトのremote MCP）。App Store Connect への upload と混同しない |
 
 Apple の DeviceInteraction ツール群を使う場合は対応する `device-interaction` スキルを読む。
 workspace session に対象を明示し、install/run、hierarchy と screenshot、操作後の状態を確認し、
@@ -45,7 +45,7 @@ python3 scripts/ios-host.py exec --host <Mac> -- xcrun simctl list devices avail
 どちらもローカルの資格情報や環境変数は
 転送しない。プロジェクトの引数・生成物・ログは実行先のパスで、取得が必要なら対象を明示して別途転送する。
 渡す引数や実行先の環境に含まれる資格情報まで隔離するものではない。SSH が同じ UID の home や
-Keychain にアクセスできる範囲を踏まえ、署名・公開は asc-mcp 側の境界に従う。
+Keychain にアクセスできる範囲を踏まえ、署名・公開は ios-ota 側の境界に従う。
 
 macOS の Tailscale SSH では、失敗したコマンドも SSH 自体の終了値が 0 になる
 [上流の問題](https://github.com/tailscale/tailscale/issues/18256)がある。この入口は SSH の終了値だけに

@@ -91,7 +91,7 @@ MCPサーバーのコード・テスト・配布方法までこのリポジト�
 | `pre-push` | pre-push | Git の push 前検証の導入・点検 |
 | `telemetry` | review | Langfuse のトレースから自分のセッションを実測し、設定改善に回す |
 | `ios-skills` | ios-app-icon, ios-simulator, ios-device-build, appstoreconnect-upload | 実行先の能力判定・Macへのリモート実行・アイコン・Simulator・実機build・ASC upload |
-| [`ota-deploy`](plugins/ota-deploy/README.md) | ota-deploy | Tailscale経由のiOS IPA・Android APK配布ページ生成 |
+| [`ios-ota`](plugins/ios-ota/README.md) | ios-ota | iOSアプリの自動Ad Hocプロビジョニング、ローカル/リモートOTA配布、ASC CLI Code Mode |
 | [`emil`](plugins/emil/README.md) | emil | UIデザイン、アニメーション、プロトタイピングとUI検証（Emil Kowalski、MIT） |
 | [`hallmark`](https://github.com/Nutlope/hallmark) | hallmark | 新規UIの設計・監査・再設計・参考デザインの分析（Nutlope/hallmark、MIT。版は marketplace の `sha` で固定） |
 | `japanese-tech-writing` | japanese-tech-writing | 日本語の技術文書・書籍原稿を書く / 推敲するときの文章規範(上流のgistから逐語でvendor、Unlicense) |
