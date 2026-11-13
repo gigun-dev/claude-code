@@ -20,7 +20,10 @@ the heading, its opening paragraph and a pointer telling the agent to read the
 moved file before acting. Text is moved, never rewritten, except that links
 starting with references/ lose that prefix because the text now lives there.
 The split refuses (exit 1) instead of producing a skill that still does not fit
-or has a broken link, so an upstream restructure fails the Nix build.
+or has a broken link, so an upstream restructure fails the Nix build. The same
+goes for a package without a Claude manifest or with an unreadable MCP list:
+those exit 1 with a one-line message naming the file, while any other error
+keeps its traceback.
 
 usage: agy_wrap_plugin.py PLUGIN_DIR [--node PATH] [--env JSON]
        agy_wrap_plugin.py PLUGIN_DIR --smoke
@@ -52,8 +55,28 @@ MARKER = "nix/agy-external-plugins.nix (scripts/agy_wrap_plugin.py), from the up
 FRONTMATTER = re.compile(r"---\n.*?\n---\n", re.S)
 
 
-class SplitError(Exception):
+class WrapError(Exception):
+    """The upstream package is not in a shape this script can wrap.
+
+    main() prints the message alone and exits 1, so the Nix build log names
+    what upstream changed. Anything else is a bug here and keeps its traceback.
+    """
+
+
+class SplitError(WrapError):
     pass
+
+
+def read_json(path: Path, what: str) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise WrapError(f"{path}: missing; the upstream package does not ship {what}") from None
+    except json.JSONDecodeError as error:
+        raise WrapError(f"{path}: {what} is not valid JSON ({error})") from None
+    if not isinstance(data, dict):
+        raise WrapError(f"{path}: {what} is not a JSON object")
+    return data
 
 
 def size(text: str) -> int:
@@ -126,7 +149,14 @@ def mcp_servers(plugin_dir: Path, claude: dict) -> dict:
         return inline
     pointer = inline if isinstance(inline, str) else ".mcp.json"
     path = plugin_dir / pointer
-    return json.loads(path.read_text(encoding="utf-8"))["mcpServers"] if path.is_file() else {}
+    if not path.is_file():
+        if isinstance(inline, str):
+            raise WrapError(f"{path}: missing; .claude-plugin/plugin.json points mcpServers at it")
+        return {}
+    servers = read_json(path, "the MCP server list").get("mcpServers")
+    if not isinstance(servers, dict):
+        raise WrapError(f"{path}: has no \"mcpServers\" object")
+    return servers
 
 
 def skill_roots(plugin_dir: Path, claude: dict) -> list[Path]:
@@ -136,8 +166,11 @@ def skill_roots(plugin_dir: Path, claude: dict) -> list[Path]:
 
 
 def wrap(plugin_dir: Path, node: str | None, env: dict[str, dict[str, str]]) -> list[str]:
-    claude = json.loads((plugin_dir / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
-    name = claude["name"]
+    manifest_path = plugin_dir / ".claude-plugin" / "plugin.json"
+    claude = read_json(manifest_path, "a Claude plugin manifest")
+    name = claude.get("name")
+    if not isinstance(name, str) or not name:
+        raise WrapError(f"{manifest_path}: has no \"name\"")
     manifest = {MARKER_KEY: MARKER} | {f: claude[f] for f in GENERATED_PLUGIN_FIELDS if f in claude}
     (plugin_dir / ".antigravity-plugin").mkdir(exist_ok=True)
     (plugin_dir / ".antigravity-plugin" / "plugin.json").write_text(fmt_json(manifest, compact=False), encoding="utf-8")
@@ -225,7 +258,7 @@ def main() -> int:
     try:
         for line in wrap(args.plugin_dir, args.node, json.loads(args.env)):
             print(line)
-    except SplitError as error:
+    except WrapError as error:
         print(f"agy_wrap_plugin: {error}", file=sys.stderr)
         return 1
     return 0

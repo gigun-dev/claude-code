@@ -1,5 +1,6 @@
 import json
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -114,6 +115,36 @@ class WrapTest(unittest.TestCase):
     def test_env_for_an_unknown_server_is_an_error(self) -> None:
         with self.assertRaises(SystemExit):
             wrap.wrap(self.plugin, None, {"other": {"B": "2"}})
+
+    def run_main(self) -> subprocess.CompletedProcess:
+        script = Path(wrap.__file__)
+        return subprocess.run([sys.executable, str(script), str(self.plugin)], capture_output=True, text=True)
+
+    def test_upstream_without_manifest_fails_with_one_line(self) -> None:
+        # rea-agents 6.8.0 and earlier ship no .claude-plugin/plugin.json.
+        (self.plugin / ".claude-plugin" / "plugin.json").unlink()
+        result = self.run_main()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(".claude-plugin/plugin.json: missing; the upstream package does not ship", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_mcp_pointer_to_a_missing_file_fails_with_one_line(self) -> None:
+        manifest = self.plugin / ".claude-plugin" / "plugin.json"
+        manifest.write_text(json.dumps(json.loads(manifest.read_text()) | {"mcpServers": "./mcp.json"}))
+        result = self.run_main()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("mcp.json: missing; .claude-plugin/plugin.json points mcpServers at it", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_unexpected_failure_keeps_its_traceback(self) -> None:
+        # Only known upstream shapes are turned into one line; a bug here must
+        # still show where it happened.
+        skill_md = self.plugin / "skills" / "demo" / "SKILL.md"
+        skill_md.unlink()
+        skill_md.mkdir()  # reading it raises IsADirectoryError, which is not a WrapError
+        result = self.run_main()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Traceback", result.stderr)
 
 
 if __name__ == "__main__":
