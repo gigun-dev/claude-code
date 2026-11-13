@@ -103,6 +103,18 @@
       "category": "Developer Tools"
     },
     {
+      "name": "visual-explainer",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/nicobailon/visual-explainer.git",
+        "path": "plugins/visual-explainer",
+        "ref": "main",
+        "sha": "9d5f880b7e8e0a9a80c890b8e1bb6918b68481ad"
+      },
+      "description": "Generate HTML diagrams, reviews, presentations and visual explanations.",
+      "category": "Developer Tools"
+    },
+    {
       "name": "hallmark",
       "source": {
         "source": "url",
