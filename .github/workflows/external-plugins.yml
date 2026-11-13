@@ -7,7 +7,11 @@ name: external-plugins
 # the minimum age and the npm manifest check inside the script, then the pin and
 # generated-manifest checks below. A failed step leaves main untouched.
 # An npm pin move also rewrites nix/npm-sources.json (tarball URL and registry
-# integrity) in the same commit, which the agy build in nix/ fetches.
+# integrity) in the same commit, which the agy build in nix/ fetches. When that
+# file changes, the agy package is built before the merge: the fetch checks the
+# hash, and the build splits the skill and starts the MCP server, so a release
+# the wrapper cannot handle (docs/adr/0005-*) stops here instead of breaking the
+# consumers' Nix builds after it lands.
 # Local dry-run:
 #   python3 scripts/update_external_plugins.py --dry-run
 
@@ -40,6 +44,17 @@ jobs:
         run: |
           python3 scripts/update_external_plugins.py --check
           python3 scripts/generate_manifests.py --check
+      - name: Did the npm sources change
+        id: npm
+        run: |
+          if git diff --quiet -- nix/npm-sources.json; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.npm.outputs.changed == 'true'
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          github_access_token: ${{ github.token }}
+      - name: Build the agy package
+        if: steps.npm.outputs.changed == 'true'
+        run: nix build .#agy-external-plugins --print-build-logs
       - name: Open PR and merge
         env:
           GH_TOKEN: ${{ github.token }}

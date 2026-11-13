@@ -19,9 +19,11 @@ After --write, run scripts/generate_manifests.py --write to carry the pins into
 
 Every npm pin also has an entry in nix/npm-sources.json (tarball URL and the
 registry's SRI integrity), which nix/agy-external-plugins.nix fetches to build
-the agy copy of the plugin. --write keeps that file on the pinned versions in
-the same change, and --check fails when the two disagree, so the version a host
+the agy copy of the plugin. --write rewrites that file from the registry in the
+same change, and --check fails when the versions disagree, so the version a host
 installs through the marketplace and the one Nix builds cannot drift apart.
+--check cannot verify the url or hash offline; the weekly workflow builds the
+Nix package before it merges, and that fetch is what checks them.
 
 Why a minimum age: the weekly workflow merges its own PR, so nobody reads the
 diff first. Waiting a few days leaves time for a bad release to be noticed and
@@ -126,6 +128,22 @@ def npm_source_problems(marketplace: dict, sources: dict) -> list[str]:
 def npm_source_entry(package: str, version: str) -> dict:
     dist = json.loads(http(f"{NPM_REGISTRY}/{urllib.parse.quote(package, safe='@')}/{version}"))["dist"]
     return {"package": package, "version": version, "url": dist["tarball"], "hash": dist["integrity"]}
+
+
+def build_npm_sources(entries: list[dict], fetch) -> dict:
+    """nix/npm-sources.json for the npm pins, every entry fetched from the registry.
+
+    Why not keep an entry whose package and version already match: --check is
+    offline and cannot see the url or hash, so a kept entry would carry a
+    hand-edited or stale hash forward and only a consumer's Nix build would
+    notice. Rebuilding from the pins also leaves no entry for a removed plugin.
+    """
+    fresh = {"$generated": NPM_SOURCES_MARKER}
+    for entry in entries:
+        source = entry["source"]
+        if source.get("source") == "npm":
+            fresh[entry["name"]] = fetch(source["package"], source["version"])
+    return fresh
 
 
 def load_npm_sources() -> dict:
@@ -244,18 +262,12 @@ def main() -> int:
         # Same form the file already has (ASCII-escaped, 2-space indent), so a
         # pin move is the only line that changes.
         MARKETPLACE.write_text(json.dumps(marketplace, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
-    if args.write and npm_source_problems(marketplace, sources):
-        # Rebuilt from the pins rather than patched, so a removed plugin leaves no entry.
-        fresh = {"$generated": NPM_SOURCES_MARKER}
-        for entry in entries:
-            source = entry["source"]
-            if source.get("source") == "npm":
-                kept = sources.get(entry["name"], {})
-                same = (kept.get("package"), kept.get("version")) == (source["package"], source["version"])
-                fresh[entry["name"]] = kept if same else npm_source_entry(source["package"], source["version"])
-        NPM_SOURCES.parent.mkdir(exist_ok=True)
-        NPM_SOURCES.write_text(json.dumps(fresh, indent=2) + "\n", encoding="utf-8")
-        print(f"wrote {NPM_SOURCES.relative_to(REPO_ROOT)}")
+    if args.write:
+        fresh = build_npm_sources(entries, npm_source_entry)
+        if fresh != sources:
+            NPM_SOURCES.parent.mkdir(exist_ok=True)
+            NPM_SOURCES.write_text(json.dumps(fresh, indent=2) + "\n", encoding="utf-8")
+            print(f"wrote {NPM_SOURCES.relative_to(REPO_ROOT)}")
     return 0
 
 
