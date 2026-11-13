@@ -141,50 +141,6 @@
       "category": "Developer Tools"
     },
     {
-      "name": "swift-concurrency-pro",
-      "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/twostraws/Swift-Concurrency-Agent-Skill.git",
-        "path": "swift-concurrency-pro",
-        "ref": "main",
-        "sha": "bee3f69ba17142da148d3c5406f148ed62592b69"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Developer Tools"
-    },
-    {
-      "name": "swift-testing-pro",
-      "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/twostraws/Swift-Testing-Agent-Skill.git",
-        "path": "swift-testing-pro",
-        "ref": "main",
-        "sha": "2d6bba14a3c8bf3694f218b92fffe617c41ae43e"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Developer Tools"
-    },
-    {
-      "name": "swiftui-pro",
-      "source": {
-        "source": "url",
-        "url": "https://github.com/twostraws/SwiftUI-Agent-Skill.git",
-        "ref": "main",
-        "sha": "f2920b63995263f57b3e198674e89a602efba6d2"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Developer Tools"
-    },
-    {
       "name": "rea",
       "source": {
         "source": "npm",

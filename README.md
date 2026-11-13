@@ -26,7 +26,7 @@ codex plugin marketplace add gigun-dev/claude-code
 codex plugin add <plugin>@gigun
 ```
 
-skill だけでできたもの(自前の japanese-tech-writing、上流の worktree・cross-agent・edit-skills・commit・emil・unslop・hallmark・langfuse・modern-web-guidance・yomiyasu)は plugin にせず、dotfiles の agent-skills-nix が版を `flake.lock` に固定して各ホストの skill ディレクトリへ置く(ADR 0006、[`skills/README.md`](skills/README.md))。marketplace に残る外部 plugin は、commands や MCP など skill 以外も持つもの(visual-explainer・REA)と、判断を保留している swift 系 3 つ。上流の Git リポジトリ(`sha`)か npm パッケージ(`version`)を marketplace に固定し、週次の workflow(`.github/workflows/external-plugins.yml`)が `scripts/update_external_plugins.py` で公開から 3 日以上経った版へ進めて自動 merge する(ADR 0004)。上流のソースはこのリポジトリへ複製しない。
+skill だけでできたもの(自前の japanese-tech-writing、上流の worktree・cross-agent・edit-skills・commit・emil・unslop・hallmark・langfuse・modern-web-guidance・yomiyasu・swift-concurrency-pro・swift-testing-pro・swiftui-pro)は plugin にせず、dotfiles の agent-skills-nix が版を `flake.lock` に固定して各ホストの skill ディレクトリへ置く(ADR 0006、[`skills/README.md`](skills/README.md))。marketplace に残る外部 plugin は、commands や MCP など skill 以外も持つもの(visual-explainer・REA)。上流の Git リポジトリ(`sha`)か npm パッケージ(`version`)を marketplace に固定し、週次の workflow(`.github/workflows/external-plugins.yml`)が `scripts/update_external_plugins.py` で公開から 3 日以上経った版へ進めて自動 merge する(ADR 0004)。上流のソースはこのリポジトリへ複製しない。
 
 ### Antigravity CLI (agy)
 
