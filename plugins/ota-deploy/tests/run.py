@@ -29,6 +29,7 @@ with tempfile.TemporaryDirectory(prefix='ota-deploy-test-') as directory:
         file.chmod(0o755)
     env = dict(os.environ, PATH=str(mocks) + ':' + os.environ['PATH'],
                OTA_HOME=str(root / 'generated'), OTA_TEST_CALLS=str(root / 'serve-calls'),
+               GIT_CONFIG_GLOBAL='/dev/null', GIT_CONFIG_NOSYSTEM='1',
                GIT_AUTHOR_NAME='Fixture', GIT_AUTHOR_EMAIL='fixture@example.invalid',
                GIT_COMMITTER_NAME='Fixture', GIT_COMMITTER_EMAIL='fixture@example.invalid')
     missing = run(['bash', str(SCRIPT), str(root / 'missing.conf')], root, env, success=False)
@@ -102,6 +103,13 @@ import json,os,sys,shutil
 from pathlib import Path
 args=sys.argv[1:]
 with open(os.environ['OTA_ASC_CALLS'],'a') as log: log.write(json.dumps(args)+'\\n')
+if args[:2]==['signing','run']:
+ sep=args.index('--')
+ inner=args[sep+2:]
+ action=inner[1]
+ if os.environ.get('OTA_ASC_FAIL')==action: sys.exit(1)
+ shutil.copyfile(os.environ['OTA_ASC_IPA'],inner[inner.index('--ipa-path')+1])
+ sys.exit(0)
 action=args[1]
 if os.environ.get('OTA_ASC_FAIL')==action: sys.exit(1)
 if action=='archive': Path(args[args.index('--archive-path')+1]).mkdir()
@@ -133,6 +141,22 @@ else: sys.exit(2)
     calls = [json.loads(line) for line in (root / 'asc-calls').read_text().splitlines()][calls_before:]
     assert len(calls) == 2
     assert all('--xcodebuild-flag=-allowProvisioningUpdates' in call for call in calls)
+    # Ephemeral signing via ASC_SIGNING_* uses CODE_SIGNING_ALLOWED=NO and asc signing run, then cleans up.
+    import base64
+    calls_before = len((root / 'asc-calls').read_text().splitlines())
+    ephemeral_env = dict(
+        native_env,
+        ASC_SIGNING_P12_BASE64=base64.b64encode(b'p12').decode(),
+        ASC_SIGNING_PASSWORD='pass',
+        ASC_SIGNING_PROFILE_BASE64=base64.b64encode(b'profile').decode(),
+    )
+    run(['/bin/bash', str(SCRIPT), str(native), '--ios'], repo, ephemeral_env)
+    calls = [json.loads(line) for line in (root / 'asc-calls').read_text().splitlines()][calls_before:]
+    assert len(calls) == 2
+    assert '--xcodebuild-flag=CODE_SIGNING_ALLOWED=NO' in calls[0]
+    assert calls[1][:2] == ['signing', 'run']
+    assert '--signing-style' in calls[1] and 'manual' in calls[1]
+    assert not (root / 'generated/state/native/.work/signing').exists()
     # A sourced configuration cannot silently opt into the per-run flag.
     config_opt_in = root / 'config-opt-in.conf'
     config_opt_in.write_text(native.read_text() + 'ALLOW_PROVISIONING_UPDATES=1\n')

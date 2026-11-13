@@ -20,6 +20,8 @@ IOS_SCHEME="iosApp"
 IOS_BUNDLE_ID="com.you.myapp"
 IOS_TEAM_ID="ABCDE12345"
 IOS_EXPORT_METHOD="release-testing"   # ASC CLI/Xcode name for ad-hoc export
+# Ephemeral signing via SOPS / env (`sops-env -- ota-deploy.sh ota.conf --ios`):
+#   export ASC_SIGNING_P12_BASE64, ASC_SIGNING_PASSWORD, ASC_SIGNING_PROFILE_BASE64
 # Apple provisioning changes require the per-run --allow-provisioning-updates flag;
 # no config value enables them. Use only with explicit user approval.
 

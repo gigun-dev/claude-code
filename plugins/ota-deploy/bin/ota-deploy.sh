@@ -43,7 +43,7 @@ fi
 
 # ---- defaults (overridable in the config) ------------------------------
 APP_NAME="App"; APP_SLUG=""; PLATFORMS="ios"
-TS_HOST=""; PORT="8787"; OTA_PUBLIC_ORIGIN=""; OTA_R2_BUCKET="ota-distribution"; OTA_WRANGLER_CONFIG=""; BARK_ENV_FILE=""; BARK_IDENTITY=""
+TS_HOST="${TS_HOST:-}"; PORT="${PORT:-8787}"; OTA_PUBLIC_ORIGIN="${OTA_PUBLIC_ORIGIN:-}"; OTA_R2_BUCKET="${OTA_R2_BUCKET:-ota-distribution}"; OTA_WRANGLER_CONFIG="${OTA_WRANGLER_CONFIG:-}"; BARK_ENV_FILE="${BARK_ENV_FILE:-}"; BARK_IDENTITY="${BARK_IDENTITY:-}"
 IOS_PROJECT=""; IOS_WORKSPACE=""; IOS_SCHEME=""; IOS_BUNDLE_ID=""
 IOS_TEAM_ID=""; IOS_EXPORT_METHOD="release-testing"
 ANDROID_PROJECT_DIR=""; ANDROID_GRADLE_TASK=":app:assembleDebug"
@@ -115,21 +115,55 @@ build_ios() {
   else
     [ -n "$IOS_SCHEME" ] || { echo "✖ IOS_SCHEME required for iOS build" >&2; return 1; }
     command -v asc >/dev/null || { echo "✖ ASC CLI required for native iOS builds (brew install asc), or pass --ipa" >&2; return 1; }
+    if [ -n "$IOS_PROJECT" ] && [ ! -f "$IOS_PROJECT/project.pbxproj" ] && [ -f "$(dirname "$IOS_PROJECT")/project.yml" ]; then
+      command -v xcodegen >/dev/null || { echo "✖ xcodegen required to generate $IOS_PROJECT from project.yml" >&2; return 1; }
+      ( cd "$(dirname "$IOS_PROJECT")" && xcodegen generate --spec project.yml )
+    fi
     local proj=() export_args=(--archive-path "$WORK/app.xcarchive" --ipa-path "$WORK/app.ipa" --method "$IOS_EXPORT_METHOD")
     if [ -n "$IOS_WORKSPACE" ]; then proj=(--workspace "$IOS_WORKSPACE"); else proj=(--project "$IOS_PROJECT"); fi
     [ -z "$IOS_TEAM_ID" ] || export_args+=(--team-id "$IOS_TEAM_ID")
     local archive_args=(xcode archive "${proj[@]}" --scheme "$IOS_SCHEME" --configuration Release
       --archive-path "$WORK/app.xcarchive" --xcodebuild-flag=-destination
       --xcodebuild-flag=generic/platform=iOS --xcodebuild-flag="CURRENT_PROJECT_VERSION=$BUILD")
-    # Enabling this may create or update signing assets in the Apple account.
-    if [ "$ALLOW_PROVISIONING_UPDATES" = 1 ]; then
-      archive_args+=(--xcodebuild-flag=-allowProvisioningUpdates)
-      export_args+=(--xcodebuild-flag=-allowProvisioningUpdates)
+    if [ -n "${ASC_SIGNING_P12_BASE64:-}" ] || [ -n "${ASC_SIGNING_PASSWORD:-}" ] || [ -n "${ASC_SIGNING_PROFILE_BASE64:-}" ]; then
+      if [ -z "${ASC_SIGNING_P12_BASE64:-}" ] || [ -z "${ASC_SIGNING_PASSWORD:-}" ] || [ -z "${ASC_SIGNING_PROFILE_BASE64:-}" ]; then
+        echo "✖ ASC_SIGNING_P12_BASE64, ASC_SIGNING_PASSWORD, and ASC_SIGNING_PROFILE_BASE64 must all be set together" >&2
+        return 1
+      fi
+      archive_args+=(--xcodebuild-flag=CODE_SIGNING_ALLOWED=NO)
+      export_args+=(--signing-style manual)
+      echo "→ iOS: archiving unsigned $IOS_SCHEME (build $BUILD)…"
+      asc "${archive_args[@]}"
+      echo "→ iOS: exporting ad-hoc ipa via ephemeral signing keychain…"
+      local sign_dir="$WORK/signing"
+      rm -rf "$sign_dir"
+      (
+        umask 077
+        mkdir -p "$sign_dir"
+        printf '%s' "$ASC_SIGNING_P12_BASE64" | base64 --decode > "$sign_dir/identity.p12"
+        printf '%s' "$ASC_SIGNING_PASSWORD" > "$sign_dir/identity.pass"
+        printf '%s' "$ASC_SIGNING_PROFILE_BASE64" | base64 --decode > "$sign_dir/profile.mobileprovision"
+      )
+      local export_rc=0
+      asc signing run \
+        --identity "$sign_dir/identity.p12" \
+        --identity-password-file "$sign_dir/identity.pass" \
+        --profile "$sign_dir/profile.mobileprovision" \
+        --purpose release-testing \
+        -- asc xcode export "${export_args[@]}" </dev/null || export_rc=$?
+      rm -rf "$sign_dir"
+      [ "$export_rc" -eq 0 ] || return "$export_rc"
+    else
+      # Enabling this may create or update signing assets in the Apple account.
+      if [ "$ALLOW_PROVISIONING_UPDATES" = 1 ]; then
+        archive_args+=(--xcodebuild-flag=-allowProvisioningUpdates)
+        export_args+=(--xcodebuild-flag=-allowProvisioningUpdates)
+      fi
+      echo "→ iOS: archiving $IOS_SCHEME (build $BUILD)…"
+      asc "${archive_args[@]}"
+      echo "→ iOS: exporting ad-hoc ipa…"
+      asc xcode export "${export_args[@]}"
     fi
-    echo "→ iOS: archiving $IOS_SCHEME (build $BUILD)…"
-    asc "${archive_args[@]}"
-    echo "→ iOS: exporting ad-hoc ipa…"
-    asc xcode export "${export_args[@]}"
     cp "$WORK/app.ipa" "$PUBLIC/app.ipa"
   fi
   # OTA manifest (iOS reads this to install)
