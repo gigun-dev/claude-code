@@ -73,7 +73,6 @@ todo・adr の実行依存は POSIX sh と awk。harness やホスト専用ラ�
 
 | プラグイン | MCPサーバー | 用途 |
 |---|---|---|
-| `xcode-mcp` | `xcrun mcpbridge` | Xcode / iOS開発 |
 | `chrome-devtools-mcp` | `chrome-devtools-mcp` | ブラウザ操作・Web検証 |
 | `deepwiki-mcp` | DeepWiki (http) | GitHubリポジトリのドキュメントQ&A |
 | `markitdown-mcp` | `markitdown-mcp` | ファイル→Markdown変換(dotfiles の packages.nix から nix で入れる) |

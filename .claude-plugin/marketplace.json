@@ -7,11 +7,6 @@
   },
   "plugins": [
     {
-      "name": "xcode-mcp",
-      "source": "./plugins/xcode-mcp",
-      "description": "Xcode MCP server (xcrun mcpbridge)"
-    },
-    {
       "name": "chrome-devtools-mcp",
       "source": "./plugins/chrome-devtools-mcp",
       "description": "Chrome DevTools MCP server"

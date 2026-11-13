@@ -57,7 +57,7 @@ macOS の Tailscale SSH では、失敗したコマンドも SSH 自体の終了
 `xcrun agent plugin path --plugin-format claude` / `codex` が使える Mac では、Xcode が管理する
 plugin を利用し、その内容をこの repo に複製しない。Claude Code は公式 marketplace の
 `xcode@claude-plugins-official` を使う。Codex は上記で得た Codex 用 plugin の登録経路を確認する。
-既存 xcode-mcp と公式 plugin は同じ xcrun mcpbridge を登録するため、同一ホストで二重有効化しない。
+Xcode の MCP(xcrun mcpbridge)は公式 plugin からだけ登録する。gigun marketplace の xcode-mcp は同じ bridge を二重に登録していたため廃止した。
 インストール・更新後は新しいセッションでツールの公開と実際の操作を確認する。
 古い Xcode では agent / xcodeproj を必須にせず、bridge と CLI をそれぞれ probe する。
 
