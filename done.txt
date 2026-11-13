@@ -41,3 +41,4 @@ x 2026-11-09 2026-11-09 mini・mini-vmの実行能力とMCP/CLI境界を調べ�
 x 2026-11-12 2026-11-10 REAを既存の外部pluginと同じように共通marketplaceへ追加しClaude・Codexで使えるようにする。上流の公開plugin配布が利用可能か確認し必要なsource形式対応と実インストールを検証する。独自の取得・ビルド・更新機構は作らない +plugins see:docs/rea-plugin-distribution.md by:me id:0065 see:docs/adr/0003-distribute-external-plugins-from-upstream-source.md
 x 2026-11-13 2026-11-13 OTA native iOSビルドの自動provisioningを明示指定にし、既定と不正値の拒否をfixtureで検証する +ota-deploy @unattended by:codex id:0066
 x 2026-11-13 2026-11-13 visual-explainer を外部プラグインとして Claude Code・Codex・agy に導入する +plugins by:me id:0067
+x 2026-11-13 2026-11-13 +plugins Claude・Codex・agyそれぞれで、設定に未記載のgigun pluginを有効と宣言したときinstall(cacheへの取得)まで自動で行われるか、既存pluginの版更新は行われるかを使い捨ての設定ディレクトリで実測する。hallmarkはmarketplaceが外部URLに変わった後もvendor版1.1.0のcacheで動いている by:claude id:0068
