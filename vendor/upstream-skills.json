@@ -6,14 +6,14 @@
       "repo": "ryoppippi/dotfiles",
       "path": "agents/skills/t3-delegate",
       "dest": "plugins/t3/skills/t3-delegate",
-      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
+      "sha": "ec309c8af9fe4857ad82ffedc4c1d49d9b740711"
     },
     {
       "name": "t3-limits",
       "repo": "ryoppippi/t3-limits",
       "path": "skills/t3-limits",
       "dest": "plugins/t3/skills/t3-limits",
-      "sha": "3918559d9f7ba8d7caed113482ae7370c6194726"
+      "sha": "487e3bb025bd5d6e399230542c2c7eb36274be62"
     }
   ]
 }
