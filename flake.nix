@@ -1,5 +1,5 @@
 {
-  description = "gigun's agent plugins: Nix builds for hosts the marketplace cannot install into";
+  description = "gigun's agent plugins: pinned external plugins built once for every agent host";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -16,18 +16,20 @@
     {
       # Built from the consumer's `final`, so a dotfiles flake that applies this
       # overlay evaluates its own nixpkgs once (same as ryoppippi/claude-code-overlay).
+      # Why no agy-external-plugins alias: its layout ($out/<name>) changed, so an
+      # alias would still break the consumer's plugins.json entry, only silently.
       overlays.default = final: _prev: {
-        agy-external-plugins = final.callPackage ./nix/agy-external-plugins.nix { };
+        external-plugins = final.callPackage ./nix/external-plugins.nix { };
       };
 
       packages = forAllSystems (
         system:
         let
-          agy-external-plugins = nixpkgs.legacyPackages.${system}.callPackage ./nix/agy-external-plugins.nix { };
+          external-plugins = nixpkgs.legacyPackages.${system}.callPackage ./nix/external-plugins.nix { };
         in
         {
-          inherit agy-external-plugins;
-          default = agy-external-plugins;
+          inherit external-plugins;
+          default = external-plugins;
         }
       );
     };

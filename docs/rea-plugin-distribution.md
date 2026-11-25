@@ -1,6 +1,6 @@
 # REA plugin配布の確認
 
-REA（morluto/rea）は npm パッケージ `rea-agents` を Claude Code・Codex 共通の plugin 配布物にしている。共通marketplaceには npm source で登録し、版は marketplace に固定している。方針は ADR 0004。
+REA（morluto/rea）は npm パッケージ `rea-agents` を plugin 配布物にしている。このリポジトリは marketplace に載せず、`nix/npm-sources.json` に固定した版をこの flake の `external-plugins` が 1 回だけビルドし、dotfiles の home-manager module が Claude Code・Codex・agy へ置く（ADR 0007）。以下の 6.8.0〜6.9.0 の節は marketplace で配っていたときの確認で、上流の配布物についての事実として残す。
 
 ## 6.8.0 で登録を見送った理由
 
@@ -27,7 +27,7 @@ REA（morluto/rea）は npm パッケージ `rea-agents` を Claude Code・Codex
 
 ## agy への配布（2026-11-13）
 
-agy には marketplace から入らないため、flake の `agy-external-plugins` で包む（ADR 0005）。確認は agy 1.5.5 で、`plugins.json` に 1 entry を一時的に足して 1 回ずつ起動した。
+agy には marketplace から入らないため、flake で包んでいた（当時の `agy-external-plugins`。いまは `external-plugins` の `share/agy-plugins/rea`）。確認は agy 1.5.5 で、`plugins.json` に 1 entry を一時的に足して 1 回ずつ起動した。
 
 - 読み取り専用の場所（`nix build` の出力）に置いた plugin を `plugins.json` から読み、MCP と skill の両方を認識した。MCP の tool 定義は 255 件で、plugin ディレクトリへの書き込みは無かった。`mcp_config.json` の `env` は起動したサーバーに渡り、`${PLUGIN_ROOT}` は plugin の絶対パスに展開された。
 - skill 本文が切られるのは、`/rea:reverse-engineer-anything` で呼んだときだった。ツールを禁じて尋ねると、本文の 24,000 バイト直前の文は見え、それより後ろの文は見えなかった。スラッシュなしの依頼では本文は注入されず、モデルが `read_file` で SKILL.md を全部読んだ。
@@ -37,7 +37,7 @@ agy には marketplace から入らないため、flake の `agy-external-plugin
 
 ## 運用
 
-REA plugin が MCP と skill を所有するため、同じ host へ `rea setup` や別の MCP 定義を重ねない。更新は plugin 更新機構に委ね、解析エンジンと Node/Java の環境は dotfiles 側で管理する。plugin 自体は Ghidra をインストールせず、CLI の `rea` を PATH へ追加するものでもない。Claude Code と Codex の launcher は PATH 上の `node` を使い、agy 版は `mcp_config.json` に書いた node を使う。agy にも `rea setup` を使わない。
+REA plugin が MCP と skill を所有するため、どの host へも `rea setup` や別の MCP 定義を重ねない。版は `nix/npm-sources.json` の週次更新と dotfiles の lock 更新で進む。3 つの host の MCP はどれも `bin/rea-mcp` を起動し、これが固定した node と、dotfiles が `mcpEnv` で渡す Ghidra・JDK の環境で上流の launcher を動かす。plugin 自体は Ghidra をインストールせず、CLI の `rea` を PATH へ追加するものでもない。Claude Code に同じ名前の marketplace 版（`rea@gigun`）が入っていると skills ディレクトリの plugin より優先されるため、移行時に外す。
 
 ## 上流の根拠
 

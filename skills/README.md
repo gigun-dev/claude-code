@@ -1,7 +1,7 @@
 # skills — plugin で包まずに配る skill
 
 skill だけでできたものは plugin にせず、dotfiles の agent-skills-nix がこのディレクトリを
-読んで Claude Code・Codex・agy へ直接置く(ADR 0006)。ここに置くのは、このリポジトリが
+読んで Claude Code・Codex・agy へ直接置く(ADR 0007)。ここに置くのは、このリポジトリが
 正本を持つものだけ。pre-push はリポジトリの CI と重なるので廃止した。上流がある skill は dotfiles 側で上流を直接固定して読む。
 
 | skill | 正本 | 備考 |
