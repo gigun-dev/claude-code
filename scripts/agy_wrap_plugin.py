@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Turn an unpacked external Claude Code plugin into an Antigravity CLI (agy) plugin.
 
-External plugins (docs/adr/0004) ship .claude-plugin/ and .codex-plugin/ but no
-agy manifest, so agy skips them. nix/agy-external-plugins.nix unpacks each npm
-source pinned in nix/npm-sources.json and runs this script on the copy:
+External plugins ship .claude-plugin/ but no agy manifest, so agy skips them.
+nix/external-plugins.nix runs this script on each pinned Git plugin it copies,
+and scripts/build_external_plugin.py uses write_agy() and split_skill() for the
+agy variant of each npm plugin:
 
   .antigravity-plugin/plugin.json  name/version/description/author from
                                    .claude-plugin/plugin.json
@@ -39,9 +40,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue
 import re
+import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -51,7 +55,7 @@ from generate_manifests import GENERATED_PLUGIN_FIELDS, convert_mcp_server, fmt_
 BODY_LIMIT = 24000
 LEAD_MAX = 600  # an opening paragraph longer than this moves with the rest
 MARKER_KEY = "$generated"
-MARKER = "nix/agy-external-plugins.nix (scripts/agy_wrap_plugin.py), from the upstream package."
+MARKER = "nix/external-plugins.nix (scripts/agy_wrap_plugin.py), from the upstream package."
 FRONTMATTER = re.compile(r"---\n.*?\n---\n", re.S)
 
 
@@ -165,18 +169,42 @@ def skill_roots(plugin_dir: Path, claude: dict) -> list[Path]:
     return [plugin_dir / p for p in paths if (plugin_dir / p).is_dir()]
 
 
-def wrap(plugin_dir: Path, node: str | None, env: dict[str, dict[str, str]]) -> list[str]:
+def read_claude_manifest(plugin_dir: Path) -> dict:
     manifest_path = plugin_dir / ".claude-plugin" / "plugin.json"
     claude = read_json(manifest_path, "a Claude plugin manifest")
     name = claude.get("name")
     if not isinstance(name, str) or not name:
         raise WrapError(f"{manifest_path}: has no \"name\"")
+    return claude
+
+
+def wrap(plugin_dir: Path, node: str | None, env: dict[str, dict[str, str]]) -> list[str]:
+    claude = read_claude_manifest(plugin_dir)
+    log = write_agy(plugin_dir, claude, mcp_servers(plugin_dir, claude), node, env)
+    for root in skill_roots(plugin_dir, claude):
+        log += split_skills(root, claude["name"])
+    return log
+
+
+def split_skills(root: Path, name: str) -> list[str]:
+    log = []
+    for skill_md in sorted(root.glob("*/SKILL.md")):
+        moved = split_skill(skill_md.parent)
+        if moved:
+            log.append(f"{name}: {skill_md.parent.name} split, moved {moved} to references/")
+    return log
+
+
+def write_agy(
+    plugin_dir: Path, claude: dict, servers: dict, node: str | None, env: dict[str, dict[str, str]]
+) -> list[str]:
+    """Write .antigravity-plugin/plugin.json and, if there are servers, mcp_config.json."""
+    name = claude["name"]
     manifest = {MARKER_KEY: MARKER} | {f: claude[f] for f in GENERATED_PLUGIN_FIELDS if f in claude}
     (plugin_dir / ".antigravity-plugin").mkdir(exist_ok=True)
     (plugin_dir / ".antigravity-plugin" / "plugin.json").write_text(fmt_json(manifest, compact=False), encoding="utf-8")
     log = [f"{name}: .antigravity-plugin/plugin.json"]
 
-    servers = mcp_servers(plugin_dir, claude)
     unknown = set(env) - set(servers)
     if unknown:
         raise SystemExit(f"{name}: --env names servers the plugin does not have: {sorted(unknown)}")
@@ -192,56 +220,98 @@ def wrap(plugin_dir: Path, node: str | None, env: dict[str, dict[str, str]]) -> 
         config = {MARKER_KEY: MARKER, "mcpServers": converted}
         (plugin_dir / "mcp_config.json").write_text(fmt_json(config, compact=False), encoding="utf-8")
         log.append(f"{name}: mcp_config.json ({', '.join(converted)})")
-
-    for root in skill_roots(plugin_dir, claude):
-        for skill_md in sorted(root.glob("*/SKILL.md")):
-            moved = split_skill(skill_md.parent)
-            if moved:
-                log.append(f"{name}: {skill_md.parent.name} split, moved {moved} to references/")
     return log
+
+
+def probe(name: str, argv: list[str], cwd: str, env: dict[str, str], timeout: float = 120) -> str:
+    """Start one stdio MCP server and run the handshake a host runs.
+
+    initialize must succeed before notifications/initialized and tools/list
+    are sent, and tools/list must return tools. The whole exchange has one
+    deadline: stdout and stderr are drained by threads, so a server that never
+    writes fails at the deadline instead of blocking the build.
+    """
+    proc = subprocess.Popen(
+        argv, cwd=cwd, env=env,
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        # Own process group, so the cleanup below also stops descendants that
+        # inherited the pipes; killing only the child left the readers waiting.
+        start_new_session=True,
+    )
+    lines: queue.Queue[str | None] = queue.Queue()
+    stderr: list[str] = []
+
+    def drain_stdout() -> None:
+        for line in proc.stdout:
+            lines.put(line)
+        lines.put(None)
+
+    readers = [
+        threading.Thread(target=drain_stdout, daemon=True),
+        threading.Thread(target=lambda: stderr.extend(proc.stderr), daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
+    deadline = time.monotonic() + timeout
+
+    def fail(why: str) -> SystemExit:
+        return SystemExit(f"{name}: {why} from {argv[0]}\n{''.join(stderr).strip()[-2000:]}")
+
+    def send(*messages: dict) -> None:
+        proc.stdin.write("".join(json.dumps(m) + "\n" for m in messages))
+        proc.stdin.flush()
+
+    def reply(request_id: int, method: str) -> dict:
+        while True:
+            left = deadline - time.monotonic()
+            try:
+                line = lines.get(timeout=max(left, 0)) if left > 0 else None
+            except queue.Empty:
+                line = None
+            if line is None:
+                raise fail(f"no {method} reply within {timeout:g}s")
+            if line.startswith("{"):
+                message = json.loads(line)
+                if message.get("id") == request_id:
+                    if "result" not in message:
+                        raise fail(f"{method} failed: {message.get('error')}")
+                    return message["result"]
+
+    try:
+        send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "external-plugin-smoke", "version": "0"}}})
+        info = reply(1, "initialize").get("serverInfo", {})
+        send({"jsonrpc": "2.0", "method": "notifications/initialized"},
+             {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        tools = reply(2, "tools/list").get("tools", [])
+        if not tools:
+            raise fail("empty tools/list")
+    finally:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.wait()
+        for reader in readers:
+            reader.join(timeout=2)
+        if not any(reader.is_alive() for reader in readers):
+            # Closing a pipe a reader still blocks on can itself block.
+            for pipe in (proc.stdin, proc.stdout, proc.stderr):
+                pipe.close()
+    return f"{name}: {info.get('name')} {info.get('version')}, {len(tools)} tools"
 
 
 def smoke(plugin_dir: Path, timeout: float = 120) -> list[str]:
     config = json.loads((plugin_dir / "mcp_config.json").read_text(encoding="utf-8"))
     root = str(plugin_dir.resolve())
-    requests = [
-        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-            "protocolVersion": "2025-06-18", "capabilities": {},
-            "clientInfo": {"name": "agy-wrap-smoke", "version": "0"}}},
-        {"jsonrpc": "2.0", "method": "notifications/initialized"},
-        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
-    ]
     log = []
     for name, server in config["mcpServers"].items():
         if "command" not in server:
             log.append(f"{name}: remote server, not started")
             continue
         argv = [server["command"], *(a.replace("${PLUGIN_ROOT}", root) for a in server.get("args", []))]
-        proc = subprocess.Popen(
-            argv, cwd=root, env=os.environ | server.get("env", {}),
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        )
-        replies: dict[int, dict] = {}
-        try:
-            proc.stdin.write("".join(json.dumps(r) + "\n" for r in requests))
-            proc.stdin.flush()
-            deadline = time.monotonic() + timeout
-            while len(replies) < 2 and time.monotonic() < deadline:
-                line = proc.stdout.readline()
-                if not line:
-                    break
-                if line.startswith("{"):
-                    message = json.loads(line)
-                    if message.get("id") in (1, 2):
-                        replies[message["id"]] = message
-        finally:
-            proc.kill()
-            stderr = proc.communicate()[1]
-        tools = replies.get(2, {}).get("result", {}).get("tools", [])
-        if not tools:
-            raise SystemExit(f"{name}: no tools/list reply from {argv[0]}\n{stderr.strip()[-2000:]}")
-        info = replies[1].get("result", {}).get("serverInfo", {})
-        log.append(f"{name}: {info.get('name')} {info.get('version')}, {len(tools)} tools")
+        log.append(probe(name, argv, root, os.environ | server.get("env", {}), timeout))
     return log
 
 

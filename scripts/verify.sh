@@ -33,11 +33,10 @@ CHECK_NAMES=(
 	"agy-mcp パース回帰テスト (--selftest-parse)"
 	"ADR の形式チェック"
 	"todo プラグインのテスト (tests/run.sh)"
-	"pre-push プラグインの実 push テスト"
 	"telemetry のローカル集計・クエリ回帰テスト"
 	"輸入 skill の固定情報 (vendor/upstream-skills.json)"
-	"外部 plugin の版固定 (marketplace の version / sha)"
-	"agy 向け外部 plugin の包み方と skill 分割 (scripts/tests)"
+	"外部 plugin の版固定 (nix/npm-sources.json の version、marketplace の sha)"
+	"外部 plugin の組み立てと agy 用 skill 分割 (scripts/tests)"
 	"iOS 実行先・project 選択・リモート終了値のテスト"
 )
 check_total=${#CHECK_NAMES[@]}
@@ -195,19 +194,6 @@ else
 fi
 [ "$todo_failed" -ne 0 ] && overall_failed=1
 
-# -----------------------------------------------------------------------
-# pre-push プラグインの実 push テスト
-# -----------------------------------------------------------------------
-# ローカルの bare リポジトリで、配布する Git フックの実際の成否を検証する。
-echo ""
-check_header
-if prepush_out=$(python3 plugins/pre-push/tests/test_pre_push.py 2>&1); then
-    printf '%s\n' "$prepush_out" | tail -4
-else
-    printf '%s\n' "$prepush_out"
-    overall_failed=1
-fi
-
 # Local fixtures cover period boundaries, usage accounting, and query output.
 echo ""
 check_header
@@ -253,8 +239,9 @@ else
     overall_failed=1
 fi
 
-# 外部 plugin が marketplace で版を固定されているか(オフライン)。固定が無いと、入る版が
-# 導入した時刻と host の環境で決まる。上流の新しい版は週次 CI が取り込む。
+# 外部 plugin の版が固定されているか(オフライン)。npm は nix/npm-sources.json だけ、Git は
+# marketplace の sha。固定が無いと、入る版が導入した時刻と host の環境で決まる。上流の新しい版は
+# 週次 CI が取り込む。
 echo ""
 check_header
 if python3 scripts/update_external_plugins.py --check; then
@@ -263,13 +250,14 @@ else
     overall_failed=1
 fi
 
-# agy 向けに外部 plugin を包む処理(nix/agy-external-plugins.nix が使う)。skill 分割が
-# 本文を失わないこと、壊れるリンクや収まらない本文で失敗することを合成データで確かめる。
+# 外部 plugin を各ホスト向けに組む処理(nix/external-plugins.nix が使う)。MCP の実行ファイルと
+# 各 manifest、agy 用の skill 分割が共有の skill に漏れないこと、分割が本文を失わないこと、
+# 壊れるリンクや収まらない本文で失敗することを合成データで確かめる。
 # Nix のビルド自体(上流 tarball の取得と MCP の起動確認)はここでは走らせない。
 echo ""
 check_header
 if python3 -m unittest discover -s scripts/tests -p 'test_*.py'; then
-    echo "✓ agy_wrap_plugin"
+    echo "✓ build_external_plugin / agy_wrap_plugin / update_external_plugins"
 else
     overall_failed=1
 fi

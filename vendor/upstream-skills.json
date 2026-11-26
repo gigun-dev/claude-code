@@ -1,13 +1,6 @@
 {
-  "$comment": "Upstream skills copied verbatim. Maintained by scripts/sync_upstream_skills.py; do not edit sha by hand. Licence: ryoppippi/dotfiles and ryoppippi/t3-limits are MIT; heydamir/unslop is CC BY 4.0 (credit kept in SKILL.md and plugins/unslop/LICENSE).",
+  "$comment": "Upstream skills copied verbatim. Maintained by scripts/sync_upstream_skills.py; do not edit sha by hand. Licence: ryoppippi/dotfiles and ryoppippi/t3-limits are MIT. Skill-only upstreams are no longer vendored here; dotfiles pins them for agent-skills-nix (ADR 0006).",
   "skills": [
-    {
-      "name": "worktree",
-      "repo": "ryoppippi/dotfiles",
-      "path": "agents/skills/worktree",
-      "dest": "plugins/worktree/skills/worktree",
-      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
-    },
     {
       "name": "t3-delegate",
       "repo": "ryoppippi/dotfiles",
@@ -21,48 +14,6 @@
       "path": "skills/t3-limits",
       "dest": "plugins/t3/skills/t3-limits",
       "sha": "3918559d9f7ba8d7caed113482ae7370c6194726"
-    },
-    {
-      "name": "ask-other-agent",
-      "repo": "ryoppippi/dotfiles",
-      "path": "agents/skills/ask-other-agent",
-      "dest": "plugins/cross-agent/skills/ask-other-agent",
-      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
-    },
-    {
-      "name": "review-loop",
-      "repo": "ryoppippi/dotfiles",
-      "path": "agents/skills/review-loop",
-      "dest": "plugins/cross-agent/skills/review-loop",
-      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
-    },
-    {
-      "name": "edit-skills",
-      "repo": "ryoppippi/dotfiles",
-      "path": "agents/skills/edit-skills",
-      "dest": "plugins/edit-skills/skills/edit-skills",
-      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805"
-    },
-    {
-      "name": "commit",
-      "repo": "ryoppippi/dotfiles",
-      "path": "agents/skills/commit",
-      "dest": "plugins/git-workflow/skills/commit",
-      "sha": "de137c2a78c0d551d11e2f3a0aebba9143046805",
-      "replace": [
-        {
-          "file": "SKILL.md",
-          "from": "Write the message in English with UK spelling:",
-          "to": "Write the message in Japanese, keeping the Conventional Commits type and scope in English:"
-        }
-      ]
-    },
-    {
-      "name": "unslop",
-      "repo": "heydamir/unslop",
-      "path": "skills/unslop",
-      "dest": "plugins/unslop/skills/unslop",
-      "sha": "97daa3eb365670ea3f87ed85356cbfcee18105a5"
     }
   ]
 }

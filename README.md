@@ -26,7 +26,7 @@ codex plugin marketplace add gigun-dev/claude-code
 codex plugin add <plugin>@gigun
 ```
 
-サードパーティ製スキル（Langfuse, modern-web-guidance, swift-concurrency-pro, swift-testing-pro, swiftui-pro, hallmark, yomiyasu 等）は、上流の Git リポジトリを両カタログから直接参照する。上流が npm パッケージで plugin を配布する REA（`rea-agents`）は npm source で参照する。どれも版を marketplace に固定し（npm は `version`、Git は `sha`）、週次の workflow（`.github/workflows/external-plugins.yml`）が `scripts/update_external_plugins.py` で公開から 3 日以上経った版へ進めて自動 merge する（ADR 0004 参照）。`claude plugin install <plugin>@gigun` / `codex plugin add <plugin>@gigun` で導入し、更新時は各ホストの marketplace とプラグインを更新する。上流のソースはこのリポジトリへ複製しない。
+skill だけでできたもの(自前の japanese-tech-writing、上流の worktree・cross-agent・edit-skills・commit・emil・unslop・hallmark・langfuse・modern-web-guidance・yomiyasu・swift-concurrency-pro・swift-testing-pro・swiftui-pro)は plugin にせず、dotfiles の agent-skills-nix が版を `flake.lock` に固定して各ホストの skill ディレクトリへ置く(ADR 0007、[`skills/README.md`](skills/README.md))。npm で配られる外部 plugin(REA)は marketplace に載せず、この flake がビルドしたものを dotfiles の home-manager module が各ホストへ置く(下の「外部 plugin」)。marketplace に残る外部 plugin は上流の Git リポジトリを `sha` で固定したもの(visual-explainer)。どちらの版も週次の workflow(`.github/workflows/external-plugins.yml`)が `scripts/update_external_plugins.py` で公開から 3 日以上経った版へ進めて自動 merge する(ADR 0007)。上流のソースはこのリポジトリへ複製しない。
 
 ### Antigravity CLI (agy)
 
@@ -36,20 +36,31 @@ hooks は agy とイベント・ツール名が違うため対象外。commands 
 `agy plugin import` / `install` はコピーを作って UI 管理の `config.json` に記録するため使わず、`~/.gemini/config/plugins.json` でこのリポジトリを指す。dotfiles(`nix/modules/home/dotfiles.nix`)が Claude の `enabledPlugins` から読ませる plugin を導いて配る。`entries[].path` は絶対パスで書く。agy 1.5.5 は文書と違って `~/` を展開せず、その entry を飛ばす(環境変数も展開されない)。
 
 ```json
-{ "entries": [{ "path": "/Users/<user>/ghq/github.com/gigun-dev/claude-code/plugins", "include_only": ["todo", "emil"] }] }
+{ "entries": [{ "path": "/Users/<user>/ghq/github.com/gigun-dev/claude-code/plugins", "include_only": ["todo", "t3"] }] }
 ```
 
 単体検証は `agy plugin validate plugins/<name>`(認証不要・読み取りのみ)。
 
-外部 plugin の agy 版はこのリポジトリの flake が作る(`nix/agy-external-plugins.nix`、overlay の `agy-external-plugins`。ADR 0005)。npm は `nix/npm-sources.json` の版とハッシュ、対応済みの Git plugin は marketplace の固定コミットから取得する。Git plugin は上流の構造を確認して Nix の `gitNames` に登録する。`scripts/agy_wrap_plugin.py` が agy の manifest と必要な `mcp_config.json` を足す。agy がスラッシュコマンドで読む skill 本文は先頭 24,000 バイトまでなので、超える SKILL.md は節単位で `references/` へ移す。出力は plugin を並べたディレクトリなので、`plugins.json` の entry としてそのまま指す。Ghidra などの環境は `mcpEnv` で渡す。
+### 外部 plugin(Nix で 3 ホストへ)
+
+npm で配られる外部 plugin は、この flake の `external-plugins`(`nix/external-plugins.nix`、overlay も同名)が 1 回だけビルドし、dotfiles の home-manager module が各ホストの読む場所へ置く(ADR 0007)。版と SRI ハッシュは `nix/npm-sources.json` だけに固定する。出力は次のとおり。
+
+| パス | 中身 | 置く先 |
+| --- | --- | --- |
+| `bin/<server>-mcp` | 固定した node を絶対パスで使い、`mcpEnv` を設定して上流の launcher を起動する | 全ホストの MCP がこれを指す。Codex は `config.toml` の `[mcp_servers.<server>]` |
+| `share/agent-plugins/<name>/` | Agent Plugins 1.0 の `plugin.json`・`mcp.json`、`.claude-plugin/plugin.json`、上流のままの `skills/` | Claude は `~/.claude/skills/<name>`(skills ディレクトリの plugin)。Codex は `skills/<skill>` を `~/.agents/skills` へ |
+| `share/agy-plugins/<name>/` | `.antigravity-plugin/`、`mcp_config.json`、24,000 バイトを超える節を `references/` へ移した `skills/` | `~/.gemini/config/plugins.json` の 1 entry |
+| `lib/<name>/` | 上流の npm パッケージそのもの | 直接は置かない |
+
+agy 版を分けるのは、agy も Claude・Codex と同じ `skills/` を読み、別の場所を指す設定が無いためである。分割を共有ディレクトリでやると Claude と Codex も分割後の本文を読む。dotfiles はパスを書かず `passthru` から引く(`plugins.<name>.dir`・`.mcpServers`・`.skills`、`agy.dir`・`agy.names`)。Ghidra などの環境は `mcpEnv` で渡す。
 
 ```nix
-(pkgs.agy-external-plugins.override {
+(pkgs.external-plugins.override {
   mcpEnv.rea.rea = { GHIDRA_INSTALL_DIR = "${ghidra}/lib/ghidra"; JAVA_HOME = "${pkgs.jdk21}"; };
 })
 ```
 
-`nix/npm-sources.json` は `scripts/update_external_plugins.py --write` が marketplace の npm の版と同じコミットで書く。手で編集しない。
+marketplace の Git plugin のうち上流の構造を確認したもの(Nix の `gitNames`)は、従来どおり `share/agy-plugins/` に agy 版だけを作る。`nix/npm-sources.json` の `url`・`hash`・`mcpServers`・`skills` は `scripts/update_external_plugins.py --write` が registry と tarball から書く。手で書くのは plugin を足すときの `package` と `version` だけ。
 
 ## Claude Code / Codex 共通の構成
 
@@ -88,23 +99,14 @@ MCPサーバーのコード・テスト・配布方法までこのリポジト�
 | プラグイン | スキル | 用途 |
 |---|---|---|
 | `todo` | todo, adr, doctor | todo.txt でタスクと依存関係を、docs/adr/ で決定を管理 |
-| `pre-push` | pre-push | Git の push 前検証の導入・点検 |
 | `telemetry` | review | Langfuse のトレースから自分のセッションを実測し、設定改善に回す |
 | `ios-skills` | ios-app-icon, ios-simulator, ios-device-build, appstoreconnect-upload | 実行先の能力判定・Macへのリモート実行・アイコン・Simulator・実機build・ASC upload |
 | [`ios-ota`](plugins/ios-ota/README.md) | ios-ota | iOSアプリの自動Ad Hocプロビジョニング、ローカル/リモートOTA配布、ASC CLI Code Mode |
-| [`emil`](plugins/emil/README.md) | emil | UIデザイン、アニメーション、プロトタイピングとUI検証（Emil Kowalski、MIT） |
-| [`hallmark`](https://github.com/Nutlope/hallmark) | hallmark | 新規UIの設計・監査・再設計・参考デザインの分析（Nutlope/hallmark、MIT。版は marketplace の `sha` で固定） |
-| `japanese-tech-writing` | japanese-tech-writing | 日本語の技術文書・書籍原稿を書く / 推敲するときの文章規範(上流のgistから逐語でvendor、Unlicense) |
-| `yomiyasu` | yomiyasu | AI が書いた日本語を、意味・数値・否定・条件を保ったまま読みやすく直す（nanaism/yomiyasu、MIT、Claude Code のみ） |
-| [`worktree`](plugins/worktree/README.md) | worktree | git-wt / git-wtpr による worktree 操作(ryoppippi/dotfiles、MIT)。`git-wt` が PATH にあること |
 | [`t3`](plugins/t3/README.md) | t3-delegate, t3-limits | T3 Code 内の子タスク委譲と quota 確認 + T3 Code MCP(ryoppippi、MIT)
-| [`cross-agent`](plugins/cross-agent/README.md) | ask-other-agent, review-loop | 他社エージェントへの相談・レビュー(ryoppippi、MIT)
-| [`edit-skills`](plugins/edit-skills/README.md) | edit-skills | skill 編集の規約と監査(ryoppippi、MIT)
-| [`git-workflow`](plugins/git-workflow/README.md) | commit | 小さな Conventional Commits を作る(ryoppippi、MIT)
 
 Supabase・Vercel など公式マーケットプレイスに既にMCP内包プラグインがあるものは重複させず、`claude-plugins-official` 側を使う方針。
 
-`worktree` `t3` `cross-agent` `edit-skills` `git-workflow` の skill は ryoppippi/dotfiles と ryoppippi/t3-limits から原本のまま写しており、出典と固定 commit は [`vendor/upstream-skills.json`](vendor/upstream-skills.json) にある。`scripts/sync_upstream_skills.py`(既定は dry-run、`--write` で写し直し)と週次の `.github/workflows/upstream-skills.yml` が差分を確認する。
+`t3` の skill は ryoppippi/dotfiles と ryoppippi/t3-limits から原本のまま写しており(MCP と一緒に配るため plugin に残す)、出典と固定 commit は [`vendor/upstream-skills.json`](vendor/upstream-skills.json) にある。`scripts/sync_upstream_skills.py`(既定は dry-run、`--write` で写し直し)と週次の `.github/workflows/upstream-skills.yml` が差分を確認する。
 
 ### harness から todo・ADR へ移行
 
