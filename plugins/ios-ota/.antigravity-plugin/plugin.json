@@ -1,0 +1,10 @@
+{
+  "$generated": "scripts/generate_manifests.py --write, from ../.claude-plugin/plugin.json. Do not hand-edit this file.",
+  "name": "ios-ota",
+  "version": "0.3.0",
+  "description": "Unified iOS OTA distribution and App Store Connect Code Mode: automatic App ID/Capability/Ad Hoc profile provisioning, local & remote builds, ephemeral Keychain signing, and private HTTPS install links.",
+  "author": {
+    "name": "gigun",
+    "url": "https://github.com/gigun-dev"
+  }
+}

@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "asc-mcp": {
+    "ios-ota": {
       "type": "http",
       "url": "https://build.097969.xyz/mcp"
     }

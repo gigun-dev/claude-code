@@ -4,7 +4,7 @@ description: |
   Archive and upload iOS/macOS apps to App Store Connect (TestFlight/App Store) via CLI.
   Use when: (1) User wants to deploy to TestFlight, (2) User wants to upload to App Store,
   (3) User explicitly requests an App Store Connect archive/upload. Ad Hoc OTA installation
-  links and private iPhone distribution use asc-mcp instead.
+  links and private iPhone distribution use ios-ota instead.
 compatibility: >-
   macOS + Xcode。Apple Developer Program(有償)への登録と、App Store Connect にアクセスできる
   Apple ID が必要。ネットワーク接続必須。

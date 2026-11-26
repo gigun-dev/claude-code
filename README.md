@@ -101,7 +101,7 @@ MCPサーバーのコード・テスト・配布方法までこのリポジト�
 | `todo` | todo, adr, doctor | todo.txt でタスクと依存関係を、docs/adr/ で決定を管理 |
 | `telemetry` | review | Langfuse のトレースから自分のセッションを実測し、設定改善に回す |
 | `ios-skills` | ios-app-icon, ios-simulator, ios-device-build, appstoreconnect-upload | 実行先の能力判定・Macへのリモート実行・アイコン・Simulator・実機build・ASC upload |
-| [`ota-deploy`](plugins/ota-deploy/README.md) | ota-deploy | Tailscale経由のiOS IPA・Android APK配布ページ生成 |
+| [`ios-ota`](plugins/ios-ota/README.md) | ios-ota | iOSアプリの自動Ad Hocプロビジョニング、ローカル/リモートOTA配布、ASC CLI Code Mode |
 | [`t3`](plugins/t3/README.md) | t3-delegate, t3-limits | T3 Code 内の子タスク委譲と quota 確認 + T3 Code MCP(ryoppippi、MIT)
 
 Supabase・Vercel など公式マーケットプレイスに既にMCP内包プラグインがあるものは重複させず、`claude-plugins-official` 側を使う方針。

@@ -14,7 +14,7 @@ compatibility: >-
 最初に `python3 ../../scripts/ios-host.py probe --mcp` で実行先の能力を確認する。
 Linux・リモート Mac・Apple MCP の install/run 経路では
 [実行先と経路の選択](../../references/execution.md)を読む。必要な Apple ツールが公開されていれば
-その対応スキルを使い、IDE を介さない実行は以下の CLI を使う。Ad Hoc OTA 配布は asc-mcp の担当。
+その対応スキルを使い、IDE を介さない実行は以下の CLI を使う。Ad Hoc OTA 配布は ios-ota の担当。
 
 対象を推測せず、プロジェクト・scheme・UDIDを明示して実行する。同じMacに他人の端末と他人の
 ビルド成果物が混在している前提で動く。端末が特定できない、または`--dry-run`のplanが依頼と

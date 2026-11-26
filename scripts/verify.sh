@@ -37,7 +37,6 @@ CHECK_NAMES=(
 	"輸入 skill の固定情報 (vendor/upstream-skills.json)"
 	"外部 plugin の版固定 (nix/npm-sources.json の version、marketplace の sha)"
 	"外部 plugin の組み立てと agy 用 skill 分割 (scripts/tests)"
-	"ota-deploy の配布・認可テスト"
 	"iOS 実行先・project 選択・リモート終了値のテスト"
 )
 check_total=${#CHECK_NAMES[@]}
@@ -259,15 +258,6 @@ echo ""
 check_header
 if python3 -m unittest discover -s scripts/tests -p 'test_*.py'; then
     echo "✓ build_external_plugin / agy_wrap_plugin / update_external_plugins"
-else
-    overall_failed=1
-fi
-
-# OTA配布の失敗・認可と既存Tailscale経路を隔離環境で確認する。
-echo ""
-check_header
-if python3 plugins/ota-deploy/tests/run.py && (cd plugins/ota-deploy/cloudflare && bun install --frozen-lockfile && bun run test && python3 publish.test.py); then
-    echo "✓ ota-deploy"
 else
     overall_failed=1
 fi
